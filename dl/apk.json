@@ -1,6 +1,6 @@
 {
-  "build": 52,
-  "ver": "1.0.36",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b52-1.0.36/SetSod.apk",
-  "notes": "SetSod 1.0.36 · หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุน A/B + ครอสเฟด) · ลิสต์วันนี้ลากเรียง/ค้นเพลงแทรก · นอมสดปุ่ม TAP ใหญ่ · แผงมิกซ์ร้าน (แยก L/R, MO, MIDI ตามที่เครื่องรองรับ)"
+  "build": 53,
+  "ver": "1.0.37",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b53-1.0.37/SetSod.apk",
+  "notes": "เสียงดังเท่าเดิม + กันเสียงแตก · ครอสเฟดเดอร์นุ่มขึ้น · บาลานซ์ใช้ได้ในหน้า 2 เด็ค"
 }
