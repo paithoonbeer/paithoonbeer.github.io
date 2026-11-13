@@ -4,7 +4,7 @@ var R=[[/\bLine\//i,'LINE'],[/MicroMessenger/i,'WeChat'],[/MessengerForiOS|\bMES
 for(var i=0;i<R.length;i++)if(R[i][0].test(ua)){app=R[i][1];break}
 if(!app&&iOS&&!sa&&!/Safari\//.test(ua))app='แอปนี้';if(!app&&And&&/; wv\)/.test(ua))app='แอปนี้';
 if((window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform())||/SetSodApp/.test(navigator.userAgent))app='';window.__INAPP=app;window.__IOSSAFARI=!app&&iOS&&!sa;if(!app)return;
-if(app=='LINE'&&!/[?&]openExternalBrowser=1\b/.test(L.search)){L.replace(L.origin+L.pathname+(L.search?L.search+'&':'?')+'openExternalBrowser=1'+L.hash);return}
+if(app=='LINE'&&!/[?&]openExternalBrowser=1\b/.test(L.search)&&!(function(){try{if(sessionStorage.getItem('bp-oeb'))return 1;sessionStorage.setItem('bp-oeb','1')}catch(e){}return 0})()){L.replace(L.origin+L.pathname+(L.search?L.search+'&':'?')+'openExternalBrowser=1'+L.hash);return}
 var IT=And&&app!='LINE'?'intent://'+L.host+L.pathname+L.search+L.hash+'#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url='+encodeURIComponent(L.href)+';end':'',auto=false;if(IT){try{if(!sessionStorage.getItem('bp-intent')){sessionStorage.setItem('bp-intent','1');auto=true}}catch(e){}}
 window.__LINEBLOCK=1;var m=L.hash.match(/[#&][slj]=([0-9A-Za-z]{8,14})/),code=m?m[1]:'',link=L.href;
 var steps=app=='LINE'?'<li>แตะเมนู <b>⋯</b> มุมขวาบนของ LINE</li><li>เลือก <b>“เปิดในเบราว์เซอร์อื่น”</b></li>'
@@ -16,7 +16,7 @@ document.body.appendChild(d);function cp(t){var ok=function(){document.getElemen
 function fb(t){var i=document.createElement('textarea');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy')}catch(e){}i.remove()}
 document.getElementById('lbcl').onclick=function(){cp(link)};var c=document.getElementById('lbcc');if(c)c.onclick=function(){cp(code)};if(auto){auto=false;setTimeout(function(){L.href=IT},400)}}
 if(document.body)show();else document.addEventListener('DOMContentLoaded',show);setInterval(show,1000)}catch(e){}})();</script><script>try{var q=(location.search.match(/[?&]theme=(\w+)/)||[])[1];if(q)localStorage.setItem("bp-theme",q);var t=localStorage.getItem("bp-theme")||"stage";if(t&&t!="studio")document.documentElement.classList.add("th-"+t)}catch(e){}</script>
-<meta name="bp-ver" content="1.0.34"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
+<meta name="bp-ver" content="1.0.35"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0b0b0f"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-512.png">
 <title>SetSod</title><meta name="apple-mobile-web-app-title" content="SetSod"><meta name="application-name" content="SetSod">

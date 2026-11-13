@@ -13,9 +13,19 @@ export async function init(){if(auth)return;
  A.onAuthStateChanged(auth,u=>{const was=user;user=u;if(u&&!was)_ev('login','');cbs.forEach(f=>f(u))})}
 export const onUser=f=>{cbs.push(f);if(auth)f(user)};
 export const me=()=>user;
-export async function google(){await init();if(__N())return nativeGoogle();const p=new A.GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});
- const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1),sa=navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);if((ios&&sa)||window.__INAPP)return A.signInWithRedirect(auth,p);
- try{return await A.signInWithPopup(auth,p)}catch(e){if(/popup-blocked|popup-closed-by-user|operation-not-supported|cancelled-popup/.test(e.code||'')&&e.code!=='auth/popup-closed-by-user'){return A.signInWithRedirect(auth,p)}throw e}}
+// v1.0.35: the web app may live on a host that is NOT the authDomain's own site (paithoonbeer.github.io → puenduang.firebaseapp.com).
+// There signInWithRedirect breaks in Safari/WebKit (storage partitioning: "missing initial state"), so use signInWithPopup,
+// called synchronously from the click (no await before it) so iOS does not block the popup. setsod.web.app/beer-player keep the old flow.
+export const xsite=()=>CFG.authDomain!==location.hostname;
+const WK=()=>{const u=navigator.userAgent;return /iPhone|iPad|iPod/.test(u)||(/Macintosh/.test(u)&&navigator.maxTouchPoints>1)||(/Safari\//.test(u)&&!/Chrome|Chromium|CriOS|FxiOS|EdgiOS|Edg\/|Android/.test(u))};
+export const ready=()=>!!auth;
+export function google(){if(__N())return init().then(()=>nativeGoogle());if(auth)return gWeb();return init().then(gWeb)}
+function gWeb(){const p=new A.GoogleAuthProvider();p.setCustomParameters({prompt:'select_account'});
+ if(!xsite()){const ios=/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1),sa=navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);if((ios&&sa)||window.__INAPP)return A.signInWithRedirect(auth,p);
+  return A.signInWithPopup(auth,p).catch(e=>{if(/popup-blocked|popup-closed-by-user|operation-not-supported|cancelled-popup/.test(e.code||'')&&e.code!=='auth/popup-closed-by-user'){return A.signInWithRedirect(auth,p)}throw e})}
+ if(window.__INAPP)return Promise.reject(Object.assign(new Error('inapp'),{code:'bp/inapp'}));
+ let pr;try{pr=A.signInWithPopup(auth,p)}catch(e){pr=Promise.reject(e)}
+ return pr.catch(e=>{const c=e&&e.code||'';if((c==='auth/popup-blocked'||c==='auth/operation-not-supported-in-this-environment')&&!window.__INAPP&&!WK())return A.signInWithRedirect(auth,p);throw e})}
 export async function emailIn(em,pw){await init();return A.signInWithEmailAndPassword(auth,em,pw)}
 export async function emailUp(em,pw){await init();return A.createUserWithEmailAndPassword(auth,em,pw)}
 export async function reset(em){await init();return A.sendPasswordResetEmail(auth,em)}
