@@ -1,0 +1,1551 @@
+/* SetSod 1.0.18 one-page chrome. Does not replace studio; body.op18 + body.live is the default home. */
+:root{
+  --op-bg:#0b0b0f;--op-card:#16161d;--op-card2:#1c1c26;--op-line:#2a2a36;--op-tx:#f2f2f7;--op-mut:#9a9aa8;
+  --op-acc:#30d158;--op-acc-dim:rgba(48,209,88,.16);--op-orange:#ff9d0a;--op-orange-dim:rgba(255,157,10,.16);
+  --op-red:#ff453a;--op-safe-t:max(10px, env(safe-area-inset-top));--op-safe-b:max(10px, env(safe-area-inset-bottom));
+  --op-top:56px;--op-dock:62px;
+}
+body.op18{background:var(--op-bg);color:var(--op-tx)}
+body.op18.live{overflow:hidden}
+
+/* top bar */
+#op-top{
+  position:fixed;left:0;right:0;top:0;z-index:80;
+  display:flex;align-items:center;gap:10px;
+  padding:var(--op-safe-t) 14px 8px 16px;
+  min-height:calc(var(--op-top) + var(--op-safe-t) - 10px);
+  background:linear-gradient(180deg,var(--op-bg) 70%,transparent);
+  pointer-events:none;
+}
+#op-top > *{pointer-events:auto}
+#op-top .op-logo{display:flex;align-items:center;gap:8px;min-width:0}
+#op-top .op-mark{width:28px;height:28px;border-radius:8px;background:linear-gradient(180deg,#ffd27a,#ff9d0a);color:#1a0e00;display:grid;place-items:center;font-weight:800;font-size:13px;letter-spacing:-.04em;box-shadow:0 2px 8px rgba(255,157,10,.35)}
+#op-top .op-word{font-weight:800;font-size:17px;letter-spacing:-.03em}
+#op-top .op-band{margin-left:auto;display:flex;align-items:center;gap:6px;min-width:0;color:var(--op-mut);font-size:13px;font-weight:600;max-width:46%}
+#op-top .op-band b{color:var(--op-tx);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#op-top .op-sync{display:none;align-items:center;gap:4px;color:var(--op-acc);font-size:12px;font-weight:700;background:var(--op-acc-dim);border:1px solid rgba(48,209,88,.28);padding:3px 8px;border-radius:999px;white-space:nowrap}
+#op-top .op-sync.on{display:inline-flex}
+#op-top .op-sync i{width:7px;height:7px;border-radius:50%;background:var(--op-acc);box-shadow:0 0 8px var(--op-acc);display:block}
+#op-av{position:relative;width:36px;height:36px;border-radius:50%;flex:none;background:linear-gradient(180deg,#3a3a48,#1e1e28);border:1px solid var(--op-line);display:grid;place-items:center;font-weight:800;font-size:14px;color:var(--op-tx);padding:0}
+#op-av .op-dot{position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;padding:0 4px;background:var(--op-red);color:#fff;border-radius:8px;font-size:10px;font-weight:800;display:none;place-items:center;border:2px solid var(--op-bg)}
+#op-av .op-dot.on{display:grid}
+
+/* hide old live header / search button — dock + top bar replace them */
+body.op18.live #livelist > .lvh,
+body.op18.live #livelist > .lvh #lvsb,
+body.op18.live #livelist > .lvh #lvx{display:none !important}
+
+/* livelist fills between top and dock */
+body.op18.live #livelist{
+  display:flex !important;flex-direction:column;
+  position:fixed;inset:auto 0 0 0;
+  top:calc(var(--op-top) + var(--op-safe-t) - 6px);
+  bottom:calc(var(--op-dock) + var(--op-safe-b));
+  z-index:50;overflow:hidden;
+  background:radial-gradient(1200px 500px at 50% -80px,rgba(48,209,88,.07),transparent 60%),var(--op-bg);
+  padding:0 0 0;height:auto !important;
+  grid-template-columns:none;grid-template-rows:none;gap:0;
+}
+body.op18.live #livelist > .lvnow{
+  flex:none;display:flex !important;flex-direction:column;align-items:stretch;
+  margin:0 12px 8px;padding:12px 14px;
+  height:auto !important;min-height:0 !important;max-height:none !important;
+  border-radius:20px;
+  background:linear-gradient(180deg,#1c1c28,#14141c);
+  border:1px solid #2e2e3c;
+  box-shadow:0 8px 28px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05);
+  grid-template-columns:none !important;grid-template-rows:none !important;
+}
+body.op18.live #livelist > .lvnow > .lvbig,
+body.op18.live #livelist > .lvnow > .rs831,
+body.op18.live #livelist > .lvnow > .th65,
+body.op18.live #livelist > .lvnow > .lv65{/* repositioned by js or hidden if we rebuild controls */}
+body.op18.live #livelist .op-now-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+body.op18.live #livelist .op-now-h .lb{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--op-mut)}
+body.op18.live #livelist .op-more{width:32px;height:32px;border-radius:10px;color:var(--op-mut);display:grid;place-items:center;background:none;border:0}
+body.op18.live #livelist .op-title{font-size:24px;font-weight:800;letter-spacing:-.03em;line-height:1.2;margin:0;color:#fff}
+body.op18.live #livelist .op-artist{font-size:14px;color:var(--op-mut);font-weight:500;margin:1px 0 8px}
+body.op18.live #livelist .op-seek{display:grid;grid-template-columns:36px 1fr 36px;gap:8px;align-items:center;font-variant-numeric:tabular-nums;font-size:11px;font-weight:600;color:var(--op-mut);margin-bottom:10px}
+body.op18.live #livelist .op-track{height:5px;background:#2a2a36;border-radius:99px;position:relative;cursor:pointer}
+body.op18.live #livelist .op-track>i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#ffd27a,var(--op-orange));border-radius:99px}
+body.op18.live #livelist .op-track>i:after{content:"";position:absolute;right:-6px;top:50%;width:12px;height:12px;border-radius:50%;background:#fff;transform:translateY(-50%);box-shadow:0 0 0 3px rgba(255,157,10,.25)}
+body.op18.live #livelist .op-adj{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+body.op18.live #livelist .op-step{display:flex;align-items:center;background:#101014;border:1px solid var(--op-line);border-radius:14px;padding:3px;min-height:44px}
+body.op18.live #livelist .op-step .k{font-size:10px;font-weight:700;color:var(--op-mut);letter-spacing:.06em;padding:0 4px 0 8px;white-space:nowrap}
+body.op18.live #livelist .op-step button{width:38px;height:36px;border-radius:11px;background:#232330;font-size:20px;font-weight:700;color:#fff;flex:none;border:0}
+body.op18.live #livelist .op-step .v{flex:1;text-align:center;font-weight:800;font-size:18px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;color:#fff}
+body.op18.live #livelist .op-rowc{display:flex;align-items:center;gap:8px}
+body.op18.live #livelist .op-chip{display:inline-flex;align-items:center;gap:5px;height:36px;padding:0 10px;border-radius:999px;background:#232330;border:1px solid var(--op-line);font-size:13px;font-weight:700;color:var(--op-mut);white-space:nowrap}
+body.op18.live #livelist .op-chip.on{background:var(--op-acc-dim);border-color:rgba(48,209,88,.4);color:var(--op-acc)}
+body.op18.live #livelist .op-chip.pad.on{background:var(--op-orange-dim);border-color:rgba(255,157,10,.4);color:var(--op-orange)}
+body.op18.live #livelist .op-trans{margin-left:auto;display:flex;align-items:center;gap:8px}
+body.op18.live #livelist .op-prev,body.op18.live #livelist .op-next,body.op18.live #livelist .op-play{display:grid;place-items:center;border-radius:50%;flex:none;border:0}
+body.op18.live #livelist .op-prev,body.op18.live #livelist .op-next{width:48px;height:48px;background:#232330;border:1px solid var(--op-line);color:#fff}
+body.op18.live #livelist .op-play{width:58px;height:58px;background:var(--op-orange);color:#1a0e00;box-shadow:0 4px 18px rgba(255,157,10,.45);font-size:22px}
+body.op18.live #livelist .op-nxt{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--op-line);font-size:13px;color:var(--op-mut)}
+body.op18.live #livelist .op-nxt b{color:var(--op-tx);font-weight:700}
+
+/* hide leftover native now-playing bits once op chrome is injected */
+body.op18.live #livelist.op-ready > .lvnow > .lvbig,
+body.op18.live #livelist.op-ready > .lvnow > .rs831,
+body.op18.live #livelist.op-ready > .lvnow > .th65,
+body.op18.live #livelist.op-ready > .lv65,
+body.op18.live #livelist.op-ready > .lvnow > div:not(.op-now-h):not(.op-title):not(.op-artist):not(.op-seek):not(.op-adj):not(.op-rowc):not(.op-nxt):not(.op-now-body){display:none !important}
+body.op18.live #livelist.op-ready .lvnow .lvt,
+body.op18.live #livelist.op-ready .lvnow .lvc,
+body.op18.live #livelist.op-ready .lvnow #lvc,
+body.op18.live #livelist.op-ready .lvnow #lvp{display:none !important}
+
+/* list */
+body.op18.live #livelist > .lvl{
+  flex:1 1 0 !important;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  padding:0 8px 16px;margin:0;gap:2px !important;
+  grid-row:auto !important;
+}
+body.op18.live #livelist .op-listh{display:flex;align-items:baseline;gap:8px;padding:2px 14px 8px;flex:none}
+body.op18.live #livelist .op-listh h2{margin:0;font-size:15px;font-weight:800;color:#fff}
+body.op18.live #livelist .op-listh .sub{color:var(--op-mut);font-size:12px;font-weight:600}
+body.op18.live #livelist .op-listh .n{margin-left:auto;font-size:12px;font-weight:700;color:var(--op-mut)}
+body.op18.live #livelist .op-listh .op-listmore{margin-left:4px;width:28px;height:28px;border-radius:8px;color:var(--op-mut);background:none;border:0}
+
+/* setlist rows */
+body.op18.live #livelist .lvl .sc{
+  display:grid !important;
+  grid-template-columns:28px 22px minmax(0,1fr) auto !important;
+  grid-template-areas:"grip num meta tags" !important;
+  gap:8px;align-items:center;
+  padding:8px 8px !important;border-radius:14px;min-height:56px;
+  background:transparent;height:auto !important;width:auto !important;
+  position:relative;
+}
+body.op18.live #livelist .lvl .sc + .sc{margin-top:2px}
+body.op18.live #livelist .lvl .sc .scn{grid-area:num;position:static !important;transform:none !important;left:auto !important;top:auto !important;font-size:12px;font-weight:700;color:var(--op-mut);font-variant-numeric:tabular-nums;text-align:center}
+body.op18.live #livelist .lvl .sc .sct{grid-area:meta;font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em;color:#fff;padding-right:0}
+body.op18.live #livelist .lvl .sc .sca{display:block;font-size:12px;color:var(--op-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0}
+body.op18.live #livelist .lvl .sc .sct,.op-meta{}
+/* place title+artist in meta cell: sct and sca share the meta column via a wrap we add, or stack with subgrid */
+body.op18.live #livelist .lvl .sc{grid-template-rows:auto auto}
+body.op18.live #livelist .lvl .sc .sct{grid-column:3;grid-row:1}
+body.op18.live #livelist .lvl .sc .sca{grid-column:3;grid-row:2}
+body.op18.live #livelist .lvl .sc .scc,
+body.op18.live #livelist .lvl .sc .tags,
+body.op18.live #livelist .lvl .sc .sc65{grid-column:4;grid-row:1/3;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+body.op18.live #livelist .lvl .sc .lvrm{position:absolute;top:2px;right:2px;z-index:2}
+body.op18.live #livelist .lvl .sc.on{background:linear-gradient(90deg,rgba(255,157,10,.14),rgba(48,209,88,.08) 40%,transparent);box-shadow:inset 3px 0 0 var(--op-orange)}
+body.op18.live #livelist .lvl .sc.on .scn{color:var(--op-orange)}
+body.op18.live #livelist .lvl .sc .eq{display:inline-flex;align-items:flex-end;gap:2px;height:12px;margin-left:6px;vertical-align:middle}
+body.op18.live #livelist .lvl .sc .eq i{width:3px;background:var(--op-orange);border-radius:1px;display:block}
+body.op18.live #livelist .lvl .sc .op-grip{grid-column:1;grid-row:1/3;color:#7a7a88;display:grid;place-items:center;cursor:grab}
+body.op18.live #livelist .lvl .sc .op-kb{font-size:11px;font-weight:800;background:#232330;border:1px solid var(--op-line);padding:2px 7px;border-radius:8px;font-variant-numeric:tabular-nums;color:#fff}
+body.op18.live #livelist .lvl .sc.on .op-kb{background:var(--op-orange);color:#1a0e00;border-color:transparent}
+body.op18.live #livelist .lvl .sc .op-bpm{font-size:10px;color:var(--op-mut);font-weight:600;font-variant-numeric:tabular-nums}
+/* hide old pad/preview chips on rows in compact one-page; still reachable via row ⋯ */
+body.op18.live #livelist .lvl .sc .sc65{display:none !important}
+body.op18.live #livelist .lvl .sc .op-rowmore{grid-column:4;grid-row:1;width:28px;height:28px;border:0;background:none;color:var(--op-mut);font-size:16px}
+
+/* dock */
+#op-dock{position:fixed;left:0;right:0;bottom:0;z-index:80;flex:none;padding:6px 12px var(--op-safe-b);background:var(--op-bg)}
+#op-dock button.op-search{
+  width:100%;display:flex;align-items:center;gap:10px;min-height:48px;
+  background:var(--op-card);border:1px solid var(--op-line);border-radius:16px;
+  padding:0 14px;color:var(--op-mut);font-size:15px;font-weight:500;text-align:left
+}
+
+/* avatar menu */
+#op-menuback{display:none;position:fixed;inset:0;z-index:90;background:rgba(0,0,0,.45)}
+body.menu-open #op-menuback{display:block}
+#op-menu{display:none;position:fixed;top:calc(var(--op-safe-t) + 48px);right:12px;z-index:91;width:min(280px,calc(100vw - 24px));background:#1a1a22;border:1px solid var(--op-line);border-radius:18px;padding:8px;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+body.menu-open #op-menu{display:block}
+#op-menu button{display:flex;align-items:center;gap:10px;width:100%;min-height:48px;padding:0 12px;border-radius:12px;font-size:15px;font-weight:600;text-align:left;background:none;border:0;color:var(--op-tx)}
+#op-menu button:hover{background:#242432}
+#op-menu .nb{margin-left:auto;background:var(--op-red);color:#fff;font-size:11px;font-weight:800;min-width:18px;height:18px;border-radius:9px;display:none;place-items:center}
+#op-menu .nb.on{display:grid}
+#op-menu .who{padding:10px 12px 12px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--op-line);margin-bottom:6px}
+#op-menu .who .av{width:40px;height:40px;border-radius:50%;background:linear-gradient(180deg,#3a3a48,#1e1e28);border:1px solid var(--op-line);display:grid;place-items:center;font-weight:800}
+#op-menu .who .nm{font-weight:800;font-size:15px}
+#op-menu .who .em{font-size:12px;color:var(--op-mut)}
+
+/* library sheet: reuse #left */
+body.op18.live.sheet-open #left{
+  display:flex !important;flex-direction:column;visibility:visible !important;
+  position:fixed;left:0;right:0;bottom:0;top:auto;width:auto !important;min-width:0 !important;
+  z-index:85;height:min(72vh,620px);
+  background:#14141c;border-top:1px solid var(--op-line);border-radius:22px 22px 0 0;
+  box-shadow:0 -12px 40px rgba(0,0,0,.5);
+  padding-bottom:var(--op-safe-b);
+}
+body.op18.live.sheet-open #left header .tabs{display:none !important;transform:none;visibility:hidden}
+body.op18.live.sheet-open #left #hd{display:flex !important}
+#op-sheetback{display:none;position:fixed;inset:0;z-index:84;background:rgba(0,0,0,.55)}
+body.sheet-open #op-sheetback{display:block}
+#op-sheethandle{display:none}
+body.sheet-open #op-sheethandle{display:block;position:fixed;left:50%;transform:translateX(-50%);bottom:min(72vh,620px);z-index:86;width:40px;height:4px;border-radius:4px;background:#3a3a48;margin:10px 0;pointer-events:none}
+
+/* metro / import overlays */
+#op-overlay{display:none;position:fixed;inset:0;z-index:88;background:var(--op-bg);padding:calc(var(--op-safe-t) + 8px) 12px calc(var(--op-safe-b) + 8px);overflow:auto}
+body.op-ov #op-overlay{display:flex;flex-direction:column}
+#op-overlay .op-ovh{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+#op-overlay .op-ovh button{min-height:40px;padding:0 12px;border-radius:12px;background:#232330;border:1px solid var(--op-line);color:#fff;font-weight:700}
+#op-overlay .op-ovb{flex:1;min-height:0;overflow:auto}
+
+/* studio return: compact back icon in the tab row (never floating) */
+#op-backlive{
+  display:none;position:static;z-index:auto;top:auto;right:auto;left:auto;bottom:auto;
+  width:40px;height:40px;min-width:40px;min-height:40px;padding:0;margin:0;
+  border-radius:10px;background:transparent;color:#ffb347;font-weight:800;border:0;box-shadow:none;
+  align-items:center;justify-content:center;flex:none;align-self:center;justify-self:center;
+}
+#op-backlive svg{display:block}
+body.op18:not(.live) #op-backlive{display:inline-flex !important}
+body.op18:not(.live) .tabs{
+  grid-template-columns:40px repeat(4,minmax(0,1fr)) 46px !important;
+}
+body.op18:not(.live) .tabs.nt70{
+  grid-template-columns:40px repeat(4,minmax(0,1fr)) 40px 40px !important;
+}
+@media (orientation:landscape) and (max-height:600px){
+  body.op18:not(.live) .tabs,
+  body.op18:not(.live) .tabs.nt70{
+    grid-template-columns:1fr !important;
+    grid-template-rows:40px repeat(4,minmax(0,1fr)) 40px 40px !important;
+  }
+  body.op18:not(.live) #op-backlive{flex:0 0 40px;width:40px;height:40px;align-self:center}
+}
+body.op18:not(.live) #op-top,body.op18:not(.live) #op-dock,body.op18:not(.live) #op-menu,body.op18:not(.live) #op-menuback{display:none !important}
+
+/* hide old bottom player while in one-page live (controls are on the card) — still openable via Studio */
+body.op18.live #pl{display:none !important}
+body.op18.live #right{display:none !important}
+
+/* Fold / tablet 2 columns */
+@media (min-width:800px){
+  body.op18.live #livelist{
+    display:grid !important;
+    grid-template-columns:380px minmax(0,1fr);
+    grid-template-rows:auto 1fr;
+    column-gap:8px;
+  }
+  body.op18.live #livelist > .lvnow{
+    grid-column:1;grid-row:1/3;
+    margin:0 8px 16px 16px;padding:20px 20px 18px;
+    display:flex !important;flex-direction:column;
+  }
+  body.op18.live #livelist .op-title{font-size:32px;margin-top:6px}
+  body.op18.live #livelist .op-artist{font-size:16px;margin-bottom:16px}
+  body.op18.live #livelist .op-adj{margin-top:auto;grid-template-columns:1fr;gap:10px}
+  body.op18.live #livelist .op-step{min-height:52px}
+  body.op18.live #livelist .op-step .v{font-size:22px}
+  body.op18.live #livelist .op-step button{width:46px;height:42px}
+  body.op18.live #livelist .op-rowc{margin-top:14px;display:grid;grid-template-columns:auto auto auto 1fr;gap:10px 8px;align-items:center}
+  body.op18.live #livelist .op-trans{grid-column:1/-1;justify-content:center;margin:4px 0 0}
+  body.op18.live #livelist .op-play{width:72px;height:72px;font-size:28px}
+  body.op18.live #livelist .op-prev, body.op18.live #livelist .op-next{width:56px;height:56px}
+  body.op18.live #livelist .op-chip{height:40px;padding:0 14px;font-size:14px}
+  body.op18.live #livelist .op-nxt{display:block}
+  body.op18.live #livelist > .op-listh{grid-column:2;grid-row:1;margin:0 16px 0 4px;align-self:end}
+  body.op18.live #livelist > .lvl{grid-column:2;grid-row:2;margin:0 16px 0 4px}
+  body.op18.live #livelist .op-listh h2{font-size:18px}
+  #op-dock{left:calc(380px + 8px);padding:8px 16px 16px 4px;background:transparent}
+  body.op18.live.sheet-open #left{
+    left:auto;right:16px;bottom:16px;top:auto;
+    width:min(440px,46vw);height:min(78vh,820px);
+    border-radius:22px;border:1px solid var(--op-line);
+  }
+  body.sheet-open #op-sheethandle{display:none}
+}
+
+/* keep account / sheets / toasts above chrome */
+body.op18 .acpg,#acctc,.ntp70,.ch81,#bs60,#toast,.mbox{z-index:120}
+
+/* --- 1.0.18 layout fixes: isolate now-playing card from leftover live-mode grid --- */
+body.op18.live #livelist > .lvnow,
+body.op18.live #livelist.op-ready > .lvnow{
+  display:flex !important;flex-direction:column !important;
+  grid-template-columns:none !important;grid-template-rows:none !important;
+  height:auto !important;max-height:none !important;min-height:0 !important;
+  align-items:stretch !important;
+}
+body.op18.live #livelist .lvnow > .op-hide,
+body.op18.live #livelist.op-ready .lvnow > .lvbig,
+body.op18.live #livelist.op-ready .lvnow > .rs831,
+body.op18.live #livelist.op-ready .lvnow > .th65,
+body.op18.live #livelist.op-ready .lvnow > .lv65,
+body.op18.live #livelist.op-ready .lvnow > #lvp,
+body.op18.live #livelist.op-ready .lvnow .lvt,
+body.op18.live #livelist.op-ready .lvnow .lvc,
+body.op18.live #livelist.op-ready .lvnow #lvc,
+body.op18.live #livelist.op-ready > .lv65{
+  display:none !important;width:0 !important;height:0 !important;margin:0 !important;padding:0 !important;overflow:hidden !important;
+}
+body.op18.live #livelist .op-now-h,
+body.op18.live #livelist .op-title,
+body.op18.live #livelist .op-artist,
+body.op18.live #livelist .op-seek,
+body.op18.live #livelist .op-adj,
+body.op18.live #livelist .op-rowc,
+body.op18.live #livelist .op-nxt{
+  display:flex;width:100%;position:static !important;
+  grid-column:auto !important;grid-row:auto !important;
+  float:none !important;height:auto !important;
+}
+body.op18.live #livelist .op-now-h{display:flex !important;align-items:center;justify-content:space-between;margin-bottom:2px}
+body.op18.live #livelist .op-now-h .lb{flex:1;text-align:left}
+body.op18.live #livelist .op-more{flex:none;width:32px;height:32px;min-width:32px;min-height:32px;padding:0;margin:0}
+body.op18.live #livelist .op-title{display:block !important;margin:0}
+body.op18.live #livelist .op-artist{display:block !important}
+body.op18.live #livelist .op-seek{display:grid !important;grid-template-columns:40px minmax(0,1fr) 40px;gap:8px;width:100%}
+body.op18.live #livelist .op-track{min-width:0;width:100%;flex:1}
+body.op18.live #livelist .op-adj{display:grid !important}
+body.op18.live #livelist .op-rowc{display:flex !important}
+
+/* library sheet chrome */
+body.op18.live.sheet-open #left{padding-top:48px}
+#op-sheetttl{display:none}
+body.sheet-open #op-sheetttl{
+  display:block;position:fixed;left:16px;right:16px;z-index:86;
+  bottom:calc(min(72vh,620px) - 42px);
+  font-size:16px;font-weight:800;color:#fff;pointer-events:none;
+}
+body.sheet-open #op-sheethandle{bottom:calc(min(72vh,620px) - 14px);z-index:86}
+@media (min-width:800px){
+  body.sheet-open #op-sheetttl{left:auto;right:32px;width:min(440px,46vw);bottom:auto;top:calc(100% - min(78vh,820px) - 16px + 18px)}
+  body.op18.live #livelist .op-rowc{display:grid !important}
+  body.op18.live #livelist .op-trans{display:flex !important;justify-content:center}
+}
+
+/* logged-out avatar */
+#op-av{font-weight:800}
+
+/* --- 1.0.19: prevent now-playing clipping (fold play/next, 360/390 steppers) --- */
+/* max-height:100% was shrinking the card and spilling play/next */
+body.op18.live #livelist > .lvnow,
+body.op18.live #livelist.op-ready > .lvnow{
+  overflow:visible !important;
+  box-sizing:border-box !important;
+  align-self:start !important;
+  max-height:none !important;
+  height:auto !important;
+}
+body.op18.live #livelist .op-step{min-width:0;box-sizing:border-box}
+body.op18.live #livelist .op-step .k{padding:0 2px 0 6px;flex:none}
+body.op18.live #livelist .op-step .v{min-width:0;font-size:16px;overflow:hidden;text-overflow:ellipsis}
+body.op18.live #livelist .op-step button{width:34px;height:34px;flex:none}
+body.op18.live #livelist .op-adj{min-width:0;width:100%;box-sizing:border-box}
+body.op18.live #livelist .op-nxt:empty{display:none !important}
+
+/* compact key+tempo side-by-side so both fit 360–390 and F#m stays fully visible */
+@media (max-width:430px){
+  body.op18.live #livelist .op-adj{grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;gap:6px;margin-bottom:8px}
+  body.op18.live #livelist .op-step{min-height:40px;padding:2px}
+  body.op18.live #livelist .op-step .k{font-size:9px;padding:0 1px 0 4px;letter-spacing:0}
+  body.op18.live #livelist .op-step .v{font-size:14px !important;overflow:visible;text-overflow:clip;min-width:2.4em}
+  body.op18.live #livelist .op-step button{width:30px;height:30px;font-size:16px;border-radius:9px}
+  body.op18.live #livelist .op-play{width:50px;height:50px}
+  body.op18.live #livelist .op-prev, body.op18.live #livelist .op-next{width:42px;height:42px}
+  body.op18.live #livelist .op-title{font-size:20px}
+  body.op18.live #livelist > .lvnow{padding:8px 10px 10px;margin:0 10px 6px}
+}
+
+@media (min-width:800px){
+  body.op18.live #livelist > .lvnow,
+  body.op18.live #livelist.op-ready > .lvnow{
+    overflow:visible !important;
+    /* size to content so play/next cannot be clipped by leftover overflow:hidden */
+    align-self:start !important;
+    justify-content:flex-start;
+    max-height:none !important;
+    min-height:0 !important;
+    height:auto !important;
+    padding:16px 16px 20px !important;
+    box-sizing:border-box !important;
+  }
+  /* keep play/next inside the card even on short fold windows */
+  body.op18.live #livelist .op-play{width:64px;height:64px}
+  body.op18.live #livelist .op-prev, body.op18.live #livelist .op-next{width:52px;height:52px}
+  body.op18.live #livelist .op-adj{margin-top:auto;flex:none}
+  body.op18.live #livelist .op-rowc{flex:none;margin-top:12px}
+  body.op18.live #livelist .op-nxt{flex:none;margin-top:8px;padding-top:8px}
+}
+@media (min-width:800px) and (max-height:700px){
+  body.op18.live #livelist .op-title{font-size:24px !important;margin-top:2px !important}
+  body.op18.live #livelist .op-artist{margin-bottom:8px !important}
+  body.op18.live #livelist .op-step{min-height:44px}
+  body.op18.live #livelist .op-play{width:56px;height:56px}
+  body.op18.live #livelist .op-prev, body.op18.live #livelist .op-next{width:46px;height:46px}
+  body.op18.live #livelist > .lvnow,
+  body.op18.live #livelist.op-ready > .lvnow{padding:12px 14px 16px !important}
+}
+/* 1.0.22: short landscape — compact card, key+tempo in one row, transport always reachable; left col can scroll */
+@media (min-width:800px) and (max-height:500px){
+  body.op18.live #livelist > .lvnow,
+  body.op18.live #livelist.op-ready > .lvnow,
+  body.op18.live.op-collapsed #livelist > .lvnow,
+  body.op18.live.op-collapsed #livelist.op-ready > .lvnow{
+    align-self:stretch !important;
+    min-height:0 !important;
+    max-height:100% !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+    padding:8px 10px 10px !important;
+  }
+  body.op18.live #livelist .op-title,
+  body.op18.live.op-collapsed #livelist .op-title{font-size:18px !important;margin-top:0 !important}
+  body.op18.live #livelist .op-artist,
+  body.op18.live.op-collapsed #livelist .op-artist{font-size:12px !important;margin-bottom:4px !important}
+  body.op18.live #livelist .op-adj,
+  body.op18.live.op-collapsed #livelist .op-adj{
+    margin-top:6px !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    gap:6px !important;
+  }
+  body.op18.live #livelist .op-step,
+  body.op18.live.op-collapsed #livelist .op-step{min-height:36px;height:36px;padding:2px}
+  body.op18.live #livelist .op-step .v,
+  body.op18.live.op-collapsed #livelist .op-step .v{font-size:16px}
+  body.op18.live #livelist .op-step button,
+  body.op18.live.op-collapsed #livelist .op-step button{width:32px;height:32px;font-size:16px}
+  body.op18.live #livelist .op-rowc,
+  body.op18.live.op-collapsed #livelist .op-rowc{
+    margin-top:8px !important;position:sticky;bottom:0;z-index:2;
+    background:var(--op-card,#16161c);padding-top:6px;
+  }
+  body.op18.live #livelist .op-play,
+  body.op18.live.op-collapsed #livelist .op-play{width:44px !important;height:44px !important;font-size:18px}
+  body.op18.live #livelist .op-prev,
+  body.op18.live #livelist .op-next,
+  body.op18.live.op-collapsed #livelist .op-prev,
+  body.op18.live.op-collapsed #livelist .op-next{width:36px !important;height:36px !important}
+  body.op18.live #livelist .op-chip{height:32px;padding:0 10px;font-size:13px}
+}
+
+/* phone landscape single-column: keep transport reachable without a tall expanded card */
+@media (max-width:799px) and (max-height:500px){
+  body.op18.live:not(.op-collapsed) #livelist .op-title{font-size:16px !important;margin-top:0 !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-artist{font-size:12px;margin-bottom:4px !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-adj{grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;gap:6px;margin-bottom:6px}
+  body.op18.live:not(.op-collapsed) #livelist .op-step{min-height:32px;padding:2px}
+  body.op18.live:not(.op-collapsed) #livelist .op-play{width:44px;height:44px}
+  body.op18.live:not(.op-collapsed) #livelist .op-prev,
+  body.op18.live:not(.op-collapsed) #livelist .op-next{width:34px;height:34px}
+  body.op18.live:not(.op-collapsed) #livelist > .lvnow{padding:6px 8px 8px;margin:0 8px 4px}
+}
+
+
+/* 1.0.19: hide leftover live-mode waveform (seek is on the card) and row chrome that overlaps tags */
+body.op18.live #livelist > #lvw{display:none !important}
+body.op18.live #livelist .lvl .sc .lvrm,
+body.op18.live #livelist .lvl .sc .scc,
+body.op18.live #livelist .lvl .sc .sc65,
+body.op18.live #livelist .lvl .sc .th65,
+body.op18.live #livelist .lvl .sc [data-p65]{display:none !important}
+@media (max-width:799px){
+  body.op18.live #livelist .op-nxt{display:none !important}
+}
+
+/* --- 1.0.19 compact + collapsible now-playing (device feedback) --- */
+body.op18.live #livelist .op-title{
+  white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+  max-width:100%;min-width:0;line-height:1.25;
+}
+body.op18.live #livelist .op-artist{
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;
+}
+body.op18.live #livelist .op-nxt{display:none !important}
+
+/* waveform lives inside the card seek track */
+body.op18.live #livelist .op-seek{align-items:center}
+body.op18.live #livelist .op-track{
+  position:relative;height:16px;min-height:16px;overflow:hidden;border-radius:99px;
+}
+body.op18.live #livelist .op-track #lvw,
+body.op18.live #op-track #lvw{
+  display:block !important;position:absolute;left:0;right:0;top:0;bottom:0;
+  height:100% !important;width:100% !important;margin:0 !important;padding:0 !important;
+  border-radius:99px;background:transparent;pointer-events:none;
+}
+body.op18.live #op-track #lvw canvas{width:100% !important;height:100% !important;display:block;opacity:.9}
+body.op18.live #op-track #lvw .lwh{background:#fff}
+body.op18.live #op-track #op-trk{z-index:1;opacity:.85}
+body.op18.live.op-collapsed #lvw,
+body.op18.live.op-collapsed #op-track #lvw{display:none !important}
+
+/* full key names (F#m) — don't ellipsis the value */
+body.op18.live #livelist .op-step .v{
+  overflow:visible;text-overflow:clip;white-space:nowrap;font-size:15px;font-weight:800;
+}
+
+/* collapsed: one compact bar — title, key, tempo, play/next */
+body.op18.live.op-collapsed #livelist > .lvnow,
+body.op18.live.op-collapsed #livelist.op-ready > .lvnow{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto auto !important;
+  grid-template-rows:56px !important;
+  align-items:center !important;
+  column-gap:8px;
+  min-height:56px !important;max-height:56px !important;height:56px !important;
+  margin:0 10px 6px !important;padding:4px 8px 4px 12px !important;
+  overflow:hidden !important;
+  cursor:pointer;
+}
+body.op18.live.op-collapsed #livelist .op-now-h,
+body.op18.live.op-collapsed #livelist .op-artist,
+body.op18.live.op-collapsed #livelist .op-seek,
+body.op18.live.op-collapsed #livelist .op-chip,
+body.op18.live.op-collapsed #livelist .op-nxt,
+body.op18.live.op-collapsed #livelist #op-nowmore{display:none !important}
+body.op18.live.op-collapsed #livelist .op-title{
+  grid-column:1;grid-row:1;font-size:15px !important;font-weight:700;margin:0 !important;
+  align-self:center;
+}
+body.op18.live.op-collapsed #livelist .op-adj{
+  grid-column:2;grid-row:1;display:flex !important;flex-direction:row !important;
+  grid-template-columns:none !important;gap:6px !important;margin:0 !important;width:auto;
+  align-items:center;
+}
+body.op18.live.op-collapsed #livelist .op-step{
+  min-height:28px;height:28px;padding:0 8px;gap:0;border-radius:8px;width:auto;
+}
+body.op18.live.op-collapsed #livelist .op-step .k,
+body.op18.live.op-collapsed #livelist .op-step button{display:none !important}
+body.op18.live.op-collapsed #livelist .op-step .v{font-size:12px;padding:0}
+body.op18.live.op-collapsed #livelist .op-rowc{
+  grid-column:3;grid-row:1;display:flex !important;margin:0 !important;gap:0;width:auto;
+}
+body.op18.live.op-collapsed #livelist .op-trans{margin:0;gap:6px}
+body.op18.live.op-collapsed #livelist .op-play{width:44px;height:44px;box-shadow:0 2px 10px rgba(255,157,10,.4)}
+body.op18.live.op-collapsed #livelist .op-prev, body.op18.live.op-collapsed #livelist .op-next{width:36px;height:36px}
+
+/* list header: one line, name ellipsis */
+body.op18.live #livelist .op-listh{
+  display:flex;align-items:center;flex-wrap:nowrap;gap:8px;
+  padding:0 14px;height:32px;min-height:32px;overflow:hidden;
+}
+body.op18.live #livelist .op-listh h2{
+  margin:0;min-width:0;flex:1 1 auto;font-size:15px;font-weight:800;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+body.op18.live #livelist .op-listh .sub{display:none}
+body.op18.live #livelist .op-listh .n{flex:none;margin-left:0}
+body.op18.live #livelist .op-listh .op-listmore{flex:none;margin:0}
+
+/* compact 56px rows: number, title+artist, key + BPM; no overlapping ⋯ / ✕ */
+body.op18.live #livelist .lvl .sc{
+  display:grid !important;
+  grid-template-columns:18px 22px minmax(0,1fr) auto !important;
+  grid-template-rows:auto auto !important;
+  grid-template-areas:none !important;
+  gap:0 8px;align-items:center;
+  min-height:52px !important;height:56px !important;max-height:56px !important;
+  padding:4px 10px 4px 4px !important;margin:0 !important;
+  overflow:hidden !important;border-radius:12px;
+  box-sizing:border-box;
+}
+body.op18.live #livelist .lvl .sc > *{min-width:0}
+body.op18.live #livelist .lvl .sc .op-grip{grid-column:1;grid-row:1/3;width:18px;color:#7a7a88}
+body.op18.live #livelist .lvl .sc .scn{
+  grid-column:2;grid-row:1/3;position:static !important;transform:none !important;
+  left:auto !important;top:auto !important;width:auto !important;height:auto !important;
+  background:none !important;border:0 !important;border-radius:0 !important;
+  font-size:12px;font-weight:700;color:var(--op-mut);text-align:center;
+}
+body.op18.live #livelist .lvl .sc.on .scn{color:var(--op-orange)}
+body.op18.live #livelist .lvl .sc .sct{
+  grid-column:3;grid-row:1;font-size:14px;font-weight:700;line-height:1.25;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0;color:#fff;
+}
+body.op18.live #livelist .lvl .sc .sca{
+  grid-column:3;grid-row:2;font-size:11px;color:var(--op-mut);line-height:1.2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0;
+}
+body.op18.live #livelist .lvl .sc .op-tags{
+  grid-column:4;grid-row:1/3;display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:2px;
+}
+body.op18.live #livelist .lvl .sc .op-rowmore,
+body.op18.live #livelist .lvl .sc .eq,
+body.op18.live #livelist .lvl .sc .nowtag,
+body.op18.live #livelist .lvl .sc::before,
+body.op18.live #livelist .lvl .sc::after{display:none !important}
+body.op18.live #livelist .lvl .sc .sct .eq,
+body.op18.live #livelist .lvl .sc .sca .chip,
+body.op18.live #livelist .lvl .sc .sca .op-kb,
+body.op18.live #livelist .lvl .sc .sca .kb{display:none !important}
+
+/* fold: ignore collapse — the list is in its own column */
+@media (min-width:800px){
+  body.op18.live.op-collapsed #livelist > .lvnow,
+  body.op18.live.op-collapsed #livelist.op-ready > .lvnow{
+    display:flex !important;flex-direction:column !important;
+    height:auto !important;max-height:none !important;min-height:0 !important;
+    overflow:visible !important;padding:16px 16px 20px !important;
+    grid-template-columns:none !important;grid-template-rows:none !important;
+    cursor:default;
+  }
+  body.op18.live.op-collapsed #livelist .op-now-h{display:flex !important}
+  body.op18.live.op-collapsed #livelist .op-artist,
+  body.op18.live.op-collapsed #livelist .op-seek,
+  body.op18.live.op-collapsed #livelist .op-chip{display:flex !important}
+  body.op18.live.op-collapsed #livelist .op-artist{display:block !important}
+  body.op18.live.op-collapsed #livelist .op-seek{display:grid !important}
+  body.op18.live.op-collapsed #livelist .op-title{font-size:32px !important;margin-top:6px !important}
+  body.op18.live.op-collapsed #livelist .op-adj{display:grid !important;grid-template-columns:1fr !important;width:100%;margin-top:auto}
+  body.op18.live.op-collapsed #livelist .op-step{min-height:52px;height:auto;padding:3px;width:auto}
+  body.op18.live.op-collapsed #livelist .op-step .k,
+  body.op18.live.op-collapsed #livelist .op-step button{display:flex !important}
+  body.op18.live.op-collapsed #livelist .op-step button{display:grid !important;width:46px;height:42px}
+  body.op18.live.op-collapsed #livelist .op-step .v{font-size:22px}
+  body.op18.live.op-collapsed #livelist .op-rowc{display:grid !important;width:100%;margin-top:14px}
+  body.op18.live.op-collapsed #livelist #op-nowmore{display:grid !important}
+  body.op18.live.op-collapsed #livelist .op-play{width:64px;height:64px}
+  body.op18.live.op-collapsed #livelist .op-prev, body.op18.live.op-collapsed #livelist .op-next{width:52px;height:52px}
+  body.op18.live.op-collapsed #op-track #lvw{display:block !important}
+}
+
+/* --- 1.0.20: pin chrome, only the setlist scrolls; compact sticky header --- */
+html.op18-live, html.op18-live body, body.op18.live{
+  overflow:hidden !important;
+  height:100% !important;
+  height:100dvh !important;
+  max-height:100% !important;
+  max-height:100dvh !important;
+  width:100% !important;
+  overscroll-behavior:none;
+  touch-action:manipulation;
+  position:relative;
+}
+/* keep body in the viewport so iOS cannot document-scroll the fixed chrome away */
+body.op18.live{
+  position:fixed !important;
+  left:0;right:0;top:0;bottom:0;
+}
+
+/* top bar: always fixed, opaque, respects safe-area (all widths / portrait) */
+#op-top{
+  position:fixed !important;
+  top:0 !important;left:0 !important;right:0 !important;
+  z-index:80 !important;
+  padding:var(--op-safe-t) 12px 6px 14px !important;
+  min-height:calc(48px + var(--op-safe-t)) !important;
+  height:auto !important;
+  background:var(--op-bg) !important;
+  box-sizing:border-box;
+  transform:none !important;
+}
+body.op18.live #livelist{
+  overflow:hidden !important;
+  overscroll-behavior:none !important;
+  touch-action:manipulation;
+  /* sit below the fixed top bar, above the dock */
+  top:calc(48px + var(--op-safe-t)) !important;
+  bottom:calc(var(--op-dock) + var(--op-safe-b)) !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+
+/* pin card + list header inside the flex column; list is the only scroller */
+body.op18.live #livelist > .lvnow,
+body.op18.live #livelist.op-ready > .lvnow{
+  flex:0 0 auto !important;
+  position:relative;
+  z-index:3;
+}
+body.op18.live #livelist > .op-listh,
+body.op18.live #livelist .op-listh{
+  flex:0 0 auto !important;
+  position:relative;
+  z-index:2;
+  display:flex !important;
+  align-items:center;
+  flex-wrap:nowrap;
+  gap:6px;
+  height:40px !important;
+  min-height:40px !important;
+  max-height:40px !important;
+  padding:0 8px 0 12px !important;
+  margin:0;
+  overflow:hidden;
+  background:var(--op-bg);
+  box-sizing:border-box;
+}
+body.op18.live #livelist .op-listh h2{
+  margin:0;min-width:0;flex:1 1 auto;
+  font-size:14px;font-weight:800;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+body.op18.live #livelist .op-listh .sub{display:none !important}
+body.op18.live #livelist .op-listh .n{
+  flex:none;margin:0;font-size:11px;font-weight:700;color:var(--op-mut);
+  white-space:nowrap;
+}
+body.op18.live #livelist .op-listacts{
+  display:flex;align-items:center;flex:none;gap:2px;margin:0;
+}
+body.op18.live #livelist .op-listhbtn,
+body.op18.live #livelist .op-listmore{
+  width:36px !important;height:36px !important;min-width:36px !important;min-height:36px !important;
+  padding:0 !important;margin:0 !important;
+  border:0 !important;border-radius:10px;
+  background:transparent !important;
+  color:var(--op-mut);
+  display:grid !important;place-items:center;
+  box-sizing:border-box;
+}
+body.op18.live #livelist .op-listhbtn svg,
+body.op18.live #livelist .op-listmore svg{width:18px;height:18px;display:block}
+
+body.op18.live #livelist > .lvl{
+  flex:1 1 0 !important;
+  min-height:0 !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+  padding:0 8px 12px;
+}
+
+/* toast: sit below the top bar, never clipped, hide fully when dismissed */
+body.op18 #toast,
+body.op18.live #toast{
+  z-index:2147483000 !important;
+  top:calc(var(--op-safe-t) + 48px + 8px) !important;
+  left:50% !important;
+  right:auto !important;
+  max-width:min(92vw, 420px) !important;
+  transform:translate(-50%, calc(-100% - 40px));
+  visibility:hidden;
+  pointer-events:none;
+  box-sizing:border-box;
+}
+body.op18 #toast.show,
+body.op18.live #toast.show{
+  transform:translate(-50%, 0);
+  visibility:visible;
+  pointer-events:auto;
+}
+
+/* Fold: two columns, header stays in the right column above the scrolling list */
+@media (min-width:800px){
+  body.op18.live #livelist{
+    display:grid !important;
+    grid-template-columns:380px minmax(0,1fr);
+    grid-template-rows:40px minmax(0,1fr);
+    overflow:hidden !important;
+  }
+  body.op18.live #livelist > .lvnow,
+  body.op18.live #livelist.op-ready > .lvnow{
+    grid-column:1;grid-row:1/3;
+    align-self:start !important;
+  }
+  body.op18.live #livelist > .op-listh,
+  body.op18.live #livelist .op-listh{
+    grid-column:2;grid-row:1;
+    margin:0 16px 0 4px;
+    width:auto;
+  }
+  body.op18.live #livelist > .lvl{
+    grid-column:2;grid-row:2;
+    margin:0 16px 0 4px;
+  }
+}
+
+/* slightly tighter collapsed bar so 7–8 rows remain visible on 390x844 */
+@media (max-width:799px){
+  body.op18.live.op-collapsed #livelist > .lvnow,
+  body.op18.live.op-collapsed #livelist.op-ready > .lvnow{
+    margin:0 10px 4px !important;
+    min-height:56px !important;max-height:56px !important;height:56px !important;
+    grid-template-rows:56px !important;
+    overflow:hidden !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-play,
+  body.op18.live.op-collapsed #livelist .op-prev, body.op18.live.op-collapsed #livelist .op-next{
+    min-width:0 !important;min-height:0 !important;padding:0 !important;
+    box-sizing:border-box !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-play{width:40px !important;height:40px !important}
+  body.op18.live.op-collapsed #livelist .op-prev, body.op18.live.op-collapsed #livelist .op-next{width:34px !important;height:34px !important}
+}
+@media (max-width:360px){
+  body.op18.live #livelist .op-listh{padding:0 6px 0 10px !important;gap:4px}
+  body.op18.live #livelist .op-listh h2{font-size:13px}
+  body.op18.live #livelist .op-listhbtn,
+  body.op18.live #livelist .op-listmore{
+    width:34px !important;height:34px !important;min-width:34px !important;min-height:34px !important;
+  }
+}
+
+/* 1.0.20 feedback form in the existing overlay */
+.op-fb{max-width:440px;margin:0 auto;padding:8px 4px 24px;display:flex;flex-direction:column;gap:12px}
+.op-fbhint{margin:0;color:var(--op-mut);font-size:14px;line-height:1.4}
+.op-fblab{display:flex;flex-direction:column;gap:6px;font-weight:700;font-size:13px;color:var(--op-mut)}
+.op-fb textarea#op-fbtx{width:100%;min-height:96px;border-radius:12px;border:1px solid var(--op-line);background:#101014;color:#fff;padding:10px 12px;font:inherit;font-size:16px;resize:vertical;box-sizing:border-box}
+.op-fbr,.op-fbc{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.op-fbr>span:first-child{font-size:13px;font-weight:700;color:var(--op-mut);margin-right:4px}
+.op-fbstars{display:flex;gap:4px}
+.op-fbstar,.op-fbcat{
+  width:36px;height:36px;min-width:36px;min-height:36px;padding:0;
+  border-radius:10px;border:1px solid var(--op-line);background:#232330;color:#fff;
+  font-weight:800;font-size:14px;
+}
+.op-fbcat{width:auto;padding:0 12px;min-width:64px}
+.op-fbstar.on,.op-fbcat.on{background:var(--op-orange);color:#1a0e00;border-color:transparent}
+.op-fbmeta{font-size:12px;color:var(--op-mut);word-break:break-word}
+.op-fbsend{
+  min-height:48px;border:0;border-radius:14px;background:var(--op-orange);color:#1a0e00;
+  font-weight:800;font-size:16px;
+}
+.op-fbsend:disabled{opacity:.6}
+@media (max-width:360px){
+  .op-fbstar,.op-fbcat{width:34px;height:34px;min-width:34px;min-height:34px;font-size:13px}
+  .op-fbcat{width:auto;padding:0 10px}
+}
+
+/* 1.0.21 continuous-play chip: same size as Pad/เมโทร; compact ∞ in collapsed bar at 390 */
+body.op18.live #livelist #op-auto.op-chip.on{
+  background:var(--op-acc-dim);border-color:rgba(48,209,88,.4);color:var(--op-acc);
+}
+body.op18.live #livelist #op-auto .op-autoico{font-weight:800;font-size:16px;line-height:1;letter-spacing:-.04em}
+@media (max-width:799px){
+  body.op18.live.op-collapsed #livelist #op-auto{
+    display:inline-flex !important;
+    width:28px;height:28px;min-width:28px;min-height:0 !important;padding:0;
+    justify-content:center;align-items:center;gap:0;margin-right:6px;
+    font-size:15px;box-sizing:border-box;
+  }
+  body.op18.live.op-collapsed #livelist #op-auto .op-autol{display:none}
+}
+@media (max-width:360px){
+  /* keep 360 collapsed uncramped: hide label-less chip if space is tight — still on expanded card */
+  body.op18.live.op-collapsed #livelist #op-auto{display:none !important}
+}
+
+
+/* ===== 1.0.22 (must be last): short landscape compact card + aligned top bar ===== */
+@media (min-width:800px){
+  /* list header sits at the top of #livelist; keep the top bar from overlapping it */
+  body.op18.live #op-top{
+    height:calc(48px + var(--op-safe-t)) !important;
+    min-height:calc(48px + var(--op-safe-t)) !important;
+    max-height:calc(48px + var(--op-safe-t)) !important;
+    padding-bottom:0 !important;
+    overflow:hidden !important;
+    align-items:center !important;
+    box-sizing:border-box !important;
+  }
+  body.op18.live #livelist{
+    top:calc(48px + var(--op-safe-t)) !important;
+  }
+}
+@media (min-width:800px) and (max-height:500px){
+  body.op18.live #op-top{
+    height:calc(44px + var(--op-safe-t)) !important;
+    min-height:calc(44px + var(--op-safe-t)) !important;
+    max-height:calc(44px + var(--op-safe-t)) !important;
+  }
+  body.op18.live #livelist{
+    top:calc(44px + var(--op-safe-t)) !important;
+  }
+  body.op18.live #livelist > .lvnow,
+  body.op18.live #livelist.op-ready > .lvnow,
+  body.op18.live.op-collapsed #livelist > .lvnow,
+  body.op18.live.op-collapsed #livelist.op-ready > .lvnow{
+    align-self:stretch !important;
+    flex:1 1 auto !important;
+    min-height:0 !important;
+    max-height:100% !important;
+    height:auto !important;
+    overflow-x:hidden !important;
+    overflow-y:auto !important;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+    padding:6px 10px 8px !important;
+    box-sizing:border-box !important;
+    justify-content:flex-start !important;
+  }
+  body.op18.live #livelist .op-now-h{margin-bottom:0 !important}
+  body.op18.live #livelist .op-title,
+  body.op18.live.op-collapsed #livelist .op-title{font-size:16px !important;margin:0 !important;line-height:1.2 !important}
+  body.op18.live #livelist .op-artist,
+  body.op18.live.op-collapsed #livelist .op-artist{font-size:11px !important;margin:0 0 4px !important}
+  body.op18.live #livelist .op-seek{margin-bottom:4px !important}
+  body.op18.live #livelist .op-adj,
+  body.op18.live.op-collapsed #livelist .op-adj{
+    margin-top:4px !important;margin-bottom:4px !important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    gap:6px !important;
+  }
+  body.op18.live #livelist .op-step,
+  body.op18.live.op-collapsed #livelist .op-step{min-height:32px !important;height:32px !important;padding:2px !important}
+  body.op18.live #livelist .op-step .v,
+  body.op18.live.op-collapsed #livelist .op-step .v{font-size:14px !important}
+  body.op18.live #livelist .op-step button,
+  body.op18.live.op-collapsed #livelist .op-step button{width:28px !important;height:28px !important;font-size:15px !important}
+  body.op18.live #livelist .op-rowc,
+  body.op18.live.op-collapsed #livelist .op-rowc{
+    margin-top:4px !important;
+    position:sticky;bottom:0;z-index:2;
+    background:var(--op-card,#16161c);
+    padding-top:4px;
+    gap:6px !important;
+  }
+  body.op18.live #livelist .op-chip{height:28px !important;padding:0 8px !important;font-size:12px !important}
+  body.op18.live #livelist .op-play,
+  body.op18.live.op-collapsed #livelist .op-play{width:40px !important;height:40px !important;min-width:0 !important;min-height:0 !important;padding:0 !important;font-size:16px !important;box-shadow:0 2px 8px rgba(255,157,10,.35) !important}
+  body.op18.live #livelist .op-prev,
+  body.op18.live #livelist .op-next,
+  body.op18.live.op-collapsed #livelist .op-prev,
+  body.op18.live.op-collapsed #livelist .op-next{width:34px !important;height:34px !important;min-width:0 !important;min-height:0 !important;padding:0 !important}
+  body.op18.live #livelist .op-chip{min-height:0 !important}
+}
+
+/* studio back: keep the icon in the tab row on short landscape rails */
+@media (orientation:landscape) and (max-height:500px){
+  body.op18:not(.live) header .tabs #op-backlive,
+  body.op18:not(.live) .tabs #op-backlive{
+    display:inline-flex !important;
+    position:static !important;
+    flex:0 0 40px !important;
+    width:40px !important;height:40px !important;
+    min-width:40px !important;min-height:40px !important;
+  }
+}
+
+
+/* ===== 1.0.22 library sheet: search on its own row, list is the scroller ===== */
+body.op18.live.sheet-open #left{
+  overflow:hidden !important;
+  overscroll-behavior:contain;
+  touch-action:manipulation;
+}
+body.op18.live.sheet-open #left header{
+  flex:none;min-height:0;height:auto !important;overflow:visible;
+  display:flex;flex-direction:column;padding:0;margin:0;border:0;background:transparent;
+}
+body.op18.live.sheet-open #left #hd{
+  display:flex !important;
+  flex-direction:column !important;
+  flex-wrap:nowrap !important;
+  align-items:stretch !important;
+  justify-content:flex-start !important;
+  gap:8px !important;
+  flex:none;
+  min-width:0;
+  width:100%;
+  box-sizing:border-box;
+  padding:0 14px 8px !important;
+}
+body.op18.live.sheet-open #left #hd .qw16{
+  order:1;
+  display:block !important;
+  width:100% !important;
+  min-width:0;
+  grid-column:auto !important;
+  position:relative;
+}
+body.op18.live.sheet-open #left #hd #q{
+  width:100% !important;
+  margin:0 !important;
+  box-sizing:border-box;
+}
+body.op18.live.sheet-open #left #hd #seg{
+  order:2;
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) minmax(0,1.15fr) !important;
+  width:100% !important;
+  min-width:0;
+  margin:0 !important;
+  box-sizing:border-box;
+}
+body.op18.live.sheet-open #left #hd #seg button{
+  min-width:0;
+  min-height:36px;
+  font-size:13px;
+  padding:4px 6px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+body.op18.live.sheet-open #left #hd .chipw{
+  order:3;
+  width:100%;
+  min-width:0;
+  overflow-x:auto;
+  overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-x;
+}
+body.op18.live.sheet-open #left #main,
+body.op18.live.sheet-open #left #main.op-libscroll{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  height:auto !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+  padding-bottom:12px;
+}
+
+/* other one-page overlays / sheets: each list is its own scroller, never the locked page */
+body.op-ov #op-overlay{
+  overflow:hidden !important;
+  overscroll-behavior:contain;
+}
+body.op-ov #op-ovb,
+body.op-ov #op-ovb #main{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+}
+#op-menu{
+  max-height:calc(100dvh - var(--op-safe-t) - 64px);
+  overflow-x:hidden;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+  touch-action:pan-y;
+}
+.ntp70,
+#bs60b, .bs60b,
+.sv60,
+.ch81l,
+.mbox,
+.acsc,
+.op-fb{
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior:contain;
+}
+
+
+/* ===== 1.0.26: Studio tabs (คลัง / Live / Metronome / Import) must page-scroll =====
+   1.0.20 locked html.op18 + html.op18 body even after leaving the one-page view. */
+html.op18:not(.op18-live),
+html.op18:not(.op18-live) body,
+body.op18:not(.live){
+  overflow:auto !important;
+  overflow-x:hidden !important;
+  height:auto !important;
+  max-height:none !important;
+  overscroll-behavior-y:auto;
+  touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;
+}
+body.op18:not(.live){
+  position:static !important;
+  left:auto;right:auto;top:auto;bottom:auto;
+}
+body.op18:not(.live) #left,
+body.op18:not(.live) #main{
+  overflow:visible !important;
+  height:auto !important;
+  max-height:none !important;
+  touch-action:pan-y;
+  -webkit-overflow-scrolling:touch;
+}
+
+/* ===== 1.0.26 scheduled maintenance banner (below sticky top bar, never blocks use) ===== */
+#op-maint{
+  position:fixed;left:8px;right:8px;z-index:79;
+  display:flex;align-items:flex-start;gap:8px;
+  background:#3a2a10;color:#ffe7c2;border:1px solid #fb923c;
+  border-radius:10px;padding:6px 10px;
+  font:600 12px/1.35 Inter,"Noto Sans Thai",system-ui,sans-serif;
+  box-shadow:0 4px 16px rgba(0,0,0,.35);
+  box-sizing:border-box;
+}
+#op-maint[hidden]{display:none!important}
+#op-maint[data-ph="now"]{background:#3a1510;border-color:#ff453a;color:#ffd6d3}
+#op-maint .tx{flex:1;min-width:0}
+#op-maint .tx .sub{font-weight:500;opacity:.9;margin-top:2px}
+#op-maint .x{
+  flex:none;width:28px;height:28px;border:0;border-radius:8px;
+  background:transparent;color:inherit;font:700 16px/28px system-ui;cursor:pointer;padding:0;
+}
+#op-maint .x[hidden]{display:none!important}
+body.op18.live.op-maintbn #livelist{
+  top:calc(48px + var(--op-safe-t) + var(--op-maint,0px)) !important;
+}
+@media (min-width:800px) and (max-height:500px){
+  body.op18.live.op-maintbn #livelist{
+    top:calc(44px + var(--op-safe-t) + var(--op-maint,0px)) !important;
+  }
+}
+@media (max-height:500px){
+  body.op18.live.op-maintbn #livelist{
+    top:calc(44px + var(--op-safe-t) + var(--op-maint,0px)) !important;
+  }
+}
+
+/* 1.0.28 SFX pad sheet + one-page chip */
+body.op18.live #livelist #op-sfx.op-chip{gap:4px}
+body.op18.live #livelist #op-sfx.op-chip svg{width:16px;height:16px;display:block}
+body.op18.live #livelist #op-sfx.op-chip.on{
+  background:var(--op-orange-dim,rgba(255,157,10,.18));
+  border-color:rgba(255,157,10,.45);
+  color:var(--op-orange,#ff9d0a);
+}
+@media (max-width:799px){
+  body.op18.live.op-collapsed #livelist #op-sfx{
+    display:inline-flex !important;
+    width:28px;height:28px;min-width:28px;min-height:0 !important;padding:0;
+    justify-content:center;align-items:center;gap:0;margin-right:6px;
+    box-sizing:border-box;
+  }
+  body.op18.live.op-collapsed #livelist #op-sfx .op-sfxl{display:none}
+}
+@media (max-width:360px){
+  body.op18.live.op-collapsed #livelist #op-sfx{display:none !important}
+}
+
+#op-sfxsheet{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  width:min(420px,calc(100vw - 16px));
+  z-index:180;
+  background:#16161c;color:#e5e7eb;
+  border:1px solid #3f3f46;border-radius:16px;
+  padding:10px 12px 12px;
+  box-shadow:0 16px 40px rgba(0,0,0,.55);
+  font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;
+  box-sizing:border-box;
+}
+#op-sfxsheet[hidden]{display:none!important}
+#op-sfxsheet .sfx-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+#op-sfxsheet .sfx-h b{font:800 13px/1 Inter,system-ui;letter-spacing:.04em}
+#op-sfxsheet .sfx-vol{flex:1 1 auto;display:flex;align-items:center;gap:8px;min-width:0;color:#a1a1aa;font:600 11px/1 Inter,"Noto Sans Thai",system-ui}
+#op-sfxsheet .sfx-vol input[type=range]{-webkit-appearance:none;appearance:none;height:16px;flex:1 1 auto;min-width:0;width:100%;background:transparent;margin:0}
+#op-sfxsheet .sfx-vol input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:#3f3f46}
+#op-sfxsheet .sfx-vol input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:#fb923c;border:0;margin-top:-5.5px}
+#op-sfxsheet .sfx-x{flex:0 0 auto;width:32px;height:32px;border:0;background:transparent;color:#a1a1aa;font:700 22px/1 Inter,system-ui;cursor:pointer;padding:0}
+#op-sfxsheet .sfx-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+#op-sfxsheet .sfx-pad{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  min-height:64px;padding:8px 4px;border-radius:12px;border:1px solid #3f3f46;
+  background:#1f1f27;color:#e5e7eb;cursor:pointer;
+  font:700 11px/1.2 Inter,"Noto Sans Thai",system-ui;
+  -webkit-tap-highlight-color:transparent;
+}
+#op-sfxsheet .sfx-pad .sfx-en{font:700 10px/1 Inter,system-ui;color:#a1a1aa;text-transform:capitalize}
+#op-sfxsheet .sfx-pad .sfx-lab{font:700 12px/1.2 Inter,"Noto Sans Thai",system-ui}
+#op-sfxsheet .sfx-pad.flash{background:#fb923c;border-color:#fb923c;color:#111;animation:sfxflash .35s ease}
+#op-sfxsheet .sfx-pad.flash .sfx-en{color:#111}
+@keyframes sfxflash{from{transform:scale(.97)}to{transform:scale(1)}}
+@media (orientation:landscape) and (max-height:500px){
+  #op-sfxsheet{
+    bottom:auto;top:calc(52px + env(safe-area-inset-top,0px));
+    width:min(560px,calc(100vw - 24px));
+    padding:8px 10px 10px;
+  }
+  #op-sfxsheet .sfx-pad{min-height:48px;padding:6px 4px}
+  #op-sfxsheet .sfx-grid{gap:6px}
+}
+
+/* ===== 1.0.29: now-playing card fits 360–430; icon-only chips; SFX vol default 80% ===== */
+body.op18.live #livelist > .lvnow,
+body.op18.live #livelist.op-ready > .lvnow{
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+}
+body.op18.live #livelist .op-adj,
+body.op18.live #livelist .op-rowc,
+body.op18.live #livelist .op-step{
+  min-width:0 !important;
+  max-width:100% !important;
+  box-sizing:border-box !important;
+}
+body.op18.live #livelist .op-step .v{
+  overflow:visible !important;
+  text-overflow:clip !important;
+  min-width:3.2em;
+  flex:1 0 auto;
+  white-space:nowrap;
+}
+body.op18.live #livelist .op-step button{
+  min-width:0 !important;
+  min-height:0 !important;
+  padding:0 !important;
+  box-sizing:border-box !important;
+}
+
+/* Phones (expanded card): equal icon-only chips + transport all visible, no horizontal scroll */
+@media (max-width:799px){
+  body.op18.live:not(.op-collapsed) #livelist .op-rowc{
+    display:flex !important;
+    flex-wrap:nowrap !important;
+    align-items:center;
+    justify-content:flex-start;
+    gap:6px !important;
+    width:100%;
+    min-width:0;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-chip{
+    flex:0 0 36px !important;
+    width:36px !important;
+    height:36px !important;
+    min-width:36px !important;
+    min-height:0 !important;
+    padding:0 !important;
+    justify-content:center !important;
+    align-items:center !important;
+    gap:0 !important;
+    box-sizing:border-box !important;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-chip svg{
+    width:18px !important;height:18px !important;display:block;flex:none;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-chip #op-padl,
+  body.op18.live:not(.op-collapsed) #livelist .op-chip .op-metrol,
+  body.op18.live:not(.op-collapsed) #livelist .op-chip .op-sfxl,
+  body.op18.live:not(.op-collapsed) #livelist .op-chip .op-autol{display:none !important}
+  body.op18.live:not(.op-collapsed) #livelist #op-auto .op-autoico{font-size:18px !important;line-height:1}
+  body.op18.live:not(.op-collapsed) #livelist .op-trans{
+    margin-left:auto !important;
+    display:flex !important;
+    align-items:center;
+    gap:6px !important;
+    flex:0 0 auto;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-play{width:48px !important;height:48px !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-prev,
+  body.op18.live:not(.op-collapsed) #livelist .op-next{width:40px !important;height:40px !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-adj{
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important;
+    gap:6px !important;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-step .v{font-size:14px !important}
+}
+@media (max-width:360px){
+  body.op18.live:not(.op-collapsed) #livelist > .lvnow{margin:0 8px 6px;padding:8px}
+  body.op18.live:not(.op-collapsed) #livelist .op-chip{
+    flex:0 0 32px !important;width:32px !important;height:32px !important;min-width:32px !important;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-chip svg{width:16px !important;height:16px !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-play{width:44px !important;height:44px !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-prev,
+  body.op18.live:not(.op-collapsed) #livelist .op-next{width:36px !important;height:36px !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-rowc{gap:5px !important}
+  body.op18.live:not(.op-collapsed) #livelist .op-step{min-height:38px;padding:2px}
+  body.op18.live:not(.op-collapsed) #livelist .op-step button{width:28px;height:28px;font-size:15px}
+  body.op18.live:not(.op-collapsed) #livelist .op-step .k{font-size:9px;padding:0 1px 0 3px}
+  body.op18.live:not(.op-collapsed) #livelist .op-step .v{font-size:13px !important}
+}
+
+/* Fold / tablet 380px now-playing column: icon-only chips, transport on the next row */
+@media (min-width:800px){
+  body.op18.live #livelist > .lvnow,
+  body.op18.live #livelist.op-ready > .lvnow,
+  body.op18.live.op-collapsed #livelist > .lvnow,
+  body.op18.live.op-collapsed #livelist.op-ready > .lvnow{
+    min-width:0 !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+  }
+  body.op18.live #livelist .op-rowc,
+  body.op18.live.op-collapsed #livelist .op-rowc{
+    display:flex !important;
+    flex-wrap:wrap !important;
+    align-items:center;
+    justify-content:space-evenly;
+    gap:8px !important;
+    width:100%;
+    min-width:0;
+  }
+  body.op18.live #livelist .op-chip,
+  body.op18.live.op-collapsed #livelist .op-chip{
+    flex:0 0 40px !important;
+    width:40px !important;
+    height:40px !important;
+    min-width:40px !important;
+    min-height:0 !important;
+    padding:0 !important;
+    justify-content:center !important;
+    align-items:center !important;
+    gap:0 !important;
+    box-sizing:border-box !important;
+  }
+  body.op18.live #livelist .op-chip svg,
+  body.op18.live.op-collapsed #livelist .op-chip svg{width:18px !important;height:18px !important;display:block}
+  body.op18.live #livelist .op-chip #op-padl,
+  body.op18.live #livelist .op-chip .op-metrol,
+  body.op18.live #livelist .op-chip .op-sfxl,
+  body.op18.live #livelist .op-chip .op-autol,
+  body.op18.live.op-collapsed #livelist .op-chip #op-padl,
+  body.op18.live.op-collapsed #livelist .op-chip .op-metrol,
+  body.op18.live.op-collapsed #livelist .op-chip .op-sfxl,
+  body.op18.live.op-collapsed #livelist .op-chip .op-autol{display:none !important}
+  body.op18.live #livelist #op-auto .op-autoico{font-size:18px !important;line-height:1}
+  body.op18.live #livelist .op-trans,
+  body.op18.live.op-collapsed #livelist .op-trans{
+    flex:1 0 100% !important;
+    justify-content:center !important;
+    margin:6px 0 0 !important;
+    gap:10px !important;
+  }
+}
+
+/* SFX volume slider: visible thumb, larger hit area */
+#op-sfxsheet .sfx-vol input[type=range]{
+  -webkit-appearance:none;appearance:none;
+  height:24px;flex:1 1 auto;min-width:0;width:100%;
+  background:transparent;margin:0;
+}
+#op-sfxsheet .sfx-vol input[type=range]::-webkit-slider-runnable-track{
+  height:4px;border-radius:99px;background:#3f3f46;
+}
+#op-sfxsheet .sfx-vol input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;appearance:none;
+  width:16px;height:16px;border-radius:50%;
+  background:#fb923c;border:0;margin-top:-6px;
+  box-shadow:0 0 0 3px rgba(251,146,60,.25);
+}
+#op-sfxsheet .sfx-vol input[type=range]::-moz-range-track{
+  height:4px;border-radius:99px;background:#3f3f46;
+}
+#op-sfxsheet .sfx-vol input[type=range]::-moz-range-thumb{
+  width:16px;height:16px;border-radius:50%;background:#fb923c;border:0;
+}
+
+/* 1.0.29 short-land steppers honor compact size (override global 48px min) */
+@media (min-width:800px) and (max-height:500px){
+  body.op18.live #livelist .op-step button,
+  body.op18.live.op-collapsed #livelist .op-step button{
+    width:28px !important;height:28px !important;min-width:0 !important;min-height:0 !important;
+    font-size:15px !important;padding:0 !important;
+  }
+  body.op18.live #livelist .op-step,
+  body.op18.live.op-collapsed #livelist .op-step{min-height:32px !important;height:32px !important}
+  body.op18.live #livelist .op-step .v,
+  body.op18.live.op-collapsed #livelist .op-step .v{font-size:14px !important;min-width:3.2em}
+}
+
+/* ===== 1.0.30: one-page play/prev/next easy to hit, without breaking 360–430 card fit ===== */
+@media (max-width:799px){
+  body.op18.live:not(.op-collapsed) #livelist .op-play{
+    width:56px !important;height:56px !important;
+    min-width:56px !important;min-height:56px !important;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-prev,
+  body.op18.live:not(.op-collapsed) #livelist .op-next{
+    width:44px !important;height:44px !important;
+    min-width:44px !important;min-height:44px !important;
+  }
+  body.op18.live:not(.op-collapsed) #livelist .op-trans{gap:6px !important}
+}
+/* collapsed bar is only ~56px tall — keep play/prev/next at a hittable 44, not 56 */
+@media (max-width:799px){
+  body.op18.live.op-collapsed #livelist .op-play{
+    width:44px !important;height:44px !important;
+    min-width:44px !important;min-height:44px !important;
+    max-width:44px !important;max-height:44px !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-prev,
+  body.op18.live.op-collapsed #livelist .op-next{
+    width:44px !important;height:44px !important;
+    min-width:44px !important;min-height:44px !important;
+  }
+}
+/* Fold / wide: transport already on its own row — use the large primary play */
+@media (min-width:800px){
+  body.op18.live #livelist .op-play,
+  body.op18.live.op-collapsed #livelist .op-play{
+    width:56px !important;height:56px !important;
+    min-width:56px !important;min-height:56px !important;
+  }
+  body.op18.live #livelist .op-prev,
+  body.op18.live #livelist .op-next,
+  body.op18.live.op-collapsed #livelist .op-prev,
+  body.op18.live.op-collapsed #livelist .op-next{
+    width:44px !important;height:44px !important;
+    min-width:44px !important;min-height:44px !important;
+  }
+}
+@media (min-width:800px) and (orientation:landscape) and (max-height:500px){
+  body.op18.live #livelist .op-play,
+  body.op18.live.op-collapsed #livelist .op-play{
+    width:56px !important;height:56px !important;
+  }
+}
+
+/* SFX sheet: custom pads, overflow menu, add tile */
+#op-sfxsheet .sfx-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+#op-sfxsheet .sfx-pad{position:relative;overflow:visible}
+#op-sfxsheet .sfx-more{
+  position:absolute;top:2px;right:2px;width:28px;height:28px;min-width:28px;min-height:28px;
+  border:0;background:transparent;color:#a1a1aa;border-radius:8px;padding:0;cursor:pointer;
+  font:800 16px/1 Inter,system-ui;
+}
+#op-sfxsheet .sfx-more:active{color:#fff}
+#op-sfxsheet .sfx-add{
+  border-style:dashed;color:#a1a1aa;background:transparent;
+}
+#op-sfxsheet .sfx-add .sfx-lab{font:700 12px/1.2 Inter,"Noto Sans Thai",system-ui}
+#op-sfxsheet .sfx-customflag{position:absolute;top:4px;left:6px;font:700 9px/1 Inter,"Noto Sans Thai",system-ui;color:#fb923c}
+#op-sfxfile{position:fixed;left:-9999px;width:1px;height:1px;opacity:0}
+#op-sfxmenu{
+  position:fixed;z-index:80;min-width:180px;max-width:240px;
+  background:#18181f;border:1px solid #3f3f46;border-radius:12px;
+  box-shadow:0 10px 30px rgba(0,0,0,.45);padding:4px;display:flex;flex-direction:column;
+}
+#op-sfxmenu[hidden]{display:none!important}
+#op-sfxmenu button{
+  width:100%;min-width:0;height:44px;border:0;background:transparent;color:#e5e7eb;
+  text-align:left;padding:0 12px;border-radius:8px;cursor:pointer;
+  font:700 13px/1 Inter,"Noto Sans Thai",system-ui;
+}
+#op-sfxmenu button:active{background:#27272f}
+#op-sfxmenu button.danger{color:#fca5a5}
+
+
+/* ===== 1.0.30: slim overlay maintenance bar — never reduces player space ===== */
+#op-maint{
+  align-items:center !important;
+  min-height:28px !important;
+  max-height:32px !important;
+  padding:3px 8px !important;
+  gap:6px !important;
+  overflow:hidden !important;
+  pointer-events:auto;
+}
+#op-maint .tx{
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  flex:1 1 auto;
+  min-width:0;
+}
+#op-maint .tx .sub{
+  display:inline !important;
+  margin:0 0 0 .4em !important;
+  padding:0 !important;
+  font-size:inherit !important;
+  opacity:.9;
+  white-space:nowrap !important;
+}
+#op-maint .tx .sub::before{content:"· ";opacity:.7}
+#op-maint .x{
+  display:block !important;
+  width:28px !important;height:28px !important;
+  min-width:28px !important;min-height:28px !important;
+}
+body.op18.live.op-maintbn #livelist,
+body.op18.live.op-maintbn.op-collapsed #livelist{
+  top:calc(48px + var(--op-safe-t,0px)) !important;
+}
+@media (max-height:500px){
+  body.op18.live.op-maintbn #livelist,
+  body.op18.live.op-maintbn.op-collapsed #livelist{
+    top:calc(44px + var(--op-safe-t,0px)) !important;
+  }
+}
+
+
+/* ===== 1.0.31: collapsed bar keeps title (ellipsis) + key/tempo + transport inside the card ===== */
+@media (max-width:799px){
+  body.op18.live.op-collapsed #livelist > .lvnow,
+  body.op18.live.op-collapsed #livelist.op-ready > .lvnow{
+    display:grid !important;
+    grid-template-columns:minmax(4.5em,1fr) auto auto !important;
+    grid-template-rows:56px !important;
+    min-height:56px !important;max-height:56px !important;height:56px !important;
+    overflow:hidden !important;
+    min-width:0 !important;max-width:100% !important;
+    box-sizing:border-box !important;
+    width:auto !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-title,
+  body.op18.live.op-collapsed #livelist #op-nowt{
+    grid-column:1 !important;grid-row:1 !important;
+    min-width:4.5em !important;max-width:100% !important;
+    overflow:hidden !important;text-overflow:ellipsis !important;white-space:nowrap !important;
+    display:block !important;margin:0 !important;
+    font-size:15px !important;line-height:1.25 !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-adj{
+    grid-column:2 !important;grid-row:1 !important;
+    display:flex !important;flex-direction:row !important;
+    flex:0 0 auto !important;width:auto !important;min-width:0 !important;
+    gap:4px !important;margin:0 !important;align-items:center !important;
+    grid-template-columns:none !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-step{
+    flex:0 0 auto !important;width:auto !important;min-width:0 !important;
+    height:28px !important;min-height:28px !important;padding:0 6px !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-step .k,
+  body.op18.live.op-collapsed #livelist .op-step button{display:none !important}
+  body.op18.live.op-collapsed #livelist .op-step .v{
+    min-width:0 !important;flex:0 0 auto !important;
+    font-size:12px !important;padding:0 !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-rowc{
+    grid-column:3 !important;grid-row:1 !important;
+    display:flex !important;flex:0 0 auto !important;
+    width:auto !important;min-width:0 !important;max-width:100% !important;
+    margin:0 !important;gap:0 !important;align-items:center !important;
+  }
+  /* chips steal title space in the 56px bar — SFX stays on the sheet / expanded card */
+  body.op18.live.op-collapsed #livelist .op-chip,
+  body.op18.live.op-collapsed #livelist #op-sfx,
+  body.op18.live.op-collapsed #livelist #op-pad,
+  body.op18.live.op-collapsed #livelist #op-metro,
+  body.op18.live.op-collapsed #livelist #op-auto{display:none !important}
+  body.op18.live.op-collapsed #livelist .op-trans{
+    display:flex !important;flex:0 0 auto !important;margin:0 !important;gap:4px !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-play{
+    width:44px !important;height:44px !important;
+    min-width:44px !important;min-height:44px !important;
+    max-width:44px !important;max-height:44px !important;
+    flex:0 0 44px !important;
+  }
+  body.op18.live.op-collapsed #livelist .op-prev,
+  body.op18.live.op-collapsed #livelist .op-next{
+    width:44px !important;height:44px !important;
+    min-width:44px !important;min-height:44px !important;
+    max-width:44px !important;max-height:44px !important;
+    flex:0 0 44px !important;
+  }
+}
+
+/* 1.0.31: short fold/desktop landscape — chips+transport on one row so play stays in the card */
+@media (min-width:800px) and (max-height:500px){
+  body.op18.live #livelist .op-rowc,
+  body.op18.live.op-collapsed #livelist .op-rowc{
+    flex-direction:row !important;
+    flex-wrap:nowrap !important;
+    align-items:center !important;
+    max-height:64px !important;
+    margin-top:4px !important;
+    overflow:hidden !important;
+    gap:6px !important;
+  }
+  body.op18.live #livelist .op-trans{flex:0 0 auto !important;margin:0 0 0 auto !important}
+  body.op18.live #livelist .op-chip,
+  body.op18.live #livelist #op-sfx,
+  body.op18.live #livelist #op-pad,
+  body.op18.live #livelist #op-metro,
+  body.op18.live #livelist #op-auto{
+    width:36px !important;height:36px !important;
+    min-width:36px !important;min-height:36px !important;
+    max-width:36px !important;max-height:36px !important;
+    padding:0 !important;flex:0 0 36px !important;
+  }
+  body.op18.live #livelist .op-title,
+  body.op18.live #livelist #op-nowt{
+    min-height:1.2em !important;
+    line-height:1.25 !important;
+    overflow:hidden !important;
+    text-overflow:ellipsis !important;
+    white-space:nowrap !important;
+  }
+}

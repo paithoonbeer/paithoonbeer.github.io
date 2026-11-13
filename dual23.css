@@ -1,0 +1,969 @@
+/* SetSod 1.0.23 — Dual (2-deck) view. Phase 1: no SYNC / no per-deck EQ+vol. */
+#op-dual{flex:0 0 auto;width:36px;height:36px;border-radius:10px;padding:0;display:inline-flex;align-items:center;justify-content:center;color:#e5e7eb;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+#op-dual svg{display:block}
+#op-dual[aria-pressed="true"],#op-dual.on{color:#111;background:#fb923c;border-color:#fb923c}
+#op-dual.hint{box-shadow:0 0 0 2px #fb923c,0 0 16px rgba(251,146,60,.55)}
+#op-dualtip{position:fixed;z-index:96;background:#1c1917;color:#fed7aa;border:1px solid #fb923c;border-radius:10px;padding:8px 12px;font:600 12px/1.3 Inter,system-ui,sans-serif;box-shadow:0 8px 24px rgba(0,0,0,.45);max-width:220px;pointer-events:auto}
+#op-dualtip[hidden]{display:none!important}
+#op-dualtip button{margin-left:8px;background:transparent;border:0;color:#fb923c;font:700 12px Inter,system-ui;cursor:pointer}
+
+body.op18.op-dual #livelist,body.live.op-dual #livelist,body.op-dual #livelist,body.op-dual #op-dock{display:none!important;visibility:hidden!important;pointer-events:none!important}
+body.op-dual #op-dualui{display:flex}
+
+#op-dualui{
+  display:none;flex-direction:column;gap:6px;
+  position:fixed;left:0;right:0;
+  top:calc(48px + var(--op-safe-t,0px));
+  bottom:var(--op-safe-b,0px);
+  z-index:55;padding:6px 8px;box-sizing:border-box;
+  background:#0c0c10;color:#e5e7eb;overflow:hidden;
+  font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;
+}
+#op-dualui *{box-sizing:border-box}
+#op-dualui .dd-decks{display:flex;flex:1 1 auto;min-height:0;gap:6px}
+#op-dualui .dd-deck{
+  flex:1 1 0;min-width:0;min-height:0;
+  display:flex;flex-direction:column;gap:4px;
+  background:#16161c;border:1px solid #2a2a33;border-radius:10px;padding:6px 8px;
+}
+#op-dualui .dd-deck.A{border-top:3px solid #fb923c}
+#op-dualui .dd-deck.B{border-top:3px solid #60a5fa}
+#op-dualui .dd-deck.audible{box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}
+#op-dualui .dd-head{display:flex;align-items:center;gap:6px;min-height:22px}
+#op-dualui .dd-badge{font:800 10px/1 Inter,system-ui;letter-spacing:.06em;padding:3px 6px;border-radius:6px;flex:0 0 auto}
+#op-dualui .dd-deck.A .dd-badge{background:#fb923c;color:#111}
+#op-dualui .dd-deck.B .dd-badge{background:#60a5fa;color:#111}
+#op-dualui .dd-meta{flex:1 1 auto;min-width:0}
+#op-dualui .dd-title,#op-dualui .dd-artist{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#op-dualui .dd-title{font:700 13px/1.2 Inter,"Noto Sans Thai",system-ui}
+#op-dualui .dd-artist{font:500 11px/1.2 Inter,"Noto Sans Thai",system-ui;color:#9ca3af}
+#op-dualui .dd-load{flex:0 0 auto;width:28px;height:28px;border-radius:8px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+#op-dualui .dd-wave{position:relative;flex:1 1 auto;min-height:36px;height:48px;border-radius:6px;background:#0a0a0e;overflow:hidden;cursor:pointer;touch-action:none}
+#op-dualui .dd-wave canvas{display:block;width:100%;height:100%}
+#op-dualui .dd-playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;pointer-events:none;left:0;transform:translateX(-1px)}
+#op-dualui .dd-deck.A .dd-playhead{background:#fb923c}
+#op-dualui .dd-deck.B .dd-playhead{background:#60a5fa}
+#op-dualui .dd-times{display:flex;justify-content:space-between;font:600 10px/1 JetBrains Mono,ui-monospace,monospace;color:#9ca3af;margin-top:-2px}
+#op-dualui .dd-adj{display:flex;align-items:center;justify-content:space-between;gap:4px}
+#op-dualui .dd-adj .grp{display:flex;align-items:center;gap:2px;min-width:0}
+#op-dualui .dd-adj button{width:26px;height:26px;border-radius:7px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;font:700 13px Inter,system-ui;padding:0;cursor:pointer}
+#op-dualui .dd-adj .val{font:700 11px/1 Inter,system-ui;min-width:36px;text-align:center;color:#e5e7eb}
+#op-dualui .dd-row{display:flex;align-items:center;justify-content:center;gap:4px}
+#op-dualui .dd-row button{width:32px;height:32px;border-radius:9px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;padding:0;display:inline-flex;align-items:center;justify-content:center;cursor:pointer}
+#op-dualui .dd-row button.play{width:40px;height:32px;background:#e5e7eb;color:#111;border-color:#e5e7eb}
+#op-dualui .dd-deck.A .dd-row button.play.on{background:#fb923c;border-color:#fb923c;color:#111}
+#op-dualui .dd-deck.B .dd-row button.play.on{background:#60a5fa;border-color:#60a5fa;color:#111}
+#op-dualui .dd-row button.on,#op-dualui .dd-chip.on{color:#111}
+#op-dualui .dd-deck.A .dd-row button.on:not(.play),#op-dualui .dd-deck.A .dd-chip.on{background:#fb923c;border-color:#fb923c}
+#op-dualui .dd-deck.B .dd-row button.on:not(.play),#op-dualui .dd-deck.B .dd-chip.on{background:#60a5fa;border-color:#60a5fa}
+#op-dualui .dd-chips{display:flex;justify-content:center;gap:6px}
+#op-dualui .dd-chip{height:26px;padding:0 10px;border-radius:999px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;font:700 11px Inter,"Noto Sans Thai",system-ui;cursor:pointer}
+#op-dualui .dd-master{flex:0 0 auto;display:flex;align-items:center;gap:10px;background:#16161c;border:1px solid #2a2a33;border-radius:10px;padding:6px 10px;min-height:40px}
+#op-dualui .dd-xfab{font:800 11px Inter,system-ui;color:#fb923c;width:14px;text-align:center}
+#op-dualui .dd-xfbb{font:800 11px Inter,system-ui;color:#60a5fa;width:14px;text-align:center}
+#op-dualui .dd-xf{flex:1 1 auto;position:relative;height:28px;touch-action:none;cursor:pointer}
+#op-dualui .dd-xftrack{position:absolute;left:0;right:0;top:50%;height:6px;margin-top:-3px;border-radius:99px;background:linear-gradient(90deg,#fb923c,#2a2a33 50%,#60a5fa)}
+#op-dualui .dd-xfknob{position:absolute;top:50%;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.5);left:50%}
+#op-dualui .dd-mbtn{height:26px;padding:0 10px;border-radius:999px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;font:700 12px Inter,system-ui;cursor:pointer;flex:0 0 auto}
+#op-dualui .dd-mbtn.on{background:#fb923c;border-color:#fb923c;color:#111}
+#op-dualui .dd-list{flex:0 0 auto;max-height:88px;min-height:44px;overflow:auto;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;display:flex;gap:6px;padding:2px 0;overscroll-behavior:contain;touch-action:pan-x}
+#op-dualui .dd-song{flex:0 0 auto;width:160px;background:#16161c;border:1px solid #2a2a33;border-radius:8px;padding:6px 8px;display:flex;flex-direction:column;gap:4px;min-width:0}
+#op-dualui .dd-song .t{font:700 11px/1.2 Inter,"Noto Sans Thai",system-ui;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#op-dualui .dd-song .a{font:500 10px/1.2 Inter,"Noto Sans Thai",system-ui;color:#9ca3af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#op-dualui .dd-song .btns{display:flex;gap:4px}
+#op-dualui .dd-song button{flex:1;height:22px;border-radius:6px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;font:800 10px Inter,system-ui;cursor:pointer}
+#op-dualui .dd-song.ona,#op-dualui .dd-song button.ona{border-color:#fb923c}
+#op-dualui .dd-song.onb,#op-dualui .dd-song button.onb{border-color:#60a5fa}
+#op-dualui .dd-song button.ona{background:#fb923c;color:#111}
+#op-dualui .dd-song button.onb{background:#60a5fa;color:#111}
+#dd-rotate{flex:0 0 auto;display:none;align-items:center;justify-content:center;gap:8px;background:#1c1917;color:#fed7aa;border:1px solid #fb923c;border-radius:8px;padding:4px 8px;font:600 11px Inter,"Noto Sans Thai",system-ui}
+#dd-rotate button{background:transparent;border:0;color:#fb923c;font:700 11px Inter,system-ui;cursor:pointer}
+
+/* Portrait phone: stacked compact decks */
+@media (max-width:699px) and (orientation:portrait){
+  #op-dualui{gap:5px;padding:4px 6px}
+  #op-dualui .dd-decks{flex-direction:column}
+  #op-dualui .dd-wave{height:36px;min-height:28px;flex:0 0 36px}
+  #op-dualui .dd-row button{width:30px;height:28px}
+  #dd-rotate{display:flex}
+  body.dd-norotate #dd-rotate{display:none}
+}
+
+/* Short landscape (844x390, 915x412, 1024x417): side-by-side + horizontal list */
+@media (orientation:landscape) and (max-height:699px){
+  #op-dualui{padding:4px 8px;gap:4px}
+  #op-dualui .dd-wave{height:44px;min-height:36px}
+  #op-dualui .dd-list{max-height:72px}
+  #op-dualui .dd-title{font-size:12px}
+  #dd-rotate{display:none!important}
+}
+
+@media (min-width:900px) and (max-height:699px){
+  #op-dualui .dd-wave{height:56px;min-height:44px}
+  #op-dualui .dd-list{max-height:80px}
+}
+
+/* Tall / Fold 880x1000: taller waves, vertical list */
+@media (min-height:700px){
+  #op-dualui{flex-direction:row;flex-wrap:wrap;align-content:stretch}
+  #op-dualui .dd-decks{flex:1 1 100%;min-height:0}
+  #op-dualui .dd-wave{height:auto;min-height:90px;flex:1 1 auto}
+  #op-dualui .dd-master{flex:0 0 100%}
+  #op-dualui .dd-list{flex:1 1 100%;max-height:none;height:auto;overflow-x:hidden;overflow-y:auto;touch-action:pan-y;flex-wrap:wrap;align-content:flex-start}
+  #op-dualui .dd-song{width:calc(50% - 4px);flex:0 0 calc(50% - 4px)}
+  #dd-rotate{display:none!important}
+}
+
+/* Fold inner landscape ~880x1000 already covered by min-height 700.
+   When both wide and tall, keep two-col decks + wrapping list. */
+@media (min-width:800px) and (min-height:700px){
+  #op-dualui .dd-list{max-height:34%}
+}
+
+/* Match short one-page top-bar height so Dual doesn't jump */
+@media (max-height:500px){
+  #op-dualui{top:calc(44px + var(--op-safe-t,0px))}
+}
+
+@media (max-width:380px){
+  #op-top .op-word{max-width:0;overflow:hidden;padding:0;margin:0}
+  #op-dual{width:32px;height:32px}
+}
+
+#op-dualui button,#op-dualui .dd-chip,#op-dualui .dd-load,#op-dualui .dd-mbtn{
+  min-width:0!important;min-height:0!important;flex-shrink:0;
+  appearance:none;-webkit-appearance:none;
+}
+#op-dualui .dd-load{width:28px!important;height:28px!important}
+#op-dualui .dd-adj button{width:24px!important;height:24px!important}
+#op-dualui .dd-row button{width:30px!important;height:28px!important}
+#op-dualui .dd-row button.play{width:36px!important;height:28px!important}
+#op-dualui .dd-chip{height:22px!important;padding:0 8px!important;line-height:22px}
+#op-dualui .dd-mbtn{height:24px!important;line-height:24px}
+#op-dualui .dd-master{min-height:32px;padding:4px 8px;position:relative;z-index:2}
+#op-dualui .dd-deck{overflow:hidden;position:relative;z-index:1}
+#op-dualui .dd-head{min-height:22px}
+#op-dualui .dd-chips{flex:0 0 auto}
+#op-dualui .dd-row{flex:0 0 auto}
+#op-dualui .dd-adj{flex:0 0 auto}
+#op-dualui .dd-list{position:relative;z-index:1}
+@media (orientation:landscape) and (max-height:699px){
+  #op-dualui .dd-wave{height:40px;min-height:32px;flex:0 0 40px}
+  #op-dualui .dd-decks{flex:1 1 auto;min-height:0}
+  #op-dualui .dd-title{font-size:12px}
+  #op-dualui .dd-artist{font-size:10px}
+  #op-dualui .dd-list{max-height:68px;min-height:40px}
+}
+
+/* JS-toggled stack: more reliable than orientation media in some webviews */
+body.dd-stack #op-dualui .dd-decks{flex-direction:column!important}
+body.dd-stack #op-dualui .dd-wave{height:32px!important;min-height:28px!important;flex:0 0 32px!important}
+body.dd-stack #op-dualui .dd-deck{flex:0 0 auto!important;max-height:none}
+body.dd-stack #dd-rotate{display:flex}
+body.dd-stack.dd-norotate #dd-rotate{display:none}
+body.dd-stack #op-dualui .dd-list{max-height:120px}
+
+
+/* ===== 1.0.24 landscape readability: strip cards, equal transport, no overlap ===== */
+#op-dualui{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+
+#op-dualui .dd-head{display:flex;align-items:center;gap:6px;min-width:0;min-height:28px}
+#op-dualui .dd-badge{flex:0 0 auto}
+#op-dualui .dd-meta{flex:1 1 auto;min-width:0;overflow:hidden}
+#op-dualui .dd-title,#op-dualui .dd-artist{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;
+}
+#op-dualui .dd-title{font:700 13px/1.3 Inter,"Noto Sans Thai",system-ui}
+#op-dualui .dd-artist{font:500 11px/1.3 Inter,"Noto Sans Thai",system-ui;color:#9ca3af}
+#op-dualui .dd-load{
+  flex:0 0 28px!important;width:28px!important;height:28px!important;
+  min-width:28px!important;min-height:28px!important;max-width:28px!important;max-height:28px!important;
+  overflow:hidden;position:relative;z-index:1
+}
+
+/* Equal-size transport; CUE is an icon so the label cannot overflow into play */
+#op-dualui .dd-row{display:flex;align-items:center;justify-content:center;gap:6px;flex:0 0 auto}
+#op-dualui .dd-row button,
+#op-dualui .dd-row button.play{
+  width:32px!important;height:32px!important;
+  min-width:32px!important;min-height:32px!important;
+  max-width:32px!important;max-height:32px!important;
+  flex:0 0 32px!important;overflow:hidden;box-sizing:border-box;
+  font-size:0!important;line-height:0!important;padding:0!important;
+}
+#op-dualui .dd-row button svg{width:16px;height:16px;display:block;flex:0 0 16px}
+
+/* Strip cards: title + artist on their own lines (ellipsis), A/B to the right, no overlap */
+#op-dualui .dd-list{
+  display:flex;gap:8px;align-items:stretch;
+  overflow-x:auto;overflow-y:hidden;
+  min-height:64px;max-height:88px;flex:0 0 72px;
+  padding:2px 0 4px;-webkit-overflow-scrolling:touch;touch-action:pan-x;
+}
+#op-dualui .dd-song{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  grid-template-rows:auto auto;
+  grid-template-areas:"title btns" "artist btns";
+  column-gap:8px;row-gap:2px;align-items:center;
+  width:210px;min-width:190px;max-width:240px;
+  min-height:56px;height:auto;padding:8px 8px;
+  overflow:hidden;flex:0 0 auto;box-sizing:border-box;
+}
+#op-dualui .dd-song .t{
+  grid-area:title;min-width:0;max-width:100%;
+  font:700 12px/1.35 Inter,"Noto Sans Thai",system-ui;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#op-dualui .dd-song .a{
+  grid-area:artist;min-width:0;max-width:100%;
+  font:500 11px/1.35 Inter,"Noto Sans Thai",system-ui;color:#9ca3af;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#op-dualui .dd-song .btns{
+  grid-area:btns;display:flex;flex-direction:row;gap:4px;align-items:center;
+  align-self:center;flex:0 0 auto;
+}
+#op-dualui .dd-song button{
+  width:28px!important;height:28px!important;
+  min-width:28px!important;min-height:28px!important;
+  max-width:28px!important;max-height:28px!important;
+  flex:0 0 28px!important;padding:0!important;
+  font:800 11px/28px Inter,system-ui!important;
+  box-sizing:border-box;overflow:hidden;
+}
+
+@media (orientation:landscape) and (max-height:699px){
+  #op-dualui .dd-list{min-height:64px;max-height:88px;flex:0 0 72px!important}
+  #op-dualui .dd-wave{height:36px;min-height:28px;flex:1 1 auto}
+  #op-dualui .dd-title{font-size:13px!important}
+  #op-dualui .dd-artist{font-size:11px!important}
+}
+@media (min-width:900px) and (max-height:699px){
+  #op-dualui .dd-list{flex:0 0 76px!important;max-height:92px}
+  #op-dualui .dd-song{width:230px;min-width:200px}
+  #op-dualui .dd-title{font-size:14px!important}
+}
+
+/* Tall / Fold: wrapping list, same no-overlap card grid */
+@media (min-height:700px){
+  #op-dualui .dd-list{
+    flex:1 1 100%;max-height:34%;min-height:0;height:auto;
+    overflow-x:hidden;overflow-y:auto;touch-action:pan-y;flex-wrap:wrap;
+  }
+  #op-dualui .dd-song{width:calc(50% - 4px);min-width:0;max-width:none;flex:0 0 calc(50% - 4px)}
+}
+body.dd-stack #op-dualui .dd-list{max-height:130px;min-height:68px;flex:0 0 auto!important;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;touch-action:pan-x}
+body.dd-stack #op-dualui .dd-song{width:210px;min-width:190px;flex:0 0 auto}
+
+#op-dualui .dd-list,body.dd-stack #op-dualui .dd-list{
+  min-width:0!important;width:100%!important;max-width:100%!important;box-sizing:border-box;
+}
+
+
+/* ===== 1.0.25 per-deck tools in spare wave space; Pad/metro moved up ===== */
+#op-dualui .dd-chips{display:none!important}
+#op-dualui .dd-wavewrap{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;gap:4px;min-width:0}
+#op-dualui .dd-wave{flex:1 1 auto;min-height:28px;min-width:0}
+#op-dualui .dd-tools{
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  flex:0 0 28px;min-height:28px;
+}
+#op-dualui .dd-tools .dd-tool,
+#op-dualui .dd-tools button{
+  width:28px!important;height:28px!important;
+  min-width:28px!important;min-height:28px!important;
+  max-width:28px!important;max-height:28px!important;
+  flex:0 0 28px!important;padding:0!important;
+  border-radius:8px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;
+  display:inline-flex;align-items:center;justify-content:center;
+  font-size:0!important;line-height:0!important;box-sizing:border-box;overflow:hidden;
+}
+#op-dualui .dd-tools .dd-tool svg{width:15px;height:15px;display:block}
+#op-dualui .dd-deck.A .dd-tools .dd-tool.on{background:#fb923c;border-color:#fb923c;color:#111}
+#op-dualui .dd-deck.B .dd-tools .dd-tool.on{background:#60a5fa;border-color:#60a5fa;color:#111}
+#op-dualui .dd-times{flex:0 0 auto;position:relative;z-index:1}
+
+@media (orientation:landscape) and (max-height:699px){
+  #op-dualui .dd-wavewrap{flex:0 0 auto}
+  #op-dualui .dd-wave{height:28px!important;min-height:24px!important;flex:0 0 28px!important}
+  #op-dualui .dd-tools{flex-direction:row;flex:0 0 28px}
+}
+@media (min-width:900px) and (max-height:699px){
+  #op-dualui .dd-wave{height:32px!important;min-height:28px!important;flex:0 0 32px!important}
+}
+
+/* Tall / Fold: shorter wave than 1.0.24, tools as a side column */
+@media (min-height:700px){
+  #op-dualui .dd-wavewrap{flex-direction:row;align-items:stretch;flex:1 1 auto;min-height:0}
+  #op-dualui .dd-wave{min-height:64px!important;height:auto;flex:1 1 auto}
+  #op-dualui .dd-tools{flex-direction:column;flex:0 0 28px;width:28px;min-height:0;justify-content:center;gap:6px}
+}
+body.dd-stack #op-dualui .dd-wavewrap{flex-direction:column!important;flex:0 0 auto}
+body.dd-stack #op-dualui .dd-wave{height:32px!important;min-height:28px!important;flex:0 0 32px!important}
+body.dd-stack #op-dualui .dd-tools{flex-direction:row!important;width:auto;flex:0 0 28px;justify-content:center}
+
+/* Cap tall waves so spare space goes to tools + list, not an empty 600px wave */
+@media (min-height:700px){
+  #op-dualui .dd-decks{flex:0 1 auto;max-height:62%;min-height:0}
+  #op-dualui .dd-wavewrap{flex:0 0 auto;max-height:160px}
+  #op-dualui .dd-wave{flex:0 1 140px!important;min-height:72px!important;max-height:140px!important;height:140px}
+  #op-dualui .dd-list{max-height:none;flex:1 1 38%;min-height:120px}
+}
+
+/* Fold/tall: tools as a row under the shorter wave (side column overflowed titles) */
+@media (min-height:700px){
+  #op-dualui .dd-wavewrap{flex-direction:column!important;flex:0 0 auto;max-height:none;align-items:stretch}
+  #op-dualui .dd-wave{flex:0 0 120px!important;height:120px!important;max-height:120px!important;min-height:80px!important}
+  #op-dualui .dd-tools{flex-direction:row!important;width:auto;flex:0 0 28px;min-height:28px;justify-content:center;gap:6px}
+}
+
+/* Hug deck cards on tall; master must stay full width so the crossfader cannot collapse to 0 */
+@media (min-height:700px){
+  #op-dualui .dd-decks{align-items:stretch;flex:0 0 auto;width:100%;max-width:100%;min-width:0}
+  #op-dualui .dd-deck{flex:1 1 0;height:auto;justify-content:flex-start;min-width:0;max-width:100%}
+  #op-dualui .dd-master{flex:0 0 100%!important;width:100%;min-width:0;align-self:flex-start;min-height:40px;max-height:none}
+}
+#op-dualui .dd-xf{min-width:80px}
+
+/* v1.0.27 per-deck volume + EQ-lite + SYNC */
+#op-dualui .dd-mix{display:flex;align-items:center;gap:3px;min-width:0;width:100%;max-width:100%;flex:0 0 auto;padding:0 2px 1px;height:auto;min-height:22px;box-sizing:border-box;flex-wrap:nowrap;overflow:hidden}
+#op-dualui .dd-mix label{display:flex;align-items:center;gap:2px;min-width:0;flex:1 1 0;margin:0;color:#a1a1aa;font:600 9px/1 Inter,system-ui;letter-spacing:.02em;max-width:100%;overflow:hidden}
+#op-dualui .dd-mix label span{flex:none;width:16px;text-align:right}
+#op-dualui .dd-mix input[type=range]{-webkit-appearance:none;appearance:none;height:14px;flex:1 1 auto;min-width:0!important;width:100%;max-width:100%;margin:0;background:transparent;padding:0}
+#op-dualui .dd-mix input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:#3f3f46}
+#op-dualui .dd-mix input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:#e5e7eb;border:0;margin-top:-4.5px}
+#op-dualui .dd-deck.A .dd-mix input[type=range]::-webkit-slider-thumb{background:#fb923c}
+#op-dualui .dd-deck.B .dd-mix input[type=range]::-webkit-slider-thumb{background:#60a5fa}
+#op-dualui .dd-sync{flex:none;height:22px;min-width:44px;padding:0 6px;border-radius:7px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;font:700 10px/1 Inter,system-ui;cursor:pointer}
+#op-dualui .dd-sync.on{background:#60a5fa;border-color:#60a5fa;color:#111}
+@media (max-height:420px){
+  #op-dualui .dd-mix{height:18px;gap:3px}
+  #op-dualui .dd-mix label span{width:16px;font-size:8px}
+  #op-dualui .dd-sync{height:18px;min-width:40px;font-size:9px}
+}
+@media (max-width:420px){
+  #op-dualui .dd-mix{flex-wrap:wrap;height:auto;row-gap:2px}
+  #op-dualui .dd-mix label{flex:1 1 calc(50% - 8px);max-width:calc(50% - 8px)}
+  #op-dualui .dd-sync{flex:0 0 auto;margin-left:auto}
+}
+body.dd-stack #op-dualui .dd-mix{flex-wrap:wrap;height:auto;row-gap:2px}
+body.dd-stack #op-dualui .dd-mix label{flex:1 1 calc(50% - 8px);max-width:calc(50% - 8px)}
+body.dd-stack #op-dualui .dd-sync{flex:0 0 auto;margin-left:auto}
+#op-dualui .dd-sync{max-width:100%;box-sizing:border-box}
+#op-dualui, #op-dualui .dd-decks, #op-dualui .dd-deck, #op-dualui .dd-mix{
+  min-width:0!important;box-sizing:border-box;
+}
+#op-dualui .dd-decks, #op-dualui .dd-deck, #op-dualui .dd-mix{max-width:100%}
+#op-dualui .dd-decks{width:100%}
+
+/* 1.0.28: Dual platter icon already uses currentColor; xf center tick; SFX master chip */
+#op-dual .op-dualico{display:block;width:18px;height:18px}
+#op-dualui .dd-xftrack::after{
+  content:'';position:absolute;left:50%;top:50%;width:2px;height:10px;margin:-5px 0 0 -1px;
+  background:#fafafa;border-radius:1px;opacity:.8;pointer-events:none;
+}
+#op-dualui .dd-mbtn#dd-sfx{display:inline-flex;align-items:center;gap:0;min-width:44px;justify-content:center}
+
+/* 1.0.29: Dual portrait 390 must not overflow the viewport */
+#op-dualui{min-width:0;max-width:100%;overflow-x:hidden;box-sizing:border-box}
+@media (max-width:430px) and (orientation:portrait){
+  #op-dualui{padding:4px 6px;gap:4px}
+  #op-dualui .dd-master{gap:6px;padding:4px 6px;min-width:0;max-width:100%;overflow:hidden}
+  #op-dualui .dd-xf{min-width:0;flex:1 1 auto}
+  #op-dualui .dd-mbtn{padding:0 8px;min-width:0}
+}
+
+/* ===== 1.0.30: Dual transport tap targets — play is the primary, prev/cue/next ≥44 ===== */
+#op-dualui .dd-row{gap:8px;justify-content:center}
+#op-dualui .dd-row button,
+#op-dualui .dd-row button:not(.play){
+  width:44px!important;height:44px!important;
+  min-width:44px!important;min-height:44px!important;
+  max-width:44px!important;max-height:44px!important;
+  flex:0 0 44px!important;
+  border-radius:12px!important;
+  padding:0!important;box-sizing:border-box!important;
+}
+#op-dualui .dd-row button.play{
+  width:56px!important;height:56px!important;
+  min-width:56px!important;min-height:56px!important;
+  max-width:56px!important;max-height:56px!important;
+  flex:0 0 56px!important;
+  border-radius:16px!important;
+}
+#op-dualui .dd-row button svg{width:20px!important;height:20px!important;flex:0 0 20px!important;display:block}
+#op-dualui .dd-row button.play svg{width:26px!important;height:26px!important;flex:0 0 26px!important}
+@media (orientation:landscape){
+  #op-dualui .dd-row button.play{
+    width:64px!important;height:64px!important;
+    min-width:64px!important;min-height:64px!important;
+    max-width:64px!important;max-height:64px!important;
+    flex:0 0 64px!important;
+    border-radius:18px!important;
+  }
+  #op-dualui .dd-row button.play svg{width:30px!important;height:30px!important;flex:0 0 30px!important}
+}
+
+/* ===== 1.0.30: iPhone Dual — always show title + key/tempo + transport; land via body.dd-land ===== */
+#op-dualui{
+  bottom:auto;
+  height:var(--vvh,100dvh);
+  max-height:var(--vvh,100dvh);
+  overflow:hidden;
+}
+#op-dualui .dd-deck{
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+#op-dualui .dd-head,
+#op-dualui .dd-times,
+#op-dualui .dd-chips,
+#op-dualui .dd-adj,
+#op-dualui .dd-row,
+#op-dualui .dd-eq,
+#op-dualui .dd-master{
+  flex:0 0 auto !important;
+  flex-shrink:0 !important;
+  min-height:0;
+}
+#op-dualui .dd-head{min-height:28px !important;overflow:hidden}
+#op-dualui .dd-wave{flex:1 1 24px !important;min-height:20px !important;height:auto !important;max-height:120px}
+#op-dualui .dd-list{flex:0 1 auto;min-height:56px;max-height:28%}
+body.dd-stack #op-dualui .dd-decks{flex-direction:column !important}
+body.dd-stack #op-dualui .dd-deck{flex:1 1 0 !important;min-height:0 !important;max-height:none !important}
+body.dd-stack #op-dualui .dd-wave{flex:1 1 20px !important;min-height:16px !important;height:auto !important}
+body.dd-land #op-dualui .dd-decks{flex-direction:row !important}
+body.dd-land #op-dualui .dd-deck{flex:1 1 0 !important}
+body.dd-land #dd-rotate{display:none !important}
+
+/* ===== 1.0.30b: stack must stay a column (override min-height:700 fold row-wrap) and never clip transport ===== */
+body.dd-stack #op-dualui{
+  flex-direction:column !important;
+  flex-wrap:nowrap !important;
+  align-content:stretch !important;
+}
+body.dd-stack #op-dualui .dd-decks{
+  flex-direction:column !important;
+  flex:1 1 0 !important;
+  width:100% !important;
+  min-height:0 !important;
+  max-height:none !important;
+}
+body.dd-stack #op-dualui .dd-deck{
+  flex:1 1 0 !important;
+  min-height:0 !important;
+  max-height:none !important;
+  width:100% !important;
+  overflow:hidden !important;
+}
+body.dd-stack #op-dualui .dd-head,
+body.dd-stack #op-dualui .dd-adj,
+body.dd-stack #op-dualui .dd-row,
+body.dd-stack #op-dualui .dd-times,
+body.dd-stack #op-dualui .dd-mix,
+body.dd-stack #op-dualui .dd-master{
+  flex:0 0 auto !important;
+  flex-shrink:0 !important;
+}
+body.dd-stack #op-dualui .dd-wavewrap{
+  flex:1 1 0 !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow:hidden !important;
+}
+body.dd-stack #op-dualui .dd-wave{
+  flex:1 1 16px !important;
+  min-height:14px !important;
+  height:auto !important;
+  max-height:80px;
+}
+body.dd-stack #op-dualui .dd-list{
+  flex:0 0 auto !important;
+  width:100% !important;
+  min-height:44px !important;
+  max-height:64px !important;
+  overflow-x:auto !important;
+  overflow-y:hidden !important;
+  flex-wrap:nowrap !important;
+}
+body.dd-stack #op-dualui .dd-mix{
+  flex-wrap:nowrap !important;
+  height:22px !important;
+  min-height:22px !important;
+  max-height:22px !important;
+}
+body.dd-stack #op-dualui .dd-mix label{
+  flex:1 1 0 !important;
+  max-width:none !important;
+}
+body.dd-stack #dd-rotate,
+body.dd-stack #op-dualui #dd-rotate{
+  display:none !important;
+}
+
+/* 1.0.30: landscape play size via JS class (iOS PWA + Playwright may not match orientation:landscape) */
+body.dd-land #op-dualui .dd-row button.play{
+  width:64px!important;height:64px!important;
+  min-width:64px!important;min-height:64px!important;
+  max-width:64px!important;max-height:64px!important;
+  flex:0 0 64px!important;
+  border-radius:18px!important;
+}
+body.dd-land #op-dualui .dd-row button.play svg{width:30px!important;height:30px!important;flex:0 0 30px!important}
+
+/* 1.0.30: short landscape — keep 44/56 transport inside the deck, never overlap the xf */
+body.dd-land #op-dualui .dd-decks{flex:1 1 0 !important;min-height:0 !important}
+body.dd-land #op-dualui .dd-deck{flex:1 1 0 !important;min-height:0 !important;overflow:hidden !important}
+body.dd-land #op-dualui .dd-master{flex:0 0 auto !important}
+body.dd-land #op-dualui .dd-list{
+  flex:0 0 52px !important;min-height:48px !important;max-height:56px !important;
+}
+body.dd-land #op-dualui .dd-head,
+body.dd-land #op-dualui .dd-times,
+body.dd-land #op-dualui .dd-adj,
+body.dd-land #op-dualui .dd-row,
+body.dd-land #op-dualui .dd-mix{flex:0 0 auto !important;flex-shrink:0 !important}
+body.dd-land #op-dualui .dd-wavewrap{flex:1 1 0 !important;min-height:0 !important;overflow:hidden !important}
+body.dd-land #op-dualui .dd-wave{flex:1 1 16px !important;min-height:14px !important;height:auto !important;max-height:64px}
+@media (max-height:430px){
+  body.dd-land #op-dualui .dd-row button.play{
+    width:56px!important;height:56px!important;
+    min-width:56px!important;min-height:56px!important;
+    max-width:56px!important;max-height:56px!important;
+    flex:0 0 56px!important;
+  }
+  body.dd-land #op-dualui .dd-row button.play svg{width:26px!important;height:26px!important;flex:0 0 26px!important}
+}
+
+
+/* ===== 1.0.31: Dual list always visible below the master bar, filling leftover height ===== */
+body.op-dual #op-dualui,
+body.op-dual.dd-land #op-dualui,
+body.op-dual.dd-stack #op-dualui{
+  display:flex !important;
+  flex-direction:column !important;
+  flex-wrap:nowrap !important;
+  align-content:stretch !important;
+}
+body:not(.op-dual) #op-dualui{
+  display:none !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+#op-dualui .dd-decks,
+body.dd-land #op-dualui .dd-decks,
+body.dd-stack #op-dualui .dd-decks{
+  flex:0 0 auto !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:min-content !important;
+  max-height:none !important;
+}
+#op-dualui .dd-deck,
+body.dd-land #op-dualui .dd-deck{
+  flex:1 1 0 !important;
+  min-height:min-content !important;
+  height:auto !important;
+  overflow:hidden !important;
+}
+body.dd-stack #op-dualui .dd-decks{flex-direction:column !important}
+body.dd-stack #op-dualui .dd-deck{
+  flex:0 0 auto !important;
+  min-height:min-content !important;
+  height:auto !important;
+  overflow:visible !important;
+}
+#op-dualui .dd-master,
+body.dd-land #op-dualui .dd-master,
+body.dd-stack #op-dualui .dd-master{
+  flex:0 0 auto !important;
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  align-self:stretch !important;
+}
+#op-dualui .dd-listwrap,
+body.dd-land #op-dualui .dd-listwrap,
+body.dd-stack #op-dualui .dd-listwrap{
+  flex:1 1 auto !important;
+  display:flex !important;
+  flex-direction:column !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:120px !important;
+  max-height:none !important;
+  overflow:hidden !important;
+}
+#op-dualui .dd-listhead,
+body.dd-land #op-dualui .dd-listhead,
+body.dd-stack #op-dualui .dd-listhead{
+  flex:0 0 auto !important;
+  display:flex !important;
+  align-items:center !important;
+  gap:8px !important;
+  width:100% !important;
+  min-height:28px !important;
+  padding:2px 4px 4px !important;
+}
+#op-dualui .dd-listhead h2{
+  margin:0 !important;
+  font:800 14px/1.2 Inter,"Noto Sans Thai",system-ui !important;
+  color:#fff !important;
+  white-space:nowrap !important;
+}
+#op-dualui .dd-listhead .n{
+  font:700 12px/1 Inter,"Noto Sans Thai",system-ui !important;
+  color:#9ca3af !important;
+  margin-left:auto !important;
+}
+#op-dualui .dd-listacts{display:flex !important;align-items:center !important;gap:2px !important;flex:0 0 auto !important}
+#op-dualui .dd-listhbtn{
+  width:28px !important;height:28px !important;
+  min-width:28px !important;min-height:28px !important;
+  border:0 !important;background:transparent !important;color:#9ca3af !important;
+  padding:0 !important;display:inline-flex !important;align-items:center !important;justify-content:center !important;
+  cursor:pointer !important;
+}
+#op-dualui .dd-listhbtn svg{width:16px;height:16px;display:block}
+#op-dualui .dd-list,
+body.dd-land #op-dualui .dd-list,
+body.dd-stack #op-dualui .dd-list{
+  flex:1 1 auto !important;
+  width:100% !important;
+  min-width:0 !important;
+  min-height:108px !important;
+  max-height:none !important;
+  height:auto !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  display:flex !important;
+  flex-direction:column !important;
+  flex-wrap:nowrap !important;
+  align-content:stretch !important;
+  gap:6px !important;
+  padding:0 0 4px !important;
+  touch-action:pan-y !important;
+  -webkit-overflow-scrolling:touch;
+}
+#op-dualui .dd-song,
+body.dd-land #op-dualui .dd-song,
+body.dd-stack #op-dualui .dd-song{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  flex:0 0 auto !important;
+}
+@media (min-width:800px) and (min-height:600px){
+  #op-dualui .dd-list,
+  body.dd-land #op-dualui .dd-list,
+  body.dd-stack #op-dualui .dd-list{
+    flex-direction:row !important;
+    flex-wrap:wrap !important;
+    align-content:flex-start !important;
+  }
+  #op-dualui .dd-song,
+  body.dd-land #op-dualui .dd-song,
+  body.dd-stack #op-dualui .dd-song{
+    width:calc(50% - 4px) !important;
+    flex:0 0 calc(50% - 4px) !important;
+  }
+}
+@media (max-height:500px){
+  #op-dualui{gap:4px !important;padding:4px 8px !important}
+  #op-dualui .dd-deck{padding:4px 6px !important;gap:2px !important}
+  #op-dualui .dd-head{min-height:22px !important}
+  #op-dualui .dd-wavewrap{flex:0 0 auto !important;max-height:52px !important;gap:2px !important}
+  #op-dualui .dd-wave{flex:0 0 22px !important;height:22px !important;min-height:20px !important;max-height:24px !important}
+  #op-dualui .dd-tools{flex:0 0 24px !important;min-height:24px !important}
+  #op-dualui .dd-mix{height:16px !important;min-height:16px !important;max-height:16px !important;flex-wrap:nowrap !important}
+  #op-dualui .dd-master{min-height:32px !important;padding:3px 8px !important}
+  #op-dualui .dd-listhead{min-height:24px !important;padding:0 2px 2px !important}
+  #op-dualui .dd-listwrap,
+  body.dd-land #op-dualui .dd-listwrap,
+  body.dd-stack #op-dualui .dd-listwrap{min-height:0 !important;flex:1 1 auto !important}
+  #op-dualui .dd-list,
+  body.dd-land #op-dualui .dd-list,
+  body.dd-stack #op-dualui .dd-list{min-height:0 !important;flex:1 1 auto !important}
+}
+@media (max-height:430px){
+  #op-dualui{gap:2px !important;padding:4px 8px !important}
+  #op-dualui .dd-wave,
+  body.dd-land #op-dualui .dd-wave,
+  body.dd-stack #op-dualui .dd-wave{display:none !important}
+  #op-dualui .dd-wavewrap,
+  body.dd-land #op-dualui .dd-wavewrap,
+  body.dd-stack #op-dualui .dd-wavewrap{
+    flex:0 0 28px !important;min-height:28px !important;max-height:28px !important;height:28px !important;overflow:hidden !important
+  }
+  #op-dualui .dd-tools,
+  body.dd-land #op-dualui .dd-tools,
+  body.dd-stack #op-dualui .dd-tools{
+    flex:0 0 28px !important;min-height:28px !important;position:relative !important;z-index:2 !important
+  }
+  #op-dualui .dd-listhead,
+  body.dd-land #op-dualui .dd-listhead,
+  body.dd-stack #op-dualui .dd-listhead{min-height:22px !important;padding:0 2px !important;gap:4px !important}
+  #op-dualui .dd-listhead h2{font-size:13px !important}
+}
+@media (max-height:400px){
+  #op-dualui .dd-listwrap,
+  body.dd-land #op-dualui .dd-listwrap,
+  body.dd-stack #op-dualui .dd-listwrap{min-height:0 !important;flex:1 1 auto !important}
+  #op-dualui .dd-list,
+  body.dd-land #op-dualui .dd-list,
+  body.dd-stack #op-dualui .dd-list{min-height:0 !important;flex:1 1 auto !important}
+}
+
+@media (min-height:700px){
+  #op-dualui .dd-wave,
+  body.dd-land #op-dualui .dd-wave,
+  body.dd-stack #op-dualui .dd-wave{
+    flex:0 0 80px !important;
+    height:80px !important;
+    min-height:72px !important;
+    max-height:120px !important;
+  }
+  #op-dualui .dd-wavewrap,
+  body.dd-land #op-dualui .dd-wavewrap,
+  body.dd-stack #op-dualui .dd-wavewrap{
+    flex-direction:column !important;
+    flex:0 0 auto !important;
+    max-height:none !important;
+  }
+  #op-dualui .dd-tools,
+  body.dd-land #op-dualui .dd-tools,
+  body.dd-stack #op-dualui .dd-tools{
+    flex-direction:row !important;
+    flex:0 0 28px !important;
+    width:auto !important;
+    min-height:28px !important;
+  }
+}
+
+
+/* ===== 1.0.33: compact portrait Dual, list gets ≥45% viewport, reliable exit ===== */
+#op-dual{
+  position:relative;z-index:90;
+  width:44px !important;height:44px !important;
+  min-width:44px !important;min-height:44px !important;
+  max-width:44px !important;max-height:44px !important;
+  flex:0 0 44px !important;
+  padding:0 !important;
+  box-sizing:border-box !important;
+}
+#op-dual svg,#op-dual .op-dualico{width:18px;height:18px;display:block}
+
+#op-dualui .dd-exp{
+  display:none;
+  flex:0 0 28px;width:28px;height:28px;
+  border-radius:8px;border:1px solid #3f3f46;background:#1f1f27;color:#e5e7eb;
+  padding:0;font:700 14px/1 Inter,system-ui;cursor:pointer;
+  align-items:center;justify-content:center;
+}
+#op-dualui .dd-exp.on{background:#3f3f46}
+#op-dualui .dd-mbtn.dd-exit,
+#dd-exit{
+  flex:0 0 auto !important;
+  min-width:44px !important;
+  height:28px !important;
+  padding:0 8px !important;
+  font:700 11px/28px Inter,"Noto Sans Thai",system-ui !important;
+  white-space:nowrap;
+  color:#e5e7eb;
+  background:#1f1f27;
+  border:1px solid #3f3f46;
+}
+#dd-exit:active,#dd-exit:focus{background:#3f3f46}
+
+/* Portrait / stacked: compact decks, Vol/EQ/tools behind chevron, list ≥45% */
+body.op-dual.dd-stack #op-dualui{
+  padding:4px 6px 6px !important;
+  gap:6px !important;
+  box-sizing:border-box !important;
+  overflow:hidden !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-decks{
+  flex:0 0 auto !important;
+  flex-direction:column !important;
+  gap:6px !important;
+  min-height:0 !important;
+  max-height:none !important;
+  width:100% !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-deck{
+  flex:0 0 auto !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:170px !important;
+  padding:6px 8px !important;
+  gap:4px !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow:hidden !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-deck.dd-open{
+  max-height:none !important;
+  overflow:visible !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-head{min-height:22px !important;gap:6px !important}
+body.op-dual.dd-stack #op-dualui .dd-artist{display:none !important}
+body.op-dual.dd-stack #op-dualui .dd-title{
+  font:700 13px/1.2 Inter,"Noto Sans Thai",system-ui !important;
+  white-space:nowrap !important;overflow:hidden !important;text-overflow:ellipsis !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-exp{display:inline-flex !important}
+body.op-dual.dd-stack #op-dualui .dd-wavewrap{
+  flex:0 0 auto !important;
+  flex-direction:column !important;
+  min-height:0 !important;
+  max-height:none !important;
+  gap:0 !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-wave{
+  display:block !important;
+  flex:0 0 40px !important;
+  height:40px !important;
+  min-height:36px !important;
+  max-height:44px !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-tools,
+body.op-dual.dd-stack #op-dualui .dd-mix,
+body.op-dual.dd-stack #op-dualui .dd-times{
+  display:none !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-deck.dd-open .dd-tools{
+  display:flex !important;
+  flex-direction:row !important;
+  flex:0 0 28px !important;
+  width:auto !important;
+  min-height:28px !important;
+  justify-content:center !important;
+  margin-top:4px;
+}
+body.op-dual.dd-stack #op-dualui .dd-deck.dd-open .dd-mix{
+  display:flex !important;
+  flex-wrap:wrap !important;
+  height:auto !important;
+  min-height:22px !important;
+  max-height:none !important;
+  margin-top:4px;
+}
+
+/* one row: key −/+ · prev cue PLAY next · tempo −/+ */
+body.op-dual.dd-stack #op-dualui .dd-adj,
+body.op-dual.dd-stack #op-dualui .dd-row{
+  display:flex !important;
+  flex:0 0 auto !important;
+  align-items:center !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-deck{
+  display:grid !important;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  grid-template-areas:
+    "head head head"
+    "wave wave wave"
+    "key trans tempo"
+    "extra extra extra";
+  align-items:center;
+}
+body.op-dual.dd-stack #op-dualui .dd-head{grid-area:head;display:flex !important}
+body.op-dual.dd-stack #op-dualui .dd-wavewrap{grid-area:wave;width:100%}
+body.op-dual.dd-stack #op-dualui .dd-adj{display:contents !important}
+body.op-dual.dd-stack #op-dualui .dd-adj .grp:first-child{grid-area:key;display:flex;align-items:center;gap:2px}
+body.op-dual.dd-stack #op-dualui .dd-adj .grp:last-child{grid-area:tempo;display:flex;align-items:center;gap:2px}
+body.op-dual.dd-stack #op-dualui .dd-row{grid-area:trans;justify-content:center !important;gap:4px !important;min-width:0}
+body.op-dual.dd-stack #op-dualui .dd-deck.dd-open .dd-tools,
+body.op-dual.dd-stack #op-dualui .dd-deck.dd-open .dd-mix{grid-area:extra}
+
+body.op-dual.dd-stack #op-dualui .dd-adj button{
+  width:28px !important;height:28px !important;
+  min-width:28px !important;min-height:28px !important;
+  max-width:28px !important;max-height:28px !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-adj .val{min-width:28px;font-size:11px}
+body.op-dual.dd-stack #op-dualui .dd-row button,
+body.op-dual.dd-stack #op-dualui .dd-row button:not(.play){
+  width:36px !important;height:36px !important;
+  min-width:36px !important;min-height:36px !important;
+  max-width:36px !important;max-height:36px !important;
+  flex:0 0 36px !important;
+  border-radius:10px !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-row button.play{
+  width:48px !important;height:48px !important;
+  min-width:48px !important;min-height:48px !important;
+  max-width:48px !important;max-height:48px !important;
+  flex:0 0 48px !important;
+  border-radius:14px !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-row button svg{width:16px !important;height:16px !important}
+body.op-dual.dd-stack #op-dualui .dd-row button.play svg{width:22px !important;height:22px !important}
+
+body.op-dual.dd-stack #op-dualui .dd-master{
+  flex:0 0 auto !important;
+  min-height:36px !important;
+  max-height:44px !important;
+  padding:4px 6px !important;
+  gap:6px !important;
+  width:100% !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-listwrap{
+  flex:1 1 auto !important;
+  min-height:45% !important;
+  max-height:none !important;
+  display:flex !important;
+  flex-direction:column !important;
+  overflow:hidden !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-list{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  flex-direction:column !important;
+  flex-wrap:nowrap !important;
+  touch-action:pan-y !important;
+  gap:4px !important;
+}
+body.op-dual.dd-stack #op-dualui .dd-song{
+  width:100% !important;
+  max-width:100% !important;
+  min-width:0 !important;
+  min-height:44px !important;
+  height:auto !important;
+  flex:0 0 auto !important;
+  padding:6px 8px !important;
+}
+body.op-dual.dd-stack #dd-rotate{display:none !important}
+
+@media (max-height:700px){
+  body.op-dual.dd-stack #op-dualui{gap:4px !important;padding:4px 6px !important}
+  body.op-dual.dd-stack #op-dualui .dd-deck:not(.dd-open){
+    max-height:128px !important;
+    padding:4px 6px !important;
+    gap:2px !important;
+  }
+  body.op-dual.dd-stack #op-dualui .dd-wave{
+    flex:0 0 36px !important;height:36px !important;
+    min-height:36px !important;max-height:36px !important;
+  }
+  body.op-dual.dd-stack #op-dualui .dd-listwrap{
+    min-height:calc(45vh + 2px) !important;
+    min-height:max(calc(45vh + 2px), calc(45dvh + 2px)) !important;
+  }
+  body.op-dual.dd-stack #op-dualui .dd-song{
+    min-height:40px !important;
+    padding:4px 8px !important;
+  }
+  body.op-dual.dd-stack #op-dualui .dd-master{min-height:32px !important;max-height:40px !important;padding:3px 6px !important}
+}
+@media (max-width:380px){
+  #dd-exit{padding:0 6px !important;font-size:10px !important}
+}
+
+/* Landscape / Fold side-by-side: keep 1.0.32 look; hide the portrait-only chevron */
+body.op-dual.dd-land #op-dualui .dd-exp{display:none !important}

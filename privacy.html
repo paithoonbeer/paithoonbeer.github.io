@@ -1,0 +1,59 @@
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>นโยบายความเป็นส่วนตัว · SetSod</title><meta name="theme-color" content="#0b0b0c">
+<style>body{margin:0;background:#0b0b0c;color:#e6e6e6;font:15px/1.7 system-ui,-apple-system,"Noto Sans Thai",sans-serif}main{max-width:720px;margin:0 auto;padding:28px 20px 60px}
+h1{font-size:22px;font-weight:600;margin:0 0 4px}h2{font-size:16px;font-weight:600;margin:28px 0 6px}p,li{color:#cfcfcf}.m{color:#8a8a8a;font-size:13px}a{color:#e6e6e6}
+table{border-collapse:collapse;width:100%;font-size:14px;margin:8px 0}td,th{border-top:1px solid #262626;padding:8px 6px;text-align:left;vertical-align:top}th{color:#9a9a9a;font-weight:500}hr{border:0;border-top:1px solid #262626;margin:36px 0}.bk20{position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:5;display:inline-flex;align-items:center;gap:4px;min-height:40px;margin:0 0 12px;background:linear-gradient(180deg,#3a3d45,#24262c);color:#e8e8ee;border:1px solid #000;border-radius:10px;padding:6px 14px 6px 10px;font:inherit;font-size:15px;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 2px 3px rgba(0,0,0,.6)}.bk20 b{font-size:22px;line-height:1;font-weight:400}</style></head>
+<body><main>
+<button type="button" id="bk20" class="bk20" aria-label="กลับ"><b>‹</b> กลับ</button>
+<h1>นโยบายความเป็นส่วนตัว</h1><div class="m">SetSod (เซ็ตสด) · ปรับปรุงล่าสุด 29 ตุลาคม 2569 · <a href="./">กลับไปที่แอป</a></div>
+
+<h2>สรุปสั้น ๆ</h2>
+<ul><li>ใช้แอปได้โดยไม่ต้องเข้าสู่ระบบ ไฟล์เพลงและการตั้งค่าเก็บอยู่ในเครื่องของคุณ</li>
+<li>เราเก็บข้อมูลบนคลาวด์ก็ต่อเมื่อคุณเข้าสู่ระบบและเลือกใช้ฟีเจอร์ที่ต้องใช้คลาวด์ (สำรองข้อมูล, วง, แชร์เซ็ตลิสต์)</li>
+<li>เราไม่ขายข้อมูล ไม่มีโฆษณา และไม่ใช้ข้อมูลของคุณเพื่อติดตามข้ามเว็บไซต์</li>
+<li>การแยก Stems ด้วย AI ทำงานในเครื่องของคุณทั้งหมด ไม่มีการอัปโหลดเพลง</li></ul>
+
+<h2>1. ข้อมูลที่เก็บในเครื่องของคุณ</h2>
+<p>ไฟล์เพลง ไฟล์ stems ภาพปก เซ็ตลิสต์ มาร์กเกอร์ คีย์/ความเร็ว มิกซ์ ธีม ภาษา และการตั้งค่าอื่น ๆ เก็บไว้ในเบราว์เซอร์ (IndexedDB, localStorage และแคชของแอป) ถ้าคุณล้างข้อมูลเว็บไซต์ ข้อมูลเหล่านี้จะหายไป</p>
+
+<h2>2. ข้อมูลบนคลาวด์ (Google Firebase) เมื่อคุณเข้าสู่ระบบ</h2>
+<table><tr><th>ข้อมูล</th><th>ใช้ทำอะไร</th></tr>
+<tr><td>บัญชี: อีเมล ชื่อที่แสดง และรหัสผู้ใช้ จาก Google หรือจากอีเมล/รหัสผ่าน (รหัสผ่านจัดการโดย Firebase Authentication เราไม่เห็นรหัสผ่าน)</td><td>เข้าสู่ระบบ แสดงชื่อในวง</td></tr>
+<tr><td>สำรองข้อมูล: เซ็ตลิสต์ ข้อมูลเพลง การตั้งค่า เวลาสำรองล่าสุด ชื่อรุ่นอุปกรณ์แบบย่อ (ไม่รวมไฟล์เสียง)</td><td>กู้คืนในเครื่องใหม่</td></tr>
+<tr><td>วง: ชื่อวง สมาชิกและบทบาท ชื่อที่แสดงของสมาชิก รหัสเชิญ (หมดอายุภายใน 15 วัน) เซ็ตลิสต์ของวง ข้อมูลเพลง (ชื่อเพลง ศิลปิน ชื่อไฟล์ ภาพปกขนาดเล็ก) รายการกิจกรรมในวง และรายการเพลงที่แต่ละคนมีในเครื่อง</td><td>ทำงานร่วมกันในวง</td></tr>
+<tr><td>ไฟล์เพลงของวง: เมื่อสมาชิกแชร์เพลงให้วง แอปจะย่อไฟล์เป็น MP3 แล้วเก็บแบ่งเป็นชิ้นใน Firestore เฉพาะสมาชิกของวงนั้นที่เปิดได้</td><td>ให้สมาชิกโหลดเพลงที่ใช้เล่นได้</td></tr>
+<tr><td>ลิงก์เซ็ตลิสต์และเซ็ตลิสต์สด: ใครก็ตามที่มีลิงก์หรือรหัสสามารถเปิดดูได้</td><td>แชร์เซ็ตลิสต์ให้คนอื่น</td></tr>
+<tr><td>สถิติการใช้งาน: ประเภทเหตุการณ์ (เช่น เข้าสู่ระบบ สร้างวง อัปเพลง ข้อผิดพลาด) วันเวลา เวอร์ชันแอป ประเภทอุปกรณ์ และรหัสผู้ใช้ รวมทั้งยอดรวมรายวัน</td><td>แก้บั๊กและปรับปรุงแอป เฉพาะผู้ดูแลระบบที่เห็น</td></tr>
+<tr><td>แพ็กเกจ: ประเภทแพ็กเกจ วันเริ่มทดลองใช้/วันหมดอายุ อีเมล และหมายเหตุการชำระเงิน</td><td>เปิดใช้ฟีเจอร์ Pro/Band</td></tr></table>
+
+<h2>3. Google Drive (ถ้าคุณอนุญาต)</h2>
+<p>เมื่อคุณเลือกเก็บเพลงของวงใน Google Drive แอปจะขอสิทธิ์ <code>drive.file</code> ซึ่งเข้าถึงได้เฉพาะไฟล์ที่แอปสร้างเอง (ในโฟลเดอร์ชื่อ "Beer Player" ใน Drive ของคุณ) แอปไม่เห็นไฟล์อื่นใน Drive ของคุณ คุณถอนสิทธิ์ได้ที่ myaccount.google.com › ความปลอดภัย › แอปของบุคคลที่สาม</p>
+
+<h2>4. บริการภายนอกที่แอปเชื่อมต่อ</h2>
+<ul><li>Google Firebase (โฮสติ้ง เข้าสู่ระบบ ฐานข้อมูล)</li><li>Google Drive (เฉพาะเมื่อคุณเปิดใช้)</li>
+<li>Hugging Face และ jsDelivr: ดาวน์โหลดโมเดลและไลบรารีสำหรับแยก Stems ด้วย AI (ครั้งแรกเท่านั้น) บริการเหล่านี้จะเห็นที่อยู่ IP ของคุณเหมือนการเปิดเว็บทั่วไป แต่จะไม่ได้รับไฟล์เพลง</li></ul>
+
+<h3>น้องเซ็ต (ผู้ช่วย AI ในแชท)</h3><p>เมื่อเปิดใช้ ข้อความที่คุณพิมพ์ในแชทกับทีมงาน (ไม่รวมอีเมลหรือข้อมูลบัญชีอื่น) จะถูกส่งไปยัง Google Gemini API เพื่อให้น้องเซ็ตตอบอัตโนมัติ เราใช้ Gemini แบบฟรี (free tier) ซึ่งตามเงื่อนไขของ Google ข้อมูลที่ส่งอาจถูกนำไปใช้ปรับปรุงผลิตภัณฑ์ของ Google และอาจมีผู้ตรวจสอบอ่านได้ — โปรดอย่าพิมพ์ข้อมูลส่วนตัว รหัสผ่าน หรือเลขบัญชีในแชท ถ้าต้องการคุยกับคน กดปุ่ม 👤 คุยกับแอดมิน ได้ทุกเมื่อ น้องเซ็ตไม่สามารถยืนยันการชำระเงินหรือคืนเงินได้</p>
+<h2>5. การชำระเงิน</h2><p>ตอนนี้รับชำระผ่าน PromptPay แบบโอนเอง เราเก็บเฉพาะข้อมูลที่จำเป็นต่อการเปิดใช้แพ็กเกจ (รหัสบัญชี แพ็กเกจที่ซื้อ ยอดเงิน เวลาโอน เลขอ้างอิง และรูปสลิปที่คุณแนบ — รูปสลิปเห็นได้เฉพาะคุณและผู้ดูแล ใช้เพื่อตรวจการชำระเงินเท่านั้น) ไม่มีการเก็บข้อมูลบัตร</p>
+
+<h2>6. ระยะเวลาเก็บ และการลบ</h2>
+<ul><li>ข้อมูลสำรองและข้อมูลวงจะเก็บไว้จนกว่าคุณจะลบ คุณลบวงหรือออกจากวงได้ในแอป</li>
+<li>สถิติการใช้งานผู้ดูแลระบบจะลบเป็นระยะ</li>
+<li>ถ้าต้องการลบบัญชีและข้อมูลทั้งหมด ให้อีเมลมาที่ <a href="mailto:paithooningrad@gmail.com">paithooningrad@gmail.com</a> เราจะดำเนินการภายใน 30 วัน</li></ul>
+
+<h2>7. สิทธิของคุณ</h2><p>ตามพระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล พ.ศ. 2562 (PDPA) คุณมีสิทธิขอเข้าถึง แก้ไข ลบ หรือขอสำเนาข้อมูลของคุณ และมีสิทธิถอนความยินยอม โดยติดต่อทางอีเมลข้างต้น</p>
+
+<h2>8. เด็ก</h2><p>แอปไม่ได้ออกแบบสำหรับเด็กอายุต่ำกว่า 13 ปี</p>
+<h2>9. การเปลี่ยนแปลง</h2><p>ถ้ามีการเปลี่ยนแปลงนโยบายนี้ เราจะแจ้งในแอปผ่านกระดิ่งแจ้งเตือน</p>
+
+<hr><h1 lang="en">Privacy policy (English summary)</h1>
+<p lang="en">SetSod works without an account. Audio files and settings stay in your browser. If you sign in, Firebase stores your account (email, name, ID), your backup (setlists and settings, no audio), band data (members, setlists, song info, and band audio as MP3 chunks visible to band members only), shared setlist links (anyone with the link), usage and error logs (admin only), and your plan status. Google Drive access is limited to files the app creates (<code>drive.file</code>). AI stem separation runs entirely on your device; the model is downloaded from Hugging Face and jsDelivr. We don't sell data or show ads. To delete your data, email paithooningrad@gmail.com.</p>
+<h2>ช่องทางติดต่อ</h2><p id="ct81">อีเมล <a href="mailto:paithooningrad@gmail.com">paithooningrad@gmail.com</a></p>
+<script>(async()=>{try{const emu=/^(localhost|127\.)/.test(location.hostname)&&new URLSearchParams(location.search).get('emu');
+const base=emu?'http://127.0.0.1:'+emu:'https://firestore.googleapis.com';
+const r=await fetch(base+'/v1/projects/puenduang/databases/(default)/documents/bp_cfg/contact');if(!r.ok)return;const f=(await r.json()).fields||{},s=k=>(f[k]&&f[k].stringValue)||'';
+const e=t=>String(t).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';'),u=x=>/^https?:\/\//i.test(x)?x:'',L=[];const em=s('em')||'paithooningrad@gmail.com';L.push(['อีเมล',em,'mailto:'+em]);
+if(s('line'))L.push(['LINE',s('line'),u(s('line'))||'https://line.me/R/ti/p/'+encodeURIComponent(s('line').startsWith('@')?s('line'):'@'+s('line'))]);
+if(s('fb'))L.push(['Facebook',s('fb'),u(s('fb'))||'https://facebook.com/'+encodeURIComponent(s('fb'))]);if(s('tel'))L.push(['โทร',s('tel'),'tel:'+s('tel').replace(/[^0-9+]/g,'')]);
+for(const v of ((f.links&&f.links.arrayValue&&f.links.arrayValue.values)||[])){const m=(v.mapValue&&v.mapValue.fields)||{},l=m.l&&m.l.stringValue,h=m.u&&m.u.stringValue;if(l&&u(h||''))L.push([l,'',h])}
+document.getElementById('ct81').innerHTML=L.map(([l,v,h])=>e(l)+' <a href="'+e(h)+'" target="_blank" rel="noopener">'+e(v||h)+'</a>').join('<br>')}catch(x){}})()</script>
+</main><script>/*8420 back*/(function(){function bk(){var r=document.referrer;try{if(history.length>1&&r&&new URL(r).origin==location.origin){history.back();return}}catch(e){}location.href="./"}window.__bk20=bk;document.getElementById("bk20").onclick=bk;addEventListener("keydown",function(e){if(e.key=="Escape")bk()});var x0=null,y0=0;addEventListener("touchstart",function(e){var t=e.touches[0];x0=t.clientX<24?t.clientX:null;y0=t.clientY},{passive:true});addEventListener("touchend",function(e){if(x0==null)return;var t=e.changedTouches[0];if(t.clientX-x0>80&&Math.abs(t.clientY-y0)<60)bk();x0=null},{passive:true})})()</script></body></html>
