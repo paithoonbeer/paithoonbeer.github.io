@@ -5530,8 +5530,9 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(t&&t.closest&&(t.closest('#op-sfxsheet')||t.closest('#op-sfx')||t.closest('#dd-sfx')||t.closest('#op-sfxmenu')||t.closest('#op-sfxfile')))return;
     close();
   },true);
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ensureSheet();bindBtns();preload()});
-  else{ensureSheet();bindBtns();preload()}
+  // v1.0.34: SFX files load on first SFX-panel open / first pad tap (not on every app start) to save hosting bandwidth.
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){ensureSheet();bindBtns()});
+  else{ensureSheet();bindBtns()}
   setInterval(bindBtns,800);
   window.__sfx={
     play:play,open:open,close:close,toggle:toggle,preload:preload,setVol:setVol,
