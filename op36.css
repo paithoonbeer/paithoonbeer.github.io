@@ -372,3 +372,11 @@ body.op36-big #op-dualui .dd-mstep{width:30px;height:40px}
   #op-dualui .dd-mix .dd-row button,#op-dualui .dd-mix .dd-row2 button{height:40px}
   #op-dualui .dd-mixh .dd-hb{width:30px;height:30px}
 }
+/* v1.0.38: click (นอม) side badge next to the title; library icon inside the search box */
+#op-dualui .dd-trow{display:flex;align-items:center;gap:5px;min-width:0}
+#op-dualui .dd-trow .dd-title{min-width:0;flex:1 1 auto}
+#op-dualui .dd-ck,.op-ck{flex:none;display:inline-flex;align-items:center;height:15px;padding:0 3px;border-radius:4px;font:800 9.5px/1 Inter,system-ui,sans-serif;letter-spacing:.02em;color:#ffd60a;background:rgba(255,214,10,.13);border:1px solid rgba(255,214,10,.35);white-space:nowrap}
+#op-dualui .dd-ck[hidden],.op-ck[hidden]{display:none}
+.op-ck{height:20px;font-size:12px;padding:0 6px;margin-right:8px;vertical-align:.25em}
+#op-dualui .dd-qlib{width:32px;height:32px;flex:none;display:grid;place-items:center;border-radius:9px;color:var(--d6-ac);background:var(--d6-acd);border:0;padding:0}
+#op-dualui .dd-qlib svg{width:17px;height:17px}

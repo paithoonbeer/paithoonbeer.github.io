@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.37';
+const APPV='1.0.38';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -863,6 +863,9 @@ new MutationObserver(()=>{try{themeSec();themeQuick()}catch(e){}}).observe(docum
 // ===== v30: share setlist link/QR, onboarding, L/R balance =====
 // ---- L/R balance (music channels only; click/นอม channel never touched) ----
 const hasClick=id=>{const s=SONG.get(id);return !!s&&(s.s=='L'||s.s=='R')};
+// v1.0.38: where the click (นอม) is: source side -> output side. 'L→R' when it moves, 'L' / 'R' when it stays, '' = no click.
+function ckSide(id){try{if(!id||!hasClick(id))return'';const s=SONG.get(id),ch=clickCh(id),st=stripOf(id,ch);let o=(st&&st.o)||outDef(ch,!!(pref(id)||{}).swap);if(o!=='L'&&o!=='R')o='C';return s.s===o?o:s.s+'→'+o}catch(e){return''}}
+function ckBadge(el,id){if(!el)return;const v=ckSide(id);if(el.textContent!==v)el.textContent=v;el.hidden=!v;el.title=v?('นอม '+v):'';el.setAttribute('aria-label',v?('นอม '+v):'')}
 let MBAL=+(localStorage.getItem('bp-mbal')||0);
 function balOf(id){return Math.max(-1,Math.min(1,(id?+(pref(id).bal||0):0)+MBAL))}
 function balMul(id,ch){if(id&&hasClick(id)&&ch==clickCh(id))return 1;const b=balOf(id);return ch==0?(b>0?1-b:1):(b<0?1+b:1)}
@@ -2430,7 +2433,7 @@ window.__ui66={tidy:tidy66,more:more66Open};
 
 // ===== v1.70: notification bell (band activity + system notices) · one-tap “+ เพิ่มเพลงให้วง” · per-song upload/cached status =====
 const NT={a:{},un:{},sys:null,sun:null,have:{},hun:{},hw:{}};
-const NTCHG={'1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
+const NTCHG={'1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
 SET65.push(['nt','#ntb','กระดิ่งแจ้งเตือน','เรื่องในวง (เพลงใหม่ ลิสต์ สมาชิก) และอัปเดตระบบ','ทั่วไป']);
 function ntOn(){return !hid65().has('nt')}
 function ntSeen(){return +localStorage.getItem('bp-nts')||0}
@@ -3524,7 +3527,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!nw.querySelector('.op-now-h')){
       nw.insertAdjacentHTML('afterbegin',
         '<div class="op-now-h"><span class="lb" id="op-nowlb">กำลังเล่น</span><button type="button" class="op-more" id="op-nowmore" aria-label="เพิ่มเติม เสียง เฟด เริ่มใหม่">'+svg.more+'</button></div>'+
-        '<h1 class="op-title" id="op-nowt">ยังไม่ได้เลือกเพลง</h1>'+
+        '<h1 class="op-title"><span class="op-ck" id="op-nowck" hidden></span><span id="op-nowt">ยังไม่ได้เลือกเพลง</span></h1>'+
         '<div class="op-artist" id="op-nowa"></div>'+
         '<div class="op-seek"><span id="op-tm">0:00</span><div class="op-track" id="op-track" role="slider" aria-label="ตำแหน่งเพลง"><i id="op-trk"></i></div><span id="op-du">0:00</span></div>'+
         '<div class="op-adj">'+
@@ -3559,7 +3562,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
         e.stopPropagation();
         const r=e.currentTarget.getBoundingClientRect();
         const f=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
-        try{seekFrac(f)}catch(err){}
+        try{if(cur&&cur.buf){const d=cur.buf.duration,a=Math.min(trS(cur.id)||0,d),b=trE(cur.id,d);seekFrac(d?Math.min(1,(a+f*Math.max(0,b-a))/d):f)}else seekFrac(f)}catch(err){}
       };
     }
     if(!lv.querySelector('.op-listh')){
@@ -3643,15 +3646,19 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const id=cur&&cur.id,s=id&&SONG.get(id);
     const t=$id('op-nowt'),a=$id('op-nowa'),lb=$id('op-nowlb');
     if(t)t.textContent=s?s.t:'ยังไม่ได้เลือกเพลง';
+    ckBadge($id('op-nowck'),id);
     if(a)a.textContent=s?(s.a||''):'';
     const i=id?SET.indexOf(id):-1;
     if(lb)lb.textContent=i>=0?('กำลังเล่น · '+(i+1)+' / '+SET.length):(SET.length?('ลิสต์ · '+SET.length+' เพลง'):'กำลังเล่น');
     let p=0,d=0;
-    try{if(cur&&cur.buf){p=pos();d=cur.buf.duration}}catch(e){}
+    // v1.0.38: time / length / progress follow the song's start+end marks (length = end mark - start mark)
+    let ms0=0,me0=0;
+    try{if(cur&&cur.buf){d=cur.buf.duration;ms0=Math.min(trS(cur.id)||0,d);me0=Math.max(ms0+0.01,trE(cur.id,d));p=Math.max(0,Math.min(pos(),me0)-ms0)}}catch(e){}
+    const ml0=Math.max(0,me0-ms0);
     const tm=$id('op-tm'),du=$id('op-du'),trk=$id('op-trk');
     if(tm)tm.textContent=fmt2(p);
-    if(du)du.textContent=fmt2(d);
-    if(trk)trk.style.width=(d?Math.max(0,Math.min(100,p/d*100)):0)+'%';
+    if(du)du.textContent=fmt2(ml0);
+    if(trk)trk.style.width=(ml0?Math.max(0,Math.min(100,p/ml0*100)):0)+'%';
     const kv=$id('op-kv'),tv=$id('op-tv');
     if(kv)kv.textContent=id?(kl65(id,1)||'—'):'—';
     if(tv){
@@ -3967,7 +3974,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     return opt?'':'—';
   }
   const DUAL={on:false,a:fresh(),b:fresh(),audible:'A',last:'A',xf:0.5,pick:null,expect:null,hinted:false,cpuWarned:false,master:null};
-  const orig={start:start,stop:stop,halt:halt,load:load,pos:pos,doFade:doFade,setPref:setPref,setPrefFor:setPrefFor,padToggle:padToggle};
+  const orig={start:start,stop:stop,halt:halt,finish:finish,load:load,pos:pos,doFade:doFade,setPref:setPref,setPrefFor:setPrefFor,padToggle:padToggle};
   const I={
     play:'<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>',
     pause:'<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>',
@@ -4124,9 +4131,21 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   function posOf(sl){
     if(!sl)return 0;
     if(!sl.playing)return sl.offset||0;
-    if(sl.sh)return sl.sh.timePlayed;
-    if(!ctx)return sl.offset||0;
-    return ctx.currentTime-sl.startAt;
+    let p;
+    if(sl.sh)p=sl.sh.timePlayed;
+    else if(!ctx)return sl.offset||0;
+    else p=ctx.currentTime-sl.startAt;
+    // v1.0.38: never report past the deck's end mark (the deck stops there)
+    try{if(sl.id&&sl.buf){const e=trE(sl.id,sl.buf.duration);if(p>e)p=e}}catch(e){}
+    return p;
+  }
+  // v1.0.38: the deck's own marks (start/end) — display, seek, end watcher and crossfade use these, not the focused song's
+  function markOf(sl){
+    const d=sl&&sl.buf?sl.buf.duration||0:0;
+    if(!sl||!sl.id||!d)return {d:d,ts:0,te:d,len:d};
+    const ts=Math.max(0,Math.min(trS(sl.id)||0,d));
+    const te=Math.max(ts+0.01,Math.min(d,trE(sl.id,d)));
+    return {d:d,ts:ts,te:te,len:te-ts};
   }
   function haltSlot(sl){
     if(!sl)return;
@@ -4148,7 +4167,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   }
   function finishSlot(w){
     w=whichOf(w);const sl=slot(w);
-    haltSlot(sl);sl.playing=false;sl.offset=0;sl.ended=true;
+    haltSlot(sl);sl.playing=false;sl.offset=(sl.id&&typeof trS==='function'?trS(sl.id):0)||0;sl.ended=true;
     try{applyXf()}catch(e){}
     try{if(!anyPlaying())relWake()}catch(e){}
     if(DUAL.last===w)syncFocus();
@@ -4214,7 +4233,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
         sl.startAt=ctx.currentTime-sl.offset;
       }
     }catch(e){try{blog('error','dual start '+w,e&&e.message)}catch(_){}return}
-    sl.playing=true;
+    sl.playing=true;sl.gen=(sl.gen||0)+1;
     DUAL.last=w;DUAL.audible=w;
     try{applyXf()}catch(e){}
     syncFocus();
@@ -4276,7 +4295,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
         '<button type="button" class="dd-listhbtn" id="dd-listshare" data-dd-listact="share" aria-label="แชร์ลิสต์">'+I.share+'</button>'+
         '<button type="button" class="dd-listhbtn" id="dd-listmore" data-dd-listact="more" aria-label="เมนูลิสต์">'+I.more+'</button>'+
         '</div></div>'+
-        '<label class="dd-sbox" id="dd-sbox">'+I.search+'<input id="dd-q" type="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="ค้นเพลงแทรก… ชื่อ / ศิลปิน" aria-label="ค้นเพลงเพื่อแทรกในลิสต์"><button type="button" id="dd-qx" class="dd-qx" aria-label="ล้างคำค้น" hidden>'+I.x+'</button></label>'+
+        '<label class="dd-sbox" id="dd-sbox">'+I.search+'<input id="dd-q" type="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="ค้นเพลงแทรก… ชื่อ / ศิลปิน" aria-label="ค้นเพลงเพื่อแทรกในลิสต์"><button type="button" id="dd-qx" class="dd-qx" aria-label="ล้างคำค้น" hidden>'+I.x+'</button><button type="button" id="dd-qlib" class="dd-qlib" aria-label="เปิดคลังเพลง" title="คลังเพลง">'+I.lib+'</button></label>'+
         '<div class="dd-list" id="dd-list"></div>'+
         '<div class="dd-res" id="dd-res" hidden></div>'+
       '</div>'+
@@ -4290,7 +4309,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     return '<section class="dd-deck '+w+'" id="dd-'+w+'" data-deck="'+w+'"><div class="dd-in">'+
       '<div class="dd-head">'+
         '<span class="dd-badge">'+w+'</span>'+
-        '<div class="dd-meta"><div class="dd-title" id="dd-'+w+'-t">ไม่มีเพลง</div><div class="dd-artist" id="dd-'+w+'-a"></div></div>'+
+        '<div class="dd-meta"><div class="dd-trow"><span class="dd-ck" id="dd-'+w+'-ck" hidden></span><div class="dd-title" id="dd-'+w+'-t">ไม่มีเพลง</div></div><div class="dd-artist" id="dd-'+w+'-a"></div></div>'+
         '<button type="button" class="dd-load dd-hb" id="dd-'+w+'-load" aria-label="โหลดเพลงจากคลังเข้าเด็ค '+w+'" title="โหลดจากคลัง">'+I.lib+'</button>'+
         '<button type="button" class="dd-exp dd-hb" id="dd-'+w+'-exp" data-dd="exp" data-deck="'+w+'" aria-expanded="false" aria-label="Vol EQ และเครื่องมือเด็ค '+w+'" title="Vol / EQ / เครื่องมือ">'+I.more+'</button>'+
       '</div>'+
@@ -4473,7 +4492,24 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     try{saveSet()}catch(e){}
     try{if(typeof renderSoon==='function')renderSoon()}catch(e){}
     try{const s=SONG.get(id);toast('แทรกต่อจากเพลงที่เล่น: '+(s&&s.t||''),1600,true)}catch(e){}
+    try{cueNext()}catch(e){}
     paintList();paintRes();
+  }
+  // v1.0.38: after an insert the idle deck must hold the list's next song (it used to keep the song loaded before the insert,
+  // so ▶ on that deck / the next song played the old one). Never touches a playing deck or a song the Pad is holding.
+  function cueNext(){
+    if(!DUAL.on)return null;
+    let w=whichOf(DUAL.last||DUAL.audible||'A');
+    if(!slot(w).playing){if(DUAL.a.playing)w='A';else if(DUAL.b.playing)w='B'}
+    const ref=slot(w);
+    const idle=ref.id?(w==='A'?'B':'A'):w;
+    const sl=slot(idle);
+    const i=ref.id?SET.indexOf(ref.id):-1;
+    const nx=ref.id?(i>=0?SET[i+1]:null):SET[0];
+    if(!nx||!SONG.get(nx)||sl.playing||sl.id===nx)return null;
+    try{if(typeof PAD!=='undefined'&&PAD&&sl.id&&(PAD.hold===sl.id||(PAD.on&&PAD.sid===sl.id)))return null}catch(e){}
+    loadInto(idle,nx,false);
+    return idle;
   }
   function paintRes(){
     const box=$el('dd-res'),q=$el('dd-q'),x=$el('dd-qx'),wrap=$el('dd-listwrap');
@@ -4496,6 +4532,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   }
   function bindSearch(){
     const q=$el('dd-q'),x=$el('dd-qx'),box=$el('dd-res');if(!q||q._b)return;q._b=1;
+    {const lb=$el('dd-qlib');if(lb&&!lb._bound){lb._bound=1;lb.addEventListener('pointerdown',function(e){e.stopPropagation()});lb.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();DUAL.pick=null;try{if(window.__op18&&__op18.openLib)__op18.openLib()}catch(err){}})}}
     q.addEventListener('input',paintRes);
     q.addEventListener('keydown',function(e){if(e.key==='Escape'){q.value='';paintRes();q.blur()}});
     if(x)x.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();q.value='';paintRes()});
@@ -4915,6 +4952,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const t=Math.max(50,Math.min(150,Math.round((ro/bm)*100*2)/2));
     setDeckLive(me,{tempo:t});
     applySlotPref(me.id,{tempo:t});
+    me.synced={id:me.id,t:t,o:ot.id}; // v1.0.38: SYNC is manual only - the button lights only after a tap
     try{toast('SYNC · เด็ค '+w+' = '+Math.round(ro)+' BPM',1800,true)}catch(e){}
     paintDeck(w);paintDeck(o);
   }
@@ -4974,7 +5012,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
         if(!sl.id||!sl.buf)return;
         const r=el.getBoundingClientRect();
         const f=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
-        const dur=sl.buf.duration,at=f*dur;
+        const m=markOf(sl),at=Math.min(m.d-0.05,m.ts+f*m.len);
         if(sl.playing)startSlot(w,at);else sl.offset=at;
         DUAL.last=w;syncFocus();
         paintDeck(w);
@@ -5010,13 +5048,15 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const el=cv.parentElement;
     const S=Math.min(el.clientWidth|0,el.clientHeight|0);
     const sl=slot(w),id=sl.id;
-    let p=0,dur=0,frac=0;
-    try{if(id&&sl.buf){p=posOf(sl);dur=sl.buf.duration;frac=dur?Math.max(0,Math.min(1,p/dur)):0}}catch(e){}
+    let p=0,dur=0,frac=0,mf=0,elp=0,len=0;
+    try{if(id&&sl.buf){p=posOf(sl);dur=sl.buf.duration;frac=dur?Math.max(0,Math.min(1,p/dur)):0;
+      const m=markOf(sl);len=m.len;elp=Math.max(0,Math.min(p,m.te)-m.ts);mf=len?Math.max(0,Math.min(1,elp/len)):0}}catch(e){}
+    // v1.0.38: seek strip, elapsed time and length follow the marks (length = end mark - start mark); the ring stays the whole file
     const ph=$el('dd-'+w+'-ph'),pr=$el('dd-'+w+'-prog');
-    if(ph)ph.style.left=(frac*100)+'%';
-    if(pr)pr.style.width=(frac*100)+'%';
+    if(ph)ph.style.left=(mf*100)+'%';
+    if(pr)pr.style.width=(mf*100)+'%';
     const tm=$el('dd-'+w+'-tm'),du=$el('dd-'+w+'-du');
-    const ts=fmt2(p),ds=fmt2(dur);
+    const ts=fmt2(elp),ds=fmt2(len);
     if(tm&&tm.textContent!==ts)tm.textContent=ts;
     if(du&&du.textContent!==ds)du.textContent=ds;
     if(S<24)return;
@@ -5069,8 +5109,9 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     el.classList.toggle('playing',!!sl.playing);
     el.classList.toggle('empty',!id);
     const t=$el('dd-'+w+'-t'),a=$el('dd-'+w+'-a');
-    const tt=s?s.t||'ไม่มีชื่อ':'ไม่มีเพลง — กด '+'คลัง',aa=s?(s.a||''):'';
+    const tt=s?s.t||'ไม่มีชื่อ':'ไม่มีเพลง — แตะเพื่อเลือก',aa=s?(s.a||''):'';
     if(t&&t.textContent!==tt)t.textContent=tt;
+    ckBadge($el('dd-'+w+'-ck'),id);
     if(a&&a.textContent!==aa)a.textContent=aa;
     const kv=$el('dd-'+w+'-kv'),tv=$el('dd-'+w+'-tv');
     const lv=sl.live||{};
@@ -5118,8 +5159,9 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(sy){
       let onS=false;
       try{
-        const ra=DUAL.a.id&&deckBpm(DUAL.a),rb=DUAL.b.id&&deckBpm(DUAL.b);
-        onS=!!(ra&&rb&&Math.abs(ra-rb)<0.6);
+        // v1.0.38: lit only while a manual SYNC on this deck still holds (same songs, same tempo) - never because BPMs happen to match
+        const y=sl.synced,ot=slot(w==='A'?'B':'A');
+        onS=!!(y&&y.id===sl.id&&ot.id===y.o&&Math.abs((deckPref(sl).tempo||100)-y.t)<0.01);
       }catch(e){}
       sy.classList.toggle('on',onS);
     }
@@ -5142,7 +5184,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
         '<button type="button" data-to="B" class="'+(onb?'onb':'')+'" aria-label="ใส่เด็ค B">B</button>'+
         '<button type="button" data-more="1" class="mo" aria-label="เมนูเพลง">'+I.more+'</button>'+
         '</div></div>';
-    }).join('')||'<div class="dd-empty">ลิสต์ว่าง — ค้นด้านบนเพื่อแทรกเพลง หรือกด “คลัง”</div>';
+    }).join('')||'<div class="dd-empty">ลิสต์ว่าง — ค้นด้านบนเพื่อแทรกเพลง หรือแตะไอคอนคลังในช่องค้น</div>';
     if(box._sig!==html){
       box._sig=html;
       box.innerHTML=html;
@@ -5162,9 +5204,10 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   let FRAMES=0;
   function loop(ts){
     raf=0;
-    if(!DUAL.on||document.hidden)return;
+    if(!DUAL.on||document.hidden||DUAL.parked)return;
     if(!anyPlaying())return;
     raf=requestAnimationFrame(loop);
+    if(document.body.classList.contains('sheet-open'))return;
     const now=ts||performance.now();
     if(now-lastFrame<FRAME_MS-2)return;
     lastFrame=now;FRAMES++;
@@ -5305,7 +5348,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   }
   function setOn(on){
     on=!!on;
-    if(on===DUAL.on){if(on)paint();return}
+    if(on===DUAL.on){if(on){if(DUAL.parked)unpark();paint()}return}
+    DUAL.parked=false;
     DUAL.on=on;
     document.body.classList.toggle('op-dual',on);
     const btn=$el('op-dual');
@@ -5343,8 +5387,31 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const lv=homeLive();
     if(lv===homeWas)return;
     homeWas=lv;
-    if(lv&&!DUAL.on)setOn(true);
-    else if(!lv&&DUAL.on)setOn(false);
+    // v1.0.38: leaving the live page while a deck plays no longer hands the song to the single player
+    // (that was a hard stop + restart = the glitch on every page change). The decks keep playing ("parked"),
+    // only the deck UI is hidden; coming back just shows it again - no restart.
+    if(lv){if(DUAL.on&&DUAL.parked)unpark();else if(!DUAL.on)setOn(true)}
+    else if(DUAL.on){if(anyPlaying())park();else setOn(false)}
+  }
+  function park(){
+    if(!DUAL.on||DUAL.parked)return;
+    DUAL.parked=true;DUAL.pick=null;
+    const ui=$el('op-dualui');if(ui){ui.hidden=true;ui.setAttribute('aria-hidden','true')}
+    document.body.classList.remove('op-dual','dd-land','dd-stack');
+    try{closeMixSheet()}catch(e){}
+    if(raf){cancelAnimationFrame(raf);raf=0}
+    try{syncFocus()}catch(e){}
+  }
+  function unpark(){
+    if(!DUAL.parked)return;
+    DUAL.parked=false;
+    if(!DUAL.on)return;
+    document.body.classList.add('op-dual');
+    const u=$el('op-dualui');if(u){u.hidden=false;u.removeAttribute('hidden');u.setAttribute('aria-hidden','false')}
+    try{placeUi()}catch(e){}
+    try{applyExp()}catch(e){}
+    try{paint()}catch(e){}
+    if(anyPlaying()&&!raf)raf=requestAnimationFrame(loop);
   }
   {const _sl=setLive;setLive=function(){const r=_sl.apply(this,arguments);try{homeEdge()}catch(e){}return r}}
 
@@ -5363,11 +5430,10 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       btn.addEventListener('click',function(e){toggleDual(e)});
       btn.addEventListener('pointerdown',function(e){e.stopPropagation()});
     }
-    let lb=$el('op-lib');
-    if(!lb&&btn){
-      btn.insertAdjacentHTML('beforebegin','<button type="button" id="op-lib" class="hw" aria-label="คลังเพลง" title="คลังเพลง">'+I.lib+'<span>คลัง</span></button>');
-      lb=$el('op-lib');
-    }
+    // v1.0.38: the top คลัง button is gone (search already covers it). The library is one tap away from the
+    // book icon inside the search box (#dd-qlib) and from each deck's load icon.
+    {const old=$el('op-lib');if(old)old.remove()}
+    const lb=$el('dd-qlib');
     if(lb&&!lb._bound){
       lb._bound=1;
       lb.addEventListener('pointerdown',function(e){e.stopPropagation()});
@@ -5445,8 +5511,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!DUAL.on)return false;
     if(!AUTO.on||!(AUTO.xf>0))return true;
     let w=null;
-    const pref=whichOf(DUAL.last||DUAL.audible||'A');
-    if(slot(pref).playing)w=pref;
+    const pw=whichOf(DUAL.last||DUAL.audible||'A'); // v1.0.38: was named "pref" and shadowed pref() -> TypeError -> fell back to the single-player crossfade
+    if(slot(pw).playing)w=pw;
     else if(slot('A').playing)w='A';
     else if(slot('B').playing)w='B';
     if(!w)return true;
@@ -5454,11 +5520,12 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!sl.id||sl.fading)return true;
     const p=pref(sl.id);
     if(p.lp!=null)return true;
-    const left=(typeof effEnd==='function'?effEnd()-posOf(sl):(sl.buf?sl.buf.duration-posOf(sl):0))/((p.tempo||100)/100);
+    const left=(sl.buf?markOf(sl).te-posOf(sl):0)/((deckPref(sl).tempo||100)/100); // v1.0.38: this deck's end mark + deck tempo
     const i=SET.indexOf(sl.id),nx=i>=0?SET[i+1]:null;
     if(!nx)return true;
-    const idle=idleOf();
-    if(slot(idle).id!==nx){slot(idle).id=nx;slot(idle).offset=0;slot(idle).buf=null;try{paintList()}catch(e){}}
+    const idle=w==='A'?'B':'A';
+    if(slot(idle).playing)return true;
+    if(slot(idle).id!==nx){assignId(slot(idle),nx);slot(idle).offset=(typeof trS==='function'?trS(nx):0)||0;slot(idle).ended=false;slot(idle).buf=null;try{paintList()}catch(e){}}
     if(!cache.has(nx)){if(left<AUTO.xf+20&&SONG.get(nx)){decode(nx).then(function(b){if(slot(idle).id===nx)slot(idle).buf=b}).catch(function(){})}return true}
     if(left>AUTO.xf)return true;
     if(!slot(idle).playing){
@@ -5477,6 +5544,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!AUTO.on)return true;
     const w=whichOf(fromW||DUAL.last||DUAL.audible);
     const sl=slot(w);
+    if(slot(w==='A'?'B':'A').playing)return true; // v1.0.38: the other deck already carries on (crossfade hand-off) -> don't reload this deck
     const i=SET.indexOf(sl.id),nx=i>=0?SET[i+1]:null;
     if(!nx){try{$('ps').textContent='✅ จบเพลง (ไม่มีเพลงถัดไปในลิสต์)'}catch(e){}return true}
     const s=SONG.get(nx);
@@ -5543,11 +5611,29 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(DUAL.on)return posOf(slot(DUAL.last||DUAL.audible||'A'));
     return orig.pos.apply(this,arguments);
   };
+  // v1.0.38: the end-mark stop (global 250 ms check -> finish()) used to call the hooked halt() only, so the deck kept
+  // sl.playing=true and its timer ran on to the file end. In Dual, finish() now finishes that deck properly.
+  finish=function(){
+    if(DUAL.on){finishSlot(DUAL.last||DUAL.audible||'A');return}
+    return orig.finish.apply(this,arguments);
+  };
+  // each deck stops at its own end mark, also when the other deck has focus
+  setInterval(function(){
+    if(!DUAL.on)return;
+    ['A','B'].forEach(function(w){
+      const sl=slot(w);
+      if(!sl.playing||!sl.buf||!sl.id||sl.fading)return;
+      try{const lp=pref(sl.id);if(lp&&lp.lp!=null)return}catch(e){}
+      const m=markOf(sl);
+      if(m.te<m.d-0.05&&posOf(sl)>=m.te-0.06)finishSlot(w);
+    });
+  },100);
   doFade=function(){
     if(DUAL.on){fadeSlot(DUAL.last||DUAL.audible||'A');paint();return}
     return orig.doFade.apply(this,arguments);
   };
   load=async function(id,autoplay){
+    if(DUAL.on&&DUAL.parked){try{setOn(false)}catch(e){}}
     if(DUAL.on){
       if(DUAL.expect==='A'||DUAL.expect==='B'){const w=DUAL.expect;DUAL.expect=null;await loadInto(w,id,autoplay!==false);return}
       songTap(id,autoplay!==false);
@@ -5613,12 +5699,14 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     get last(){return DUAL.last},
     get ids(){return{a:DUAL.a.id,b:DUAL.b.id}},
     get holds(){return{hold:typeof PAD!=='undefined'?PAD.hold:null,wait:typeof PAD!=='undefined'?PAD.wait:null,sid:typeof PAD!=='undefined'?PAD.sid:null}},
+    get gen(){return{A:DUAL.a.gen||0,B:DUAL.b.gen||0,parked:!!DUAL.parked}},
     get state(){return{on:DUAL.on,a:DUAL.a.id,b:DUAL.b.id,audible:DUAL.audible,last:DUAL.last,xf:DUAL.xf,pick:DUAL.pick,cur:cur&&cur.id,playing:anyPlaying(),playingA:!!DUAL.a.playing,playingB:!!DUAL.b.playing,pos:posOf(slot(DUAL.last||DUAL.audible)),posA:posOf(DUAL.a),posB:posOf(DUAL.b),gains:gainsState(),shA:!!DUAL.a.sh,shB:!!DUAL.b.sh,cpuWarned:!!DUAL.cpuWarned,nodes:{a:!!(DUAL.a.src||DUAL.a.sh),b:!!(DUAL.b.src||DUAL.b.sh)}}},
     get gains(){return gainsState()},
-    setSong:function(id,ch){const s=SONG.get(id);if(!s)return false;if(ch&&ch.t!=null)s.t=ch.t;if(ch&&ch.a!=null)s.a=ch.a;if(ch&&'b' in ch)s.b=ch.b;if(ch&&ch.f!=null)s.f=ch.f;return true},
+    setSong:function(id,ch){const s=SONG.get(id);if(!s)return false;if(ch&&ch.t!=null)s.t=ch.t;if(ch&&ch.a!=null)s.a=ch.a;if(ch&&'b' in ch)s.b=ch.b;if(ch&&ch.f!=null)s.f=ch.f;if(ch&&'s' in ch)s.s=ch.s;return true},
     loadSong:function(id,auto){return load(id,auto!==false)},
     setAuto:function(p){Object.assign(AUTO,p||{});try{saveAuto()}catch(e){}},
     get auto(){return{on:!!AUTO.on,xf:+(AUTO.xf||0),gap:+(AUTO.gap||0)}},
+    setAuto:function(o){o=o||{};if('on' in o)AUTO.on=!!o.on;if('xf' in o)AUTO.xf=+o.xf||0;if('gap' in o)AUTO.gap=+o.gap||0;return{on:!!AUTO.on,xf:+(AUTO.xf||0),gap:+(AUTO.gap||0)}}, // v1.0.38 test hook
     seek:function(at,w){w=w?whichOf(w):(DUAL.last||DUAL.audible||'A');const sl=slot(w);if(sl.buf){const t=Math.max(0,Math.min(sl.buf.duration-0.05,+at||0));if(sl.playing)startSlot(w,t);else sl.offset=t;DUAL.last=w;syncFocus();paint()}},
     paint:paint,
     prime:prime,
@@ -5640,6 +5728,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     setBig:setBig,
     moveSet:moveSet,
     insertNext:insertNext,
+    cueNext:cueNext,
     search:searchSongs,
     get frames(){return FRAMES},
     get rafOn(){return !!raf},
