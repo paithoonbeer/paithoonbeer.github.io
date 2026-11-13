@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.35';
+const APPV='1.0.36';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -2422,7 +2422,7 @@ window.__ui66={tidy:tidy66,more:more66Open};
 
 // ===== v1.70: notification bell (band activity + system notices) · one-tap “+ เพิ่มเพลงให้วง” · per-song upload/cached status =====
 const NT={a:{},un:{},sys:null,sun:null,have:{},hun:{},hw:{}};
-const NTCHG={'1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
+const NTCHG={'1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
 SET65.push(['nt','#ntb','กระดิ่งแจ้งเตือน','เรื่องในวง (เพลงใหม่ ลิสต์ สมาชิก) และอัปเดตระบบ','ทั่วไป']);
 function ntOn(){return !hid65().has('nt')}
 function ntSeen(){return +localStorage.getItem('bp-nts')||0}
@@ -3473,7 +3473,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       [autoXfLabel(),function(){cycleAutoXf()}],
       [autoXcLabel(),function(){toggleAutoXc()}],
       ['สตูดิโอ (มิกเซอร์ / คลื่น / stems)',function(){try{setLive(false)}catch(e){}}],
-      ['แก้ข้อมูลเพลงนี้',function(){if(cur)try{openMeta(cur.id)}catch(e){toast('เลือกเพลงก่อน',1500)}}],
+      ['แก้ข้อมูลเพลงนี้',function(){if(cur)try{openMeta([cur.id])}catch(e){toast('เลือกเพลงก่อน',1500)}}],
       ['แชร์ลิสต์',function(){try{shareOne()}catch(e){}}]
     ]);
   }
@@ -3490,7 +3490,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     popActs('เพลงนี้',[
       ['▶ เล่น',function(){try{load(id)}catch(e){}}],
       ['🗑 ลบออกจากลิสต์',function(){try{lvRm839(id)}catch(e){}}],
-      ['✏️ แก้ข้อมูล',function(){try{openMeta(id)}catch(e){}}],
+      ['✏️ แก้ข้อมูล',function(){try{openMeta([id])}catch(e){}}],
       ['☁︎ ส่งเข้าวง',function(){try{go845(id)}catch(e){}}]
     ]);
   }
@@ -3730,7 +3730,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const ids=[];
     for(let i=0;i<n;i++){
       const id='__op20_'+i;
-      if(!SONG.has(id))SONG.set(id,{t:'เพลงทดสอบ '+(i+1),a:'ศิลปิน',id:id});
+      if(!SONG.has(id))SONG.set(id,{t:'เพลงทดสอบ '+(i+1),a:'ศิลปิน',id:id,_id:id});
       ids.push(id);
     }
     SET=ids.slice();
@@ -3976,6 +3976,20 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     list:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg>',
     share:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 3.1M15.4 6.9l-6.8 3.1"/></svg>'
   };
+  Object.assign(I,{
+    lib:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></svg>',
+    x:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+    plus:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+    minus:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>',
+    search:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    grip:'<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
+    ins:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h10M4 12h7M4 18h10"/><path d="M18 9v6M15 12h6"/></svg>',
+    sliders:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+    plug:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3v5M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/></svg>',
+    sfx:'<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>',
+    save:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3h11l3 3v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/></svg>',
+    swap:'<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h14M17 12l4 4-4 4M21 16H7"/></svg>'
+  });
   function slot(w){return (w==='B'||w==='b')?DUAL.b:DUAL.a}
   function whichOf(w){return (w==='B'||w==='b')?'B':'A'}
   function deckOf(id){if(!id)return null;if(DUAL.a.id===id)return 'A';if(DUAL.b.id===id)return 'B';return null}
@@ -4017,16 +4031,49 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   function ensureBus(sl){
     if(sl.bus)return sl.bus;
     if(!ensureMaster())return null;
+    // v1.0.36: per-song L/R mix (same rules as the single player: swap, strip vol/mute/solo, strip output) before EQ.
+    const sp=ctx.createChannelSplitter(2);try{sp.channelInterpretation='speakers'}catch(e){}
+    const f0=ctx.createGain(),f1=ctx.createGain();
+    const p0=ctx.createStereoPanner(),p1=ctx.createStereoPanner();
+    const sum=stereo(ctx.createGain());
+    sp.connect(f0,0);sp.connect(f1,1);f0.connect(p0);f1.connect(p1);p0.connect(sum);p1.connect(sum);
     const eqL=stereo(ctx.createBiquadFilter());eqL.type='lowshelf';eqL.frequency.value=250;eqL.gain.value=0;
     const eqM=stereo(ctx.createBiquadFilter());eqM.type='peaking';eqM.frequency.value=1000;eqM.Q.value=0.7;eqM.gain.value=0;
     const eqH=stereo(ctx.createBiquadFilter());eqH.type='highshelf';eqH.frequency.value=4000;eqH.gain.value=0;
     const vol=stereo(ctx.createGain());vol.gain.value=1;
     const xf=stereo(ctx.createGain());xf.gain.value=1;
     const fade=stereo(ctx.createGain());fade.gain.value=1;
-    eqL.connect(eqM);eqM.connect(eqH);eqH.connect(vol);vol.connect(xf);xf.connect(fade);fade.connect(DUAL.master);
-    sl.bus={in:eqL,eqL:eqL,eqM:eqM,eqH:eqH,vol:vol,xf:xf,fade:fade};
-    applyVol(sl);applyEq(sl);applyXf();
+    sum.connect(eqL);eqL.connect(eqM);eqM.connect(eqH);eqH.connect(vol);vol.connect(xf);xf.connect(fade);fade.connect(DUAL.master);
+    sl.bus={in:sp,sp:sp,f:[f0,f1],p:[p0,p1],sum:sum,eqL:eqL,eqM:eqM,eqH:eqH,vol:vol,xf:xf,fade:fade,mixSig:''};
+    applyDeckMix(sl,true);applyVol(sl);applyEq(sl);applyXf();
     return sl.bus;
+  }
+  function deckMix(id){
+    const out={f:[1,1],pan:[-1,1],M:1,swap:false};
+    if(!id||typeof mixOf!=='function')return out;
+    try{
+      const m=mixOf(id),sw=!!(pref(id)||{}).swap,solo=m.c.s||m.u.s;
+      out.swap=sw;out.M=db2(m.M);
+      for(let ch=0;ch<2;ch++){
+        const st=stripOf(id,ch);
+        out.f[ch]=(st.m||(solo&&!st.s))?0:db2(st.v);
+        const o=st.o||outDef(ch,sw);
+        out.pan[ch]=o==='L'?-1:o==='R'?1:0;
+      }
+    }catch(e){}
+    return out;
+  }
+  function applyDeckMix(sl,force){
+    if(!sl||!sl.bus||!ctx)return;
+    const m=deckMix(sl.id),sig=(sl.id||'')+'|'+m.f.join(',')+'|'+m.pan.join(',')+'|'+m.M;
+    if(!force&&sl.bus.mixSig===sig)return;
+    sl.bus.mixSig=sig;
+    const t=ctx.currentTime;
+    for(let ch=0;ch<2;ch++){
+      try{sl.bus.f[ch].gain.setTargetAtTime(m.f[ch],t,0.015)}catch(e){sl.bus.f[ch].gain.value=m.f[ch]}
+      try{sl.bus.p[ch].pan.setTargetAtTime(m.pan[ch],t,0.015)}catch(e){sl.bus.p[ch].pan.value=m.pan[ch]}
+    }
+    try{sl.bus.sum.gain.setTargetAtTime(m.M,t,0.015)}catch(e){sl.bus.sum.gain.value=m.M}
   }
   function applyVol(sl){
     if(!sl||!sl.bus)return;
@@ -4127,6 +4174,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     sl.offset=Math.max(0,Math.min(want,dur-0.05));
     sl.ended=false;
     fadeResetSlot(sl);
+    try{applyDeckMix(sl)}catch(e){}
     const dest=sl.bus.in;
     try{
       if(!needSh(p)){
@@ -4188,69 +4236,99 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const d=document.createElement('div');
     d.id='op-dualui';
     d.setAttribute('role','region');
-    d.setAttribute('aria-label','โหมด 2 เด็ค');
+    d.setAttribute('aria-label','หน้าแสดงสด 2 เด็ค');
     d.innerHTML=
-      '<div id="dd-rotate">หมุนจอเพื่อเห็นสองเด็คคู่กัน <button type="button" id="dd-rotatedismiss">ซ่อน</button></div>'+
       '<div class="dd-decks">'+deckHtml('A')+deckHtml('B')+'</div>'+
       '<div class="dd-master">'+
         '<span class="dd-xfab">A</span>'+
-        '<div class="dd-xf" id="dd-xf" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="ครอสเฟดเดอร์">'+
-          '<div class="dd-xftrack"></div><div class="dd-xfknob" id="dd-xfknob"></div>'+
+        '<div class="dd-xf" id="dd-xf" role="slider" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50" aria-label="ครอสเฟดเดอร์ (แตะสองครั้ง = กลาง)">'+
+          '<div class="dd-xftrack"></div><i class="dd-xfmid"></i><div class="dd-xfknob" id="dd-xfknob"></div>'+
         '</div>'+
         '<span class="dd-xfbb">B</span>'+
-        '<button type="button" class="dd-mbtn" id="dd-auto" aria-pressed="false" aria-label="เล่นต่อเนื่องอัตโนมัติ">∞</button>'+
-        '<button type="button" class="dd-mbtn" id="dd-xfsec" aria-label="ความยาวครอสเฟด">XF</button>'+
-        '<button type="button" class="dd-mbtn" id="dd-sfx" aria-pressed="false" aria-label="เสียงประกอบ" title="SFX">SFX</button>'+
-        '<button type="button" class="dd-mbtn dd-exit" id="dd-exit" aria-label="ออกจากโหมด 2 เด็ค" title="ออกจากโหมด 2 เด็ค">✕ ออก 2 เด็ค</button>'+
+        '<button type="button" class="dd-mbtn" id="dd-auto" aria-pressed="false" aria-label="เล่นต่อเนื่องอัตโนมัติ" title="เล่นต่อเนื่อง">∞</button>'+
+        '<button type="button" class="dd-mbtn" id="dd-xfsec" aria-label="ความยาวครอสเฟด" title="ความยาวครอสเฟด">XF</button>'+
+        '<button type="button" class="dd-mbtn" id="dd-sfx" aria-pressed="false" aria-label="เสียงประกอบ" title="SFX">'+I.sfx+'</button>'+
       '</div>'+
       '<div class="dd-listwrap" id="dd-listwrap">'+
-      '<div class="dd-listhead" id="dd-listhead"><h2>ลิสต์สด</h2><span class="n" id="dd-listn">0 เพลง</span>'+
-      '<div class="dd-listacts">'+
-      '<button type="button" class="dd-listhbtn" id="dd-listsw" data-dd-listact="sw" aria-label="สลับลิสต์สดหรือลิสต์ที่บันทึก">'+I.list+'</button>'+
-      '<button type="button" class="dd-listhbtn" id="dd-listshare" data-dd-listact="share" aria-label="แชร์ลิสต์">'+I.share+'</button>'+
-      '<button type="button" class="dd-listhbtn" id="dd-listmore" data-dd-listact="more" aria-label="เมนูลิสต์">'+I.more+'</button>'+
-      '</div></div>'+
-      '<div class="dd-list" id="dd-list"></div></div>';
+        '<div class="dd-listhead" id="dd-listhead"><h2>ลิสต์วันนี้</h2><span class="n" id="dd-listn">0 เพลง</span><span class="dd-st" id="dd-st" aria-live="polite"></span>'+
+        '<div class="dd-listacts">'+
+        '<button type="button" class="dd-listhbtn" id="dd-listsw" data-dd-listact="sw" aria-label="สลับลิสต์สดหรือลิสต์ที่บันทึก">'+I.list+'</button>'+
+        '<button type="button" class="dd-listhbtn" id="dd-listshare" data-dd-listact="share" aria-label="แชร์ลิสต์">'+I.share+'</button>'+
+        '<button type="button" class="dd-listhbtn" id="dd-listmore" data-dd-listact="more" aria-label="เมนูลิสต์">'+I.more+'</button>'+
+        '</div></div>'+
+        '<label class="dd-sbox" id="dd-sbox">'+I.search+'<input id="dd-q" type="search" enterkeyhint="search" autocomplete="off" autocorrect="off" spellcheck="false" placeholder="ค้นเพลงแทรก… ชื่อ / ศิลปิน" aria-label="ค้นเพลงเพื่อแทรกในลิสต์"><button type="button" id="dd-qx" class="dd-qx" aria-label="ล้างคำค้น" hidden>'+I.x+'</button></label>'+
+        '<div class="dd-list" id="dd-list"></div>'+
+        '<div class="dd-res" id="dd-res" hidden></div>'+
+      '</div>'+
+      '<div class="dd-dock" id="dd-dock">'+metroHtml()+mixHtml()+'</div>';
     document.body.appendChild(d);
     bindUi();
   }
   function deckHtml(w){
-    return '<section class="dd-deck '+w+'" id="dd-'+w+'" data-deck="'+w+'">'+
+    const o=w==='A'?'B':'A',sid=w==='B'?'dd-sync':'dd-syncA';
+    const st=function(act,d,lab,ic){return '<button type="button" data-dd="'+act+'" data-d="'+d+'" data-deck="'+w+'" aria-label="'+lab+'">'+ic+'</button>'};
+    return '<section class="dd-deck '+w+'" id="dd-'+w+'" data-deck="'+w+'"><div class="dd-in">'+
       '<div class="dd-head">'+
-        '<span class="dd-badge">DECK '+w+'</span>'+
+        '<span class="dd-badge">'+w+'</span>'+
         '<div class="dd-meta"><div class="dd-title" id="dd-'+w+'-t">ไม่มีเพลง</div><div class="dd-artist" id="dd-'+w+'-a"></div></div>'+
-        '<button type="button" class="dd-load" id="dd-'+w+'-load" aria-label="โหลดเพลงเข้าเด็ค '+w+'" title="โหลดจากลิสต์หรือคลัง">'+I.load+'</button>'+
-        '<button type="button" class="dd-exp" id="dd-'+w+'-exp" data-dd="exp" data-deck="'+w+'" aria-expanded="false" aria-label="Vol EQ และเครื่องมือเด็ค '+w+'" title="Vol / EQ / เครื่องมือ">▾</button>'+
+        '<button type="button" class="dd-load dd-hb" id="dd-'+w+'-load" aria-label="โหลดเพลงจากคลังเข้าเด็ค '+w+'" title="โหลดจากคลัง">'+I.lib+'</button>'+
+        '<button type="button" class="dd-exp dd-hb" id="dd-'+w+'-exp" data-dd="exp" data-deck="'+w+'" aria-expanded="false" aria-label="Vol EQ และเครื่องมือเด็ค '+w+'" title="Vol / EQ / เครื่องมือ">'+I.more+'</button>'+
       '</div>'+
-      '<div class="dd-wavewrap">'+
-        '<div class="dd-wave" id="dd-'+w+'-wave" data-deck="'+w+'"><canvas id="dd-'+w+'-cv"></canvas><div class="dd-playhead" id="dd-'+w+'-ph"></div></div>'+
+      '<div class="dd-plat" id="dd-'+w+'-plat"><canvas id="dd-'+w+'-cv" aria-hidden="true"></canvas>'+
+        '<button type="button" class="play" data-dd="play" data-deck="'+w+'" aria-label="เล่น">'+I.play+'</button></div>'+
+      '<div class="dd-rt">'+
         '<div class="dd-tools" role="toolbar" aria-label="เครื่องมือเด็ค '+w+'">'+
+          '<button type="button" class="dd-tool cue" data-dd="cue" data-deck="'+w+'" aria-label="คิว เริ่มใหม่" title="CUE เริ่มใหม่">'+I.cue+'</button>'+
+          '<button type="button" class="dd-tool tx dd-sync" data-dd="sync" data-deck="'+w+'" id="'+sid+'" aria-label="ซิงก์เทมโปเด็ค '+w+' ให้เท่าเด็ค '+o+'" title="SYNC '+w+' = '+o+'">SYNC</button>'+
           '<button type="button" class="dd-tool" data-dd="pad" data-deck="'+w+'" id="dd-'+w+'-pad" aria-pressed="false" aria-label="Pad" title="Pad">'+I.pad+'</button>'+
-          '<button type="button" class="dd-tool" data-dd="metro" data-deck="'+w+'" id="dd-'+w+'-metro" aria-pressed="false" aria-label="เมโทร" title="เมโทร">'+I.metro+'</button>'+
           '<button type="button" class="dd-tool" data-dd="fade" data-deck="'+w+'" id="dd-'+w+'-fade" aria-pressed="false" aria-label="เฟดออก" title="เฟดออก">'+I.fade+'</button>'+
-          '<button type="button" class="dd-tool" data-dd="nudge" data-d="-5" data-deck="'+w+'" aria-label="ถอย 5 วินาที" title="ถอย 5 วิ">'+I.nudgeL+'</button>'+
-          '<button type="button" class="dd-tool" data-dd="nudge" data-d="5" data-deck="'+w+'" aria-label="เดิน 5 วินาที" title="เดิน 5 วิ">'+I.nudgeR+'</button>'+
-          '<button type="button" class="dd-tool" data-dd="more" data-deck="'+w+'" aria-label="เมนูเพลง" title="เมนูเพลง">'+I.more+'</button>'+
+        '</div>'+
+        '<div class="dd-adj">'+
+          '<div class="grp ky" id="dd-'+w+'-ky">'+st('key',-1,'ลดคีย์',I.minus)+'<span class="val"><em>คีย์</em><b id="dd-'+w+'-kv">—</b></span>'+st('key',1,'เพิ่มคีย์',I.plus)+'</div>'+
+          '<div class="grp tp" id="dd-'+w+'-tp">'+st('tempo',-1,'ช้าลง',I.minus)+'<span class="val"><em>BPM</em><b id="dd-'+w+'-tv">—</b></span>'+st('tempo',1,'เร็วขึ้น',I.plus)+'</div>'+
         '</div>'+
       '</div>'+
-      '<div class="dd-times"><span id="dd-'+w+'-tm">0:00</span><span id="dd-'+w+'-du">0:00</span></div>'+
-      '<div class="dd-adj">'+
-        '<div class="grp"><button type="button" data-dd="key" data-d="-1" data-deck="'+w+'" aria-label="ลดคีย์">−</button><span class="val" id="dd-'+w+'-kv">—</span><button type="button" data-dd="key" data-d="1" data-deck="'+w+'" aria-label="เพิ่มคีย์">+</button></div>'+
-        '<div class="grp"><button type="button" data-dd="tempo" data-d="-1" data-deck="'+w+'" aria-label="ช้าลง">−</button><span class="val" id="dd-'+w+'-tv">—</span><button type="button" data-dd="tempo" data-d="1" data-deck="'+w+'" aria-label="เร็วขึ้น">+</button></div>'+
+      '<div class="dd-times"><span id="dd-'+w+'-tm">0:00</span><div class="dd-wave" id="dd-'+w+'-wave" data-deck="'+w+'" aria-label="แตะเพื่อเลื่อนตำแหน่งเพลงเด็ค '+w+'"><i class="dd-prog" id="dd-'+w+'-prog"></i><div class="dd-playhead" id="dd-'+w+'-ph"></div></div><span id="dd-'+w+'-du">0:00</span></div>'+
       '</div>'+
-      '<div class="dd-mix">'+
+      '<div class="dd-mix" id="dd-'+w+'-mix" role="group" aria-label="Vol EQ และเครื่องมือเด็ค '+w+'">'+
+        '<div class="dd-mixh"><b>เด็ค '+w+'</b><span class="dd-mixn">ปรับชั่วคราว ไม่บันทึกทับเพลง</span><button type="button" class="dd-hb" data-dd="exp" data-deck="'+w+'" aria-label="ปิดแผงเด็ค '+w+'">'+I.x+'</button></div>'+
         '<label class="dd-vol"><span>Vol</span><input type="range" min="0" max="100" value="100" id="dd-'+w+'-vol" data-dd="vol" data-deck="'+w+'" aria-label="ระดับเสียงเด็ค '+w+'"></label>'+
         '<label class="dd-eqi"><span>Lo</span><input type="range" min="-12" max="12" value="0" id="dd-'+w+'-eql" data-dd="eq" data-b="l" data-deck="'+w+'" aria-label="EQ เบสเด็ค '+w+'"></label>'+
         '<label class="dd-eqi"><span>Mid</span><input type="range" min="-12" max="12" value="0" id="dd-'+w+'-eqm" data-dd="eq" data-b="m" data-deck="'+w+'" aria-label="EQ กลางเด็ค '+w+'"></label>'+
         '<label class="dd-eqi"><span>Hi</span><input type="range" min="-12" max="12" value="0" id="dd-'+w+'-eqh" data-dd="eq" data-b="h" data-deck="'+w+'" aria-label="EQ แหลมเด็ค '+w+'"></label>'+
-        (w==='B'?'<button type="button" class="dd-sync" data-dd="sync" data-deck="B" id="dd-sync" aria-label="ซิงก์เทมโปเด็ค B ให้เท่าเด็ค A" title="ซิงก์เทมโป B = A">SYNC</button>':'')+
+        '<div class="dd-row">'+
+          '<button type="button" data-dd="prev" data-deck="'+w+'" aria-label="เพลงก่อนหน้า" title="เพลงก่อนหน้า">'+I.prev+'</button>'+
+          '<button type="button" data-dd="nudge" data-d="-5" data-deck="'+w+'" aria-label="ถอย 5 วินาที" title="ถอย 5 วิ">'+I.nudgeL+'</button>'+
+          '<button type="button" data-dd="nudge" data-d="5" data-deck="'+w+'" aria-label="เดิน 5 วินาที" title="เดิน 5 วิ">'+I.nudgeR+'</button>'+
+          '<button type="button" data-dd="next" data-deck="'+w+'" aria-label="เพลงถัดไป" title="เพลงถัดไป">'+I.next+'</button>'+
+          '<button type="button" data-dd="metro" data-deck="'+w+'" id="dd-'+w+'-metro" aria-pressed="false" aria-label="ตั้งนอมสดตาม BPM เด็คนี้" title="นอมสดตามเด็คนี้">'+I.metro+'</button>'+
+          '<button type="button" data-dd="more" data-deck="'+w+'" aria-label="เมนูเพลง (แก้ข้อมูล/บันทึก)" title="เมนูเพลง">'+I.more+'</button>'+
+        '</div>'+
+        '<div class="dd-row2">'+
+          '<button type="button" class="dd-wide" data-dd="save" data-deck="'+w+'" id="dd-'+w+'-save" aria-label="บันทึกคีย์และเทมโปนี้กับเพลง">'+I.save+'<span>บันทึกคีย์/เทมโป</span></button>'+
+          '<button type="button" class="dd-wide" data-dd="swap" data-deck="'+w+'" id="dd-'+w+'-swap" aria-pressed="false" aria-label="สลับช่องซ้ายขวาของเพลงนี้ (บันทึกกับเพลง)">'+I.swap+'<span>สลับ L/R</span></button>'+
+        '</div>'+
       '</div>'+
-      '<div class="dd-row">'+
-        '<button type="button" data-dd="prev" data-deck="'+w+'" aria-label="เพลงก่อนหน้า">'+I.prev+'</button>'+
-        '<button type="button" class="cue" data-dd="cue" data-deck="'+w+'" aria-label="คิว เริ่มใหม่" title="CUE เริ่มใหม่">'+I.cue+'</button>'+
-        '<button type="button" class="play" data-dd="play" data-deck="'+w+'" aria-label="เล่น">'+I.play+'</button>'+
-        '<button type="button" data-dd="next" data-deck="'+w+'" aria-label="เพลงถัดไป">'+I.next+'</button>'+
+    '</section>';
+  }
+  function metroHtml(){
+    return '<section class="dd-blk dd-metro" id="dd-metro" aria-label="นอมสด เมโทรนอม">'+
+      '<div class="dd-bt">'+I.metro+'<span class="dd-btl">นอมสด</span><span class="dd-sp"></span>'+
+        '<button type="button" class="dd-pill" id="dd-mout" aria-label="ช่องเสียงนอมสด">ออก L+R</button></div>'+
+      '<div class="dd-mctl">'+
+        '<button type="button" class="dd-mgo" id="dd-mgo" aria-pressed="false" aria-label="เริ่มนอมสด">'+I.play+'</button>'+
+        '<div class="dd-mbpm"><button type="button" class="dd-mstep" id="dd-mdn" aria-label="ลด BPM">'+I.minus+'</button>'+
+          '<span class="dd-bpm"><b id="dd-mbpm">100</b><small>BPM <span id="dd-msig">4/4</span></small><span class="dd-beats" id="dd-beats" aria-hidden="true"></span></span>'+
+          '<button type="button" class="dd-mstep" id="dd-mup" aria-label="เพิ่ม BPM">'+I.plus+'</button></div>'+
+        '<button type="button" class="dd-tap" id="dd-mtap" aria-label="แตะจับจังหวะ TAP"><b>TAP</b><small id="dd-mtaph">แตะตามจังหวะ</small></button>'+
       '</div>'+
+    '</section>';
+  }
+  function mixHtml(){
+    return '<section class="dd-blk dd-mixer" id="dd-mixer" aria-label="ต่อมิกซ์ร้าน">'+
+      '<div class="dd-bt">'+I.plug+'<span class="dd-btl">มิกซ์ร้าน</span><span class="dd-sp"></span><span class="dd-pill" id="dd-mxp">สเตอริโอ</span></div>'+
+      '<button type="button" class="dd-mxbody" id="dd-mxset" aria-label="ตั้งค่าการต่อมิกซ์ร้าน">'+
+        '<span class="dd-chs" id="dd-chs"></span>'+I.sliders+'</button>'+
     '</section>';
   }
 
@@ -4273,8 +4351,10 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       else if(act==='fade')fadeDeck(w);
       else if(act==='nudge')nudgeDeck(w,d);
       else if(act==='more')moreDeck(w);
-      else if(act==='sync')syncDeck();
+      else if(act==='sync')syncDeck(w);
       else if(act==='exp')toggleExp(w);
+      else if(act==='save')saveDeck(w);
+      else if(act==='swap')swapDeck(w);
     });
     root.addEventListener('input',function(e){
       const b=e.target.closest('[data-dd]');
@@ -4287,22 +4367,312 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     $el('dd-B-load').onclick=function(e){e.stopPropagation();pickLoad('B')};
     $el('dd-auto').onclick=function(e){e.stopPropagation();try{AUTO.on=!AUTO.on;if(!AUTO.on)cancelCd();saveAuto();if(typeof drawAuto==='function')drawAuto();if(window.__op18&&__op18.syncAuto)__op18.syncAuto();paintMaster()}catch(err){}};
     $el('dd-xfsec').onclick=function(e){e.stopPropagation();cycleXf();paintMaster()};
-    const ex=$el('dd-exit');if(ex&&!ex._bound){ex._bound=1;ex.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();toggleDual(e)})}
-    const rot=$el('dd-rotatedismiss');if(rot)rot.onclick=function(e){e.stopPropagation();document.body.classList.add('dd-norotate')};
     root.addEventListener('click',function(e){
       const b=e.target.closest('[data-dd-listact]');
       if(!b)return;
       e.preventDefault();e.stopPropagation();
+      const act=b.getAttribute('data-dd-listact');
+      if(act==='more'){try{if(window.__op18&&__op18.openListMore){__op18.openListMore();return}}catch(err){}}
       const map={sw:'op-listsw',share:'op-listshare',more:'op-listmore'};
-      const t=document.getElementById(map[b.getAttribute('data-dd-listact')]||'');
+      const t=document.getElementById(map[act]||'');
       if(t)t.click();
     });
     bindXf();
     bindWaves();
+    bindSearch();
+    bindList();
+    bindDock();
     if(!document._ddLib){
       document._ddLib=1;
       document.addEventListener('click',libIntercept,true);
     }
+    mirrorStatus();
+  }
+
+  // ---- v1.0.36 explicit saves from the deck panel (deck steppers alone stay temporary) ----
+  async function saveDeck(w){
+    w=whichOf(w);const sl=slot(w);
+    if(!sl.id){try{toast('โหลดเพลงเข้าเด็ค '+w+' ก่อน',1800)}catch(e){}return}
+    const p=deckPref(sl),ch={key:p.key||0,tempo:p.tempo||100},id=sl.id;
+    const pr=orig.setPrefFor(id,ch);
+    try{dropLive(id,ch)}catch(e){}
+    try{await pr}catch(e){}
+    try{dropLive(id,ch);applySlotPref(id,ch)}catch(e){}
+    try{toast('บันทึกคีย์/เทมโปกับเพลงแล้ว',1600,true)}catch(e){}
+    paintDeck(w);
+  }
+  async function swapDeck(w){
+    w=whichOf(w);const sl=slot(w);
+    if(!sl.id){try{toast('โหลดเพลงเข้าเด็ค '+w+' ก่อน',1800)}catch(e){}return}
+    const sw=!((typeof pref==='function'&&pref(sl.id))||{}).swap;
+    try{await orig.setPrefFor(sl.id,{swap:sw})}catch(e){}
+    try{ensureBus(sl);applyDeckMix(sl,true)}catch(e){}
+    try{toast(sw?'สลับซ้าย/ขวาแล้ว (บันทึกกับเพลง)':'ซ้าย/ขวาตามไฟล์',1600,true)}catch(e){}
+    paintDeck(w);
+  }
+
+  // ---- v1.0.36 status line (auto-continue countdown etc. used to show in the hidden now-card) ----
+  function mirrorStatus(){
+    const ps=document.getElementById('ps'),st=$el('dd-st');
+    if(!ps||!st||ps._dd36)return;ps._dd36=1;
+    let tmo=0;
+    const upd=function(){
+      const t=(ps.textContent||'').trim();
+      if(/^(⏭|⚠️|✅)/.test(t)){st.textContent=t;st.classList.add('on');clearTimeout(tmo);tmo=setTimeout(function(){st.classList.remove('on');st.textContent=''},/^⏭/.test(t)?3000:6000)}
+    };
+    try{new MutationObserver(upd).observe(ps,{childList:true,characterData:true,subtree:true})}catch(e){}
+  }
+
+  // ---- v1.0.36 inline insert-search (เพลงแทรก) ----
+  function inPool(s,id){
+    // same pool as the library sheet (catalog rules untouched) + the user's own imports + today's list
+    if(!(typeof CAT!=='undefined'&&CAT&&CAT.length))return true;
+    return !!(s&&(s.X||SET.includes(id)||inPool.cat(s)));
+  }
+  inPool.cat=function(s){if(inPool._c!==CAT||inPool._n!==CAT.length){inPool._c=CAT;inPool._n=CAT.length;inPool._s=new Set(CAT)}return inPool._s.has(s)};
+  function searchSongs(q){
+    const k=typeof sq==='function'?sq(q):String(q||'').toLowerCase().replace(/\s+/g,'');
+    if(!k)return [];
+    const out=[];
+    for(const [id,s] of SONG){
+      if(out.length>=40)break;
+      if(!s||!inPool(s,id))continue;
+      const hay=(typeof sq==='function')?sq((s.t||'')+(s.a||'')):String((s.t||'')+(s.a||'')).toLowerCase();
+      if(hay.indexOf(k)>=0)out.push(id);
+    }
+    return out;
+  }
+  function insertNext(id){
+    if(!id||!SONG.get(id))return;
+    const ref=slot(DUAL.last||DUAL.audible||'A').id;
+    const i0=SET.indexOf(id);
+    if(i0>=0)SET.splice(i0,1);
+    let at=ref?SET.indexOf(ref):-1;
+    at=at>=0?at+1:0;
+    SET.splice(at,0,id);
+    try{saveSet()}catch(e){}
+    try{if(typeof renderSoon==='function')renderSoon()}catch(e){}
+    try{const s=SONG.get(id);toast('แทรกต่อจากเพลงที่เล่น: '+(s&&s.t||''),1600,true)}catch(e){}
+    paintList();paintRes();
+  }
+  function paintRes(){
+    const box=$el('dd-res'),q=$el('dd-q'),x=$el('dd-qx'),wrap=$el('dd-listwrap');
+    if(!box||!q)return;
+    const v=(q.value||'').trim();
+    if(x)x.hidden=!v;
+    if(wrap)wrap.classList.toggle('dd-searching',!!v);
+    if(!v){box.hidden=true;box.innerHTML='';box._sig='';return}
+    const ids=searchSongs(v);
+    const sig=v+'|'+ids.join(',')+'|'+SET.length+'|'+DUAL.a.id+'|'+DUAL.b.id;
+    box.hidden=false;
+    if(box._sig===sig)return;box._sig=sig;
+    if(!ids.length){box.innerHTML='<div class="dd-empty">ไม่พบเพลง “'+esc(v)+'” ในคลัง</div>';return}
+    box.innerHTML=ids.map(function(id){
+      const s=SONG.get(id)||{},inSet=SET.includes(id);
+      return '<div class="dd-song dd-r" data-rid="'+esc(id)+'"><div class="ti"><div class="t">'+esc(s.t||id)+'</div><div class="a">'+esc(s.a||'')+(inSet?' · <span class="in">อยู่ในลิสต์</span>':'')+'</div></div>'+
+        '<div class="btns"><button type="button" data-ins="1" aria-label="แทรกเป็นเพลงถัดไป" title="แทรกถัดไป">'+I.ins+'</button>'+
+        '<button type="button" data-to="A" aria-label="ใส่เด็ค A">A</button><button type="button" data-to="B" aria-label="ใส่เด็ค B">B</button></div></div>';
+    }).join('');
+  }
+  function bindSearch(){
+    const q=$el('dd-q'),x=$el('dd-qx'),box=$el('dd-res');if(!q||q._b)return;q._b=1;
+    q.addEventListener('input',paintRes);
+    q.addEventListener('keydown',function(e){if(e.key==='Escape'){q.value='';paintRes();q.blur()}});
+    if(x)x.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();q.value='';paintRes()});
+    if(box)box.addEventListener('click',function(e){
+      const r=e.target.closest('[data-rid]');if(!r)return;
+      e.preventDefault();e.stopPropagation();
+      const id=r.getAttribute('data-rid');
+      const b=e.target.closest('button');
+      if(b&&b.dataset.to){if(!SET.includes(id)){try{insertNext(id)}catch(err){}}loadInto(b.dataset.to,id,false);q.value='';paintRes();return}
+      insertNext(id);
+    });
+  }
+
+  // ---- v1.0.36 today list: tap = load idle deck, grip = drag reorder (order only), long-press = song menu ----
+  function bindList(){
+    const box=$el('dd-list');if(!box||box._b)return;box._b=1;
+    let lp=0,lpX=0,lpY=0,drag=null;
+    box.addEventListener('click',function(e){
+      const row=e.target.closest('.dd-song');if(!row)return;
+      e.stopPropagation();
+      if(box._lpFired){box._lpFired=0;return}
+      const id=row.getAttribute('data-sid');
+      const b=e.target.closest('button');
+      if(b&&b.dataset.to){loadInto(b.dataset.to,id,false);return}
+      if(b&&b.dataset.more){try{if(window.__op18&&__op18.openRowMore)__op18.openRowMore(id)}catch(err){}return}
+      if(b&&b.classList.contains('dd-grip'))return;
+      songTap(id,false);
+    });
+    box.addEventListener('pointerdown',function(e){
+      const g=e.target.closest('.dd-grip');
+      const row=e.target.closest('.dd-song');if(!row)return;
+      if(g){
+        e.preventDefault();
+        const rows=[...box.querySelectorAll('.dd-song')];
+        const from=rows.indexOf(row);if(from<0)return;
+        drag={row:row,from:from,to:from,y0:e.clientY,h:row.getBoundingClientRect().height||48,n:rows.length,pid:e.pointerId,rows:rows};
+        try{g.setPointerCapture(e.pointerId)}catch(err){}
+        row.classList.add('dragging');
+        return;
+      }
+      if(e.target.closest('button'))return;
+      lpX=e.clientX;lpY=e.clientY;clearTimeout(lp);
+      lp=setTimeout(function(){lp=0;box._lpFired=1;try{if(navigator.vibrate)navigator.vibrate(8)}catch(err){}try{if(window.__op18&&__op18.openRowMore)__op18.openRowMore(row.getAttribute('data-sid'))}catch(err){}},520);
+    });
+    box.addEventListener('pointermove',function(e){
+      if(lp&&Math.hypot(e.clientX-lpX,e.clientY-lpY)>10){clearTimeout(lp);lp=0}
+      if(!drag||e.pointerId!==drag.pid)return;
+      e.preventDefault();
+      const dy=e.clientY-drag.y0;
+      const to=Math.max(0,Math.min(drag.n-1,drag.from+Math.round(dy/drag.h)));
+      drag.to=to;
+      drag.row.style.transform='translateY('+dy+'px)';
+      drag.rows.forEach(function(r,i){
+        if(r===drag.row)return;
+        let s=0;
+        if(drag.from<to&&i>drag.from&&i<=to)s=-drag.h;
+        else if(drag.from>to&&i<drag.from&&i>=to)s=drag.h;
+        r.style.transform=s?'translateY('+s+'px)':'';
+      });
+    });
+    const end=function(e){
+      clearTimeout(lp);lp=0;
+      if(!drag||(e&&e.pointerId!==drag.pid))return;
+      const d=drag;drag=null;
+      d.rows.forEach(function(r){r.style.transform='';r.classList.remove('dragging')});
+      if(d.to!==d.from)moveSet(d.from,d.to);
+    };
+    box.addEventListener('pointerup',end);
+    box.addEventListener('pointercancel',end);
+    box.addEventListener('contextmenu',function(e){if(e.target.closest('.dd-song'))e.preventDefault()});
+  }
+  function moveSet(from,to){
+    if(from===to||from<0||to<0||from>=SET.length||to>=SET.length)return false;
+    const id=SET.splice(from,1)[0];
+    SET.splice(to,0,id);
+    try{saveSet()}catch(e){}
+    try{if(typeof renderSoon==='function')renderSoon()}catch(e){}
+    const box=$el('dd-list');if(box)box._sig='';
+    paintList();
+    return true;
+  }
+
+  // ---- v1.0.36 นอมสด block (drives metro.js; one engine) + มิกซ์ร้าน block ----
+  function bindDock(){
+    const go=$el('dd-mgo'),tap=$el('dd-mtap'),up=$el('dd-mup'),dn=$el('dd-mdn'),out=$el('dd-mout'),mx=$el('dd-mxset');
+    if(!go||go._b)return;go._b=1;
+    const M=function(){return window.__metro||null};
+    go.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();const m=M();if(m&&m.toggle)Promise.resolve(m.toggle()).then(paintDock,paintDock);paintDock()});
+    const step=function(d){const m=M();if(!m)return;m.setBpm((m.S.bpm||100)+d);paintDock()};
+    const rep=function(btn,d){
+      let t=0,iv=0;
+      const stop=function(){clearTimeout(t);clearInterval(iv);t=iv=0};
+      btn.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();step(d);stop();t=setTimeout(function(){iv=setInterval(function(){step(d)},90)},420)});
+      ['pointerup','pointercancel','pointerleave'].forEach(function(ev){btn.addEventListener(ev,stop)});
+      btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation()});
+      btn.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();step(d)}});
+    };
+    rep(up,1);rep(dn,-1);
+    // TAP fires on pointerdown (no click delay) with an immediate pressed state.
+    const press=function(){tap.classList.remove('hit');void tap.offsetWidth;tap.classList.add('hit','press');try{if(navigator.vibrate)navigator.vibrate(6)}catch(err){}};
+    tap.addEventListener('pointerdown',function(e){e.preventDefault();e.stopPropagation();press();const m=M();if(m&&m.tap)m.tap();tap._tapAt=Date.now();paintDock()});
+    ['pointerup','pointercancel','pointerleave'].forEach(function(ev){tap.addEventListener(ev,function(){tap.classList.remove('press')})});
+    tap.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();if(Date.now()-(tap._tapAt||0)<600)return;press();const m=M();if(m&&m.tap)m.tap();setTimeout(function(){tap.classList.remove('press')},120);paintDock()});
+    tap.addEventListener('animationend',function(){tap.classList.remove('hit')});
+    out.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();const m=M();if(!m||!m.setOut)return;const o=m.S.out||'both';m.setOut(o==='both'?'left':o==='left'?'right':'both');paintDock()});
+    mx.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();openMixSheet()});
+    const hook=function(){const m=M();if(!m||!m.on){setTimeout(hook,300);return}m.on(function(b){if(b==null){paintDock();return}beatHit(b)})};
+    hook();
+  }
+  function beatHit(b){
+    const box=$el('dd-beats');if(!box)return;
+    const ds=box.children;
+    for(let i=0;i<ds.length;i++)ds[i].classList.toggle('hit',i===b);
+  }
+  const OUTLAB={left:'ซ้าย',right:'ขวา',both:'ทั้งคู่'};
+  function paintDock(){
+    const m=window.__metro;if(!m||!m.S)return;
+    const S=m.S,run=!!(m.state&&m.state.running);
+    const g=$el('dd-mgo');
+    if(g){g.innerHTML=run?I.pause:I.play;g.classList.toggle('on',run);g.setAttribute('aria-pressed',run?'true':'false');g.setAttribute('aria-label',run?'หยุดนอมสด':'เริ่มนอมสด')}
+    const b=$el('dd-mbpm');if(b&&b.textContent!==String(S.bpm))b.textContent=String(S.bpm);
+    const sg=$el('dd-msig');if(sg){const sig=(m.sigs&&m.sigs[S.sig])||(S.sig+'/4');if(sg.textContent!==sig)sg.textContent=sig}
+    const o=$el('dd-mout');if(o){const lab='ออก '+(S.out==='left'?'L':S.out==='right'?'R':'L+R');o.setAttribute('aria-label','นอมสดออก '+(OUTLAB[S.out]||'ทั้งคู่')+' — แตะเพื่อเปลี่ยน');if(o.textContent!==lab)o.textContent=lab;o.classList.toggle('on',S.out!=='both')}
+    const bx=$el('dd-beats');if(bx&&bx.children.length!==(+S.sig||4)){bx.innerHTML=Array.from({length:+S.sig||4},function(_,i){return '<i class="'+(i===0&&S.sig>1?'acc':'')+'"></i>'}).join('')}
+    if(bx&&!run)[...bx.children].forEach(function(c){c.classList.remove('hit')});
+    const blk=$el('dd-metro');if(blk)blk.classList.toggle('on',run);
+    paintMixer();
+  }
+  function audioCaps(){
+    const AC=window.AudioContext||window.webkitAudioContext;
+    let sink=false,midi=false,maxCh=2;
+    try{sink=!!(AC&&AC.prototype&&('setSinkId' in AC.prototype))}catch(e){}
+    try{midi=typeof navigator.requestMIDIAccess==='function'}catch(e){}
+    try{if(ctx&&ctx.destination)maxCh=ctx.destination.maxChannelCount||2}catch(e){}
+    let mo=false;try{mo=!!(typeof MO!=='undefined'&&MO&&MO.cfg&&MO.cfg.on)}catch(e){}
+    let sinkLab='';try{sinkLab=(typeof MO!=='undefined'&&MO&&MO.cfg&&(MO.cfg.label||MO.cfg.sinkLabel))||''}catch(e){}
+    const ua=navigator.userAgent||'';
+    const ios=/iPhone|iPad|iPod/.test(ua)||(/Macintosh/.test(ua)&&'ontouchend' in document);
+    const android=/Android/.test(ua);
+    return {sink:sink,midi:midi,maxCh:maxCh,mo:mo,sinkLab:sinkLab,ios:ios,android:android};
+  }
+  function paintMixer(){
+    const m=window.__metro,c=audioCaps();
+    const out=m&&m.S?m.S.out:'both';
+    const chs=$el('dd-chs');
+    if(chs){
+      const l1='<b>นอมสด</b> → '+(out==='left'?'ซ้าย (L)':out==='right'?'ขวา (R)':'ทั้งสองข้าง');
+      const l2='<b>เพลง</b> → '+(c.mo?'แยกหลายช่อง (สตูดิโอ)':'สเตอริโอ L/R')+(c.midi?' · MIDI ✓':'');
+      const h='<span>'+l1+'</span><span>'+l2+'</span>';
+      if(chs._h!==h){chs._h=h;chs.innerHTML=h}
+    }
+    const p=$el('dd-mxp');
+    if(p){const lab=out!=='both'?'แยก L/R':'สเตอริโอ';if(p.textContent!==lab)p.textContent=lab;p.classList.toggle('ok',out!=='both')}
+  }
+  function openMixSheet(){
+    let sh=$el('dd-mxsheet');
+    if(!sh){
+      sh=document.createElement('div');sh.id='dd-mxsheet';sh.setAttribute('role','dialog');sh.setAttribute('aria-label','ต่อกับมิกซ์ร้าน');
+      document.body.appendChild(sh);
+      sh.addEventListener('click',function(e){
+        if(e.target===sh){closeMixSheet();return}
+        const b=e.target.closest('button');if(!b)return;
+        e.preventDefault();e.stopPropagation();
+        if(b.dataset.x!=null)closeMixSheet();
+        else if(b.dataset.mout){try{__metro.setOut(b.dataset.mout)}catch(err){}renderMixSheet();paintDock()}
+        else if(b.dataset.go==='mo'){closeMixSheet();try{__op18.openImport();setTimeout(function(){const s=document.getElementById('mosec');if(s&&s.scrollIntoView)s.scrollIntoView({block:'start'})},250)}catch(err){}}
+        else if(b.dataset.go==='midi'){closeMixSheet();try{if(typeof midiOpen==='function')midiOpen()}catch(err){}}
+        else if(b.dataset.go==='metro'){closeMixSheet();try{if(window.__op18&&__op18.openMetro)__op18.openMetro()}catch(err){}}
+      });
+    }
+    renderMixSheet();
+    sh.hidden=false;document.body.classList.add('dd-mxopen');
+  }
+  function closeMixSheet(){const sh=$el('dd-mxsheet');if(sh)sh.hidden=true;document.body.classList.remove('dd-mxopen')}
+  function renderMixSheet(){
+    const sh=$el('dd-mxsheet');if(!sh)return;
+    const c=audioCaps(),m=window.__metro,out=m&&m.S?m.S.out:'both';
+    const yes=function(ok,y,n){return '<span class="cap '+(ok?'y':'n')+'">'+(ok?'✓ ':'✕ ')+(ok?y:n)+'</span>'};
+    const dev=c.ios?'iPhone / iPad':c.android?'Android':'คอมพิวเตอร์';
+    sh.innerHTML='<div class="dd-mxbox">'+
+      '<div class="dd-mxt"><b>'+I.plug+' ต่อกับมิกซ์ร้าน</b><button type="button" class="dd-hb" data-x aria-label="ปิด">'+I.x+'</button></div>'+
+      '<p class="dd-mxdev">เครื่องนี้: <b>'+dev+'</b> — แสดงเฉพาะสิ่งที่ SetSod ทำได้จริงในเครื่องนี้</p>'+
+      '<section><h3>1 · นอมสดออกช่องไหน</h3><p>เสียบสายแยก L/R เข้ามิกซ์ 2 ช่อง: ให้นอมออกข้างหนึ่ง เพลงอีกข้าง หรือออกทั้งคู่</p>'+
+        '<div class="dd-seg">'+['left','both','right'].map(function(o){return '<button type="button" data-mout="'+o+'" class="'+(out===o?'on':'')+'" aria-pressed="'+(out===o)+'">'+(o==='left'?'ซ้าย L':o==='right'?'ขวา R':'ทั้งคู่')+'</button>'}).join('')+'</div>'+
+        yes(true,'ใช้ได้ทุกเครื่อง','')+'</section>'+
+      '<section><h3>2 · เพลงที่มีนอมในไฟล์ (นอมซ้าย / นอมขวา)</h3><p>เด็คเล่นแยกช่องตามไฟล์ และตามที่ตั้งไว้ในมิกเซอร์ของเพลง ถ้าสายสลับข้าง กด ⋯ ที่เด็ค → “สลับ L/R” (บันทึกกับเพลง)</p>'+yes(true,'ใช้ได้ทุกเครื่อง','')+'</section>'+
+      '<section><h3>3 · การ์ดเสียง / แยกหลายช่อง (MO)</h3><p>เลือกอุปกรณ์เสียงออก และแยกนอม/เพลงเกิน 2 ช่อง ใช้กับเครื่องเล่นเดี่ยวในสตูดิโอ — หน้า 2 เด็คส่งออกสเตอริโอ L/R</p>'+
+        yes(c.sink,'เลือกอุปกรณ์เสียงออกได้ในเครื่องนี้','เครื่องนี้เลือกอุปกรณ์เสียงออกไม่ได้ (Safari/iPhone ไม่รองรับ) — ใช้สาย L/R แทน')+
+        '<span class="cap '+(c.maxCh>2?'y':'n')+'">'+(c.maxCh>2?'✓ ':'• ')+'ตอนนี้ส่งออกได้ '+c.maxCh+' ช่อง</span>'+
+        (c.mo?'<span class="cap y">✓ เปิดแยกหลายช่องอยู่</span>':'')+
+        '<button type="button" class="dd-mxgo" data-go="mo"'+(c.sink?'':' disabled')+'>'+I.sliders+' ตั้งค่าแยกช่อง</button></section>'+
+      '<section><h3>4 · คอนโทรลเลอร์ MIDI / แป้นเหยียบ</h3><p>ผูกปุ่มเล่น/หยุด/ถัดไป กับคอนโทรลเลอร์หรือแป้นเหยียบ</p>'+
+        yes(c.midi,'รองรับ MIDI ในเครื่องนี้','เครื่องนี้ไม่รองรับ Web MIDI — แป้นเหยียบบลูทูธแบบคีย์บอร์ดยังใช้ได้')+
+        '<button type="button" class="dd-mxgo" data-go="midi"'+(c.midi?'':' disabled')+'>ตั้งปุ่ม MIDI</button></section>'+
+      '<p class="dd-mxfoot">ยังไม่รองรับการควบคุมดิจิทัลมิกซ์ของร้าน</p>'+
+      '<button type="button" class="dd-mxgo alt" data-go="metro">ตั้งค่านอมเพิ่มเติม (เสียงคลิก/ห้องเพลง/ความดัง)</button>'+
+    '</div>';
   }
 
   function pickLoad(w){
@@ -4334,7 +4704,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!DUAL.on)return;
     const t=e.target.closest('[data-play],[data-sid],#main [data-id],.sc[data-sid],#livelist [data-sid],.dd-song');
     if(!t)return;
-    if(e.target.closest('[data-p65],[data-dd],.dd-song button,#op-dual,#op-dualui .dd-load'))return;
+    if(e.target.closest('[data-p65],[data-dd],.dd-song button,#op-dual,#op-dualui,[data-op36id],.op36ab'))return;
     const id=t.getAttribute('data-play')||t.getAttribute('data-sid')||t.getAttribute('data-id')||t.dataset.play||t.dataset.sid||t.dataset.id;
     if(!id||!SONG.get(id))return;
     e.preventDefault();e.stopPropagation();
@@ -4462,19 +4832,18 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const sl=slot(w);
     if(!ensureBus(sl))return;
     try{PAD.g.disconnect()}catch(e){}
-    try{PAD.g.connect(sl.bus.in)}catch(e){}
+    try{PAD.g.connect(sl.bus.eqL)}catch(e){}
   }
   function metroDeck(w){
+    // v1.0.36: sets the on-page นอมสด block to this deck's BPM (no page switch).
     w=whichOf(w);
     const sl=slot(w);
-    try{
-      const bpm=sl.id&&typeof realBpm==='function'?realBpm(sl.id):null;
-      if(bpm&&window.__metro){
-        if(typeof __metro.setBpm==='function')__metro.setBpm(bpm);
-        else if(__metro.S)__metro.S.bpm=Math.max(30,Math.min(300,Math.round(bpm)));
-      }
-    }catch(e){}
-    try{if(typeof openMetro==='function')openMetro();else if(window.__op18&&__op18.openMetro)__op18.openMetro()}catch(err){}
+    let bpm=null;
+    try{bpm=sl.id?deckBpm(sl):null}catch(e){}
+    if(!bpm){try{toast('เด็ค '+w+' ยังไม่มี BPM — ใช้ TAP ที่นอมสด',2000)}catch(e){}return}
+    try{if(window.__metro&&__metro.setBpm)__metro.setBpm(bpm)}catch(e){}
+    try{toast('นอมสด = '+Math.round(bpm)+' BPM (ตามเด็ค '+w+')',1600,true)}catch(e){}
+    try{paintDock()}catch(e){}
   }
   function fadeDeck(w){
     w=whichOf(w);
@@ -4514,17 +4883,20 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     sl.eq[k]=Math.max(-12,Math.min(12,+val||0));
     ensureBus(sl);applyEq(sl);
   }
-  function syncDeck(){
-    const a=DUAL.a,b=DUAL.b;
-    if(!a.id||!b.id){try{toast('โหลดเพลงทั้งสองเด็คก่อน',1800)}catch(e){}return}
-    const ra=deckBpm(a);
-    const bb=typeof baseBpm==='function'?baseBpm(b.id):null;
-    if(!ra||!bb){try{toast('ยังไม่มี BPM ของเด็ค A หรือ B',2200)}catch(e){}return}
-    const t=Math.max(50,Math.min(150,Math.round((ra/bb)*100*2)/2));
-    setDeckLive(b,{tempo:t});
-    applySlotPref(b.id,{tempo:t});
-    try{toast('SYNC · เด็ค B = '+Math.round(ra)+' BPM',1800,true)}catch(e){}
-    paintDeck('B');
+  function syncDeck(w){
+    // v1.0.36: SYNC on deck w matches w's tempo to the other deck (no argument = B follows A, as before).
+    w=w?whichOf(w):'B';
+    const o=w==='A'?'B':'A';
+    const me=slot(w),ot=slot(o);
+    if(!me.id||!ot.id){try{toast('โหลดเพลงทั้งสองเด็คก่อน',1800)}catch(e){}return}
+    const ro=deckBpm(ot);
+    const bm=typeof baseBpm==='function'?baseBpm(me.id):null;
+    if(!ro||!bm){try{toast('ยังไม่มี BPM ของเด็ค A หรือ B',2200)}catch(e){}return}
+    const t=Math.max(50,Math.min(150,Math.round((ro/bm)*100*2)/2));
+    setDeckLive(me,{tempo:t});
+    applySlotPref(me.id,{tempo:t});
+    try{toast('SYNC · เด็ค '+w+' = '+Math.round(ro)+' BPM',1800,true)}catch(e){}
+    paintDeck(w);paintDeck(o);
   }
 
   function cycleXf(){
@@ -4590,35 +4962,83 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     });
   }
 
+  // ---- v1.0.36 platter: ring waveform from real peaks, rotates so "now" sits under the top needle ----
+  const RING=new Map(),RN=180;
+  function ringOf(id,buf){
+    if(!id)return null;
+    const k=id+'|'+(buf?buf.length:0);
+    if(RING.has(k))return RING.get(k);
+    let a=null;
+    try{
+      if(buf&&typeof buf.getChannelData==='function'&&typeof peaks==='function'){
+        const P=peaks(id,buf),L=P[0],R=P[1]||P[0],n=L.length;a=new Float32Array(RN);let mx=0;
+        for(let i=0;i<RN;i++){let m=0;const s=Math.floor(i*n/RN),e=Math.max(s+1,Math.floor((i+1)*n/RN));for(let j=s;j<e;j++){const v=Math.max(L[j],R[j]);if(v>m)m=v}a[i]=m;if(m>mx)mx=m}
+        if(mx<0.005)a=null;else for(let i=0;i<RN;i++)a[i]=Math.min(1,a[i]/mx);
+      }
+    }catch(e){a=null}
+    if(!a){
+      a=new Float32Array(RN);let seed=0;for(let i=0;i<id.length;i++)seed=(seed*31+id.charCodeAt(i))>>>0;
+      for(let i=0;i<RN;i++){seed=(seed*1664525+1013904223)>>>0;a[i]=0.25+((seed&255)/255)*0.7}
+      a._fake=1;
+    }
+    if(buf)RING.set(k,a);
+    if(RING.size>12)RING.delete(RING.keys().next().value);
+    return a;
+  }
   function drawWave(w){
     const cv=$el('dd-'+w+'-cv');if(!cv)return;
-    const el=cv.parentElement,W=el.clientWidth|0,H=el.clientHeight|0;
-    if(W<2||H<2)return;
-    if(cv.width!==W||cv.height!==H){cv.width=W;cv.height=H}
-    const g=cv.getContext('2d');g.clearRect(0,0,W,H);
+    const el=cv.parentElement;
+    const S=Math.min(el.clientWidth|0,el.clientHeight|0);
     const sl=slot(w),id=sl.id;
-    const col=w==='A'?'#fb923c':'#60a5fa';
-    g.fillStyle='#12121a';g.fillRect(0,0,W,H);
-    const n=Math.max(24,W>>1);
-    g.fillStyle=col;
-    let seed=0;if(id){for(let i=0;i<id.length;i++)seed=(seed*31+id.charCodeAt(i))>>>0}
-    for(let i=0;i<n;i++){
-      seed=(seed*1664525+1013904223)>>>0;
-      const h=0.15+((seed&255)/255)*0.8;
-      const x=i*(W/n),bw=Math.max(1,W/n-1),bh=h*H;
-      g.globalAlpha=0.55;
-      g.fillRect(x,(H-bh)/2,bw,bh);
-    }
-    g.globalAlpha=1;
-    const ph=$el('dd-'+w+'-ph');
-    let frac=0,p=0,dur=0;
-    try{
-      if(id&&sl.buf){p=posOf(sl);dur=sl.buf.duration;frac=dur?p/dur:0}
-    }catch(e){}
-    if(ph)ph.style.left=(Math.max(0,Math.min(1,frac))*100)+'%';
+    let p=0,dur=0,frac=0;
+    try{if(id&&sl.buf){p=posOf(sl);dur=sl.buf.duration;frac=dur?Math.max(0,Math.min(1,p/dur)):0}}catch(e){}
+    const ph=$el('dd-'+w+'-ph'),pr=$el('dd-'+w+'-prog');
+    if(ph)ph.style.left=(frac*100)+'%';
+    if(pr)pr.style.width=(frac*100)+'%';
     const tm=$el('dd-'+w+'-tm'),du=$el('dd-'+w+'-du');
-    if(tm)tm.textContent=fmt2(p);
-    if(du)du.textContent=fmt2(dur);
+    const ts=fmt2(p),ds=fmt2(dur);
+    if(tm&&tm.textContent!==ts)tm.textContent=ts;
+    if(du&&du.textContent!==ds)du.textContent=ds;
+    if(S<24)return;
+    const dpr=Math.min(2,window.devicePixelRatio||1),D=Math.round(S*dpr);
+    if(cv.width!==D||cv.height!==D){cv.width=D;cv.height=D;cv.style.width=S+'px';cv.style.height=S+'px'}
+    const g=cv.getContext('2d');
+    g.setTransform(1,0,0,1,0,0);g.clearRect(0,0,D,D);
+    const c=D/2,R=D/2-1*dpr;
+    const col=w==='A'?'#fb923c':'#60a5fa',dim=w==='A'?'rgba(251,146,60,.28)':'rgba(96,165,250,.28)';
+    // platter body
+    g.fillStyle='#101014';g.beginPath();g.arc(c,c,R,0,Math.PI*2);g.fill();
+    const rIn=R*0.56,rOut=R*0.97;
+    const ring=id?ringOf(id,sl.buf):null;
+    const rot=-frac*Math.PI*2;
+    if(ring){
+      const n=ring.length,cut=Math.floor(frac*n),step=Math.PI*2/n;
+      g.lineWidth=Math.max(1,(Math.PI*2*rOut/n)*0.62);g.lineCap='butt';
+      for(let pass=0;pass<2;pass++){
+        g.strokeStyle=pass?col:dim;g.beginPath();
+        for(let i=0;i<n;i++){
+          const played=i<cut;if(played!==!!pass)continue;
+          const a=-Math.PI/2+rot+i*step,h=0.14+ring[i]*0.86;
+          const r0=rIn+(rOut-rIn)*(1-h)*0.5,r1=rOut-(rOut-rIn)*(1-h)*0.5;
+          const ca=Math.cos(a),sa=Math.sin(a);
+          g.moveTo(c+ca*r0,c+sa*r0);g.lineTo(c+ca*r1,c+sa*r1);
+        }
+        g.stroke();
+      }
+    }else{
+      g.strokeStyle='rgba(255,255,255,.08)';g.lineWidth=1*dpr;
+      for(let k=0;k<4;k++){g.beginPath();g.arc(c,c,rIn+(rOut-rIn)*(k+0.5)/4,0,Math.PI*2);g.stroke()}
+    }
+    // vinyl label (spins with position) + groove marker
+    const lr=R*0.5;
+    g.fillStyle='#1b1b22';g.beginPath();g.arc(c,c,lr,0,Math.PI*2);g.fill();
+    const spin=(p/1.8)*Math.PI*2;
+    g.strokeStyle=id?col:'rgba(255,255,255,.18)';g.lineWidth=2*dpr;g.globalAlpha=0.8;
+    g.beginPath();g.arc(c,c,lr*0.86,spin,spin+Math.PI*0.35);g.stroke();
+    g.beginPath();g.arc(c,c,lr*0.86,spin+Math.PI,spin+Math.PI*1.35);g.stroke();
+    g.globalAlpha=1;
+    // needle at 12 o'clock
+    g.fillStyle='#f8fafc';g.fillRect(c-1.2*dpr,0,2.4*dpr,(rOut-rIn)*0.9+R*0.04);
   }
 
   function paintDeck(w){
@@ -4627,23 +5047,32 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const sl=slot(w),id=sl.id,s=id&&SONG.get(id);
     el.classList.toggle('audible',DUAL.last===w&&!!id);
     el.classList.toggle('playing',!!sl.playing);
+    el.classList.toggle('empty',!id);
     const t=$el('dd-'+w+'-t'),a=$el('dd-'+w+'-a');
-    if(t)t.textContent=s?s.t||'ไม่มีชื่อ':'ไม่มีเพลง';
-    if(a)a.textContent=s?(s.a||''):'';
+    const tt=s?s.t||'ไม่มีชื่อ':'ไม่มีเพลง — กด '+'คลัง',aa=s?(s.a||''):'';
+    if(t&&t.textContent!==tt)t.textContent=tt;
+    if(a&&a.textContent!==aa)a.textContent=aa;
     const kv=$el('dd-'+w+'-kv'),tv=$el('dd-'+w+'-tv');
+    const lv=sl.live||{};
     if(kv){
       let lab='—';
-      try{if(id)lab=deckKeyLab(sl,1)||'—'}catch(e){}
-      kv.textContent=lab;
+      try{if(id){lab=deckKeyLab(sl,1);if(!lab){const k=deckPref(sl).key||0;lab=k?(k>0?'+':'')+k:'—'}}}catch(e){}
+      if(kv.textContent!==lab)kv.textContent=lab;
     }
     if(tv){
       let lab='—';
-      try{if(id){const r=deckBpm(sl);if(r)lab=String(Math.round(r))}}catch(e){}
-      tv.textContent=lab;
+      try{if(id){const r=deckBpm(sl);if(r)lab=String(Math.round(r));else{const tp=deckPref(sl).tempo||100;if(tp!==100)lab=(Math.round(tp*2)/2)+'%'}}}catch(e){}
+      if(tv.textContent!==lab)tv.textContent=lab;
     }
-    const pb=el.querySelector('[data-dd="play"]');
+    const ky=$el('dd-'+w+'-ky'),tp=$el('dd-'+w+'-tp');
+    if(ky)ky.classList.toggle('tmp','key' in lv);
+    if(tp)tp.classList.toggle('tmp','tempo' in lv);
+    const sv=$el('dd-'+w+'-save');if(sv)sv.classList.toggle('on',!!(id&&sl.live&&Object.keys(sl.live).length));
+    const sw=$el('dd-'+w+'-swap');
+    if(sw){const on=!!(id&&typeof pref==='function'&&pref(id).swap);sw.classList.toggle('on',on);sw.setAttribute('aria-pressed',on?'true':'false')}
+    const pb=el.querySelector('.dd-plat [data-dd="play"]');
     const on=!!sl.playing;
-    if(pb){pb.innerHTML=on?I.pause:I.play;pb.classList.toggle('on',on);pb.setAttribute('aria-label',on?'หยุด':'เล่น')}
+    if(pb&&pb._on!==on){pb._on=on;pb.innerHTML=on?I.pause:I.play;pb.classList.toggle('on',on);pb.setAttribute('aria-label',on?'หยุด':'เล่น')}
     const pad=$el('dd-'+w+'-pad');
     if(pad){
       const pon=!!(typeof PAD!=='undefined'&&PAD.on&&(PAD.sid===id||PAD.hold===id||(cur&&cur.id===id&&!PAD.sid)));
@@ -4665,73 +5094,86 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       const i=$el('dd-'+w+'-eq'+k);
       if(i&&document.activeElement!==i)i.value=String((sl.eq&&sl.eq[k])||0);
     });
-    const sy=$el('dd-sync');
-    if(sy&&w==='B'){
+    const sy=$el(w==='B'?'dd-sync':'dd-syncA');
+    if(sy){
       let onS=false;
       try{
-        const ra=DUAL.a.id&&realBpm(DUAL.a.id),rb=DUAL.b.id&&realBpm(DUAL.b.id);
+        const ra=DUAL.a.id&&deckBpm(DUAL.a),rb=DUAL.b.id&&deckBpm(DUAL.b);
         onS=!!(ra&&rb&&Math.abs(ra-rb)<0.6);
       }catch(e){}
       sy.classList.toggle('on',onS);
     }
+    try{if(sl.bus)applyDeckMix(sl)}catch(e){}
     drawWave(w);
   }
   function paintList(){
     const box=$el('dd-list');if(!box)return;
-    const nn=$el('dd-listn');if(nn)nn.textContent=(SET&&SET.length?SET.length:0)+' เพลง';
-    const html=SET.map(function(id){
+    const nn=$el('dd-listn');if(nn){const tx=(SET&&SET.length?SET.length:0)+' เพลง';if(nn.textContent!==tx)nn.textContent=tx}
+    const html=SET.map(function(id,i){
       const s=SONG.get(id)||{t:id,a:''};
       const ona=DUAL.a.id===id,onb=DUAL.b.id===id;
-      return '<div class="dd-song'+(ona?' ona':'')+(onb?' onb':'')+'" data-sid="'+id+'">'+
-        '<div class="t"></div><div class="a"></div><div class="btns">'+
-        '<button type="button" data-to="A" class="'+(ona?'ona':'')+'">A</button>'+
-        '<button type="button" data-to="B" class="'+(onb?'onb':'')+'">B</button>'+
+      const pa=ona&&DUAL.a.playing,pb=onb&&DUAL.b.playing;
+      return '<div class="dd-song'+(ona?' ona':'')+(onb?' onb':'')+(pa||pb?' now':'')+'" data-sid="'+esc(id)+'">'+
+        '<button type="button" class="dd-grip" aria-label="ลากเพื่อเรียงลำดับ" title="ลากเรียง">'+I.grip+'</button>'+
+        '<span class="no">'+(i+1)+'</span>'+
+        '<div class="ti"><div class="t">'+esc(s.t||id)+'</div><div class="a">'+esc(s.a||'')+'</div></div>'+
+        '<div class="btns">'+
+        '<button type="button" data-to="A" class="'+(ona?'ona':'')+'" aria-label="ใส่เด็ค A">A</button>'+
+        '<button type="button" data-to="B" class="'+(onb?'onb':'')+'" aria-label="ใส่เด็ค B">B</button>'+
+        '<button type="button" data-more="1" class="mo" aria-label="เมนูเพลง">'+I.more+'</button>'+
         '</div></div>';
-    }).join('');
+    }).join('')||'<div class="dd-empty">ลิสต์ว่าง — ค้นด้านบนเพื่อแทรกเพลง หรือกด “คลัง”</div>';
     if(box._sig!==html){
       box._sig=html;
       box.innerHTML=html;
-      box.querySelectorAll('.dd-song').forEach(function(row){
-        const id=row.getAttribute('data-sid'),s=SONG.get(id)||{};
-        const tt=row.querySelector('.t'),aa=row.querySelector('.a');
-        if(tt)tt.textContent=s.t||id;if(aa)aa.textContent=s.a||'';
-        row.onclick=function(e){if(e.target.closest('button[data-to]'))return;e.stopPropagation();songTap(id,false)};
-        row.querySelectorAll('button[data-to]').forEach(function(b){
-          b.onclick=function(e){e.stopPropagation();loadInto(b.getAttribute('data-to'),id,false)};
-        });
-      });
     }
   }
   function paintMaster(){
     const au=$el('dd-auto'),xf=$el('dd-xfsec');
     if(au){const on=!!(AUTO&&AUTO.on);au.classList.toggle('on',on);au.setAttribute('aria-pressed',on?'true':'false')}
-    if(xf){const v=+(AUTO&&AUTO.xf||0);xf.textContent=v>0?('XF '+v+'s'):'CUT';xf.classList.toggle('on',v>0)}
+    if(xf){const v=+(AUTO&&AUTO.xf||0);const tx=v>0?('XF '+v+'s'):'CUT';if(xf.textContent!==tx)xf.textContent=tx;xf.classList.toggle('on',v>0)}
     setKnob(DUAL.xf);
   }
-  function paint(){if(!DUAL.on)return;paintDeck('A');paintDeck('B');paintList();paintMaster()}
+  function paint(){if(!DUAL.on)return;paintDeck('A');paintDeck('B');paintList();paintMaster();try{paintRes()}catch(e){}try{paintDock()}catch(e){}}
 
-  let raf=0;
-  function loop(){
+  // ~30fps while a deck plays; nothing runs while the page is hidden.
+  let raf=0,lastFrame=0;
+  const FRAME_MS=1000/30;
+  let FRAMES=0;
+  function loop(ts){
     raf=0;
-    if(!DUAL.on)return;
+    if(!DUAL.on||document.hidden)return;
+    if(!anyPlaying())return;
+    raf=requestAnimationFrame(loop);
+    const now=ts||performance.now();
+    if(now-lastFrame<FRAME_MS-2)return;
+    lastFrame=now;FRAMES++;
     try{paintDeck('A');paintDeck('B')}catch(e){}
-    if(anyPlaying())raf=requestAnimationFrame(loop);
   }
+  document.addEventListener('visibilitychange',function(){
+    if(document.hidden){if(raf){cancelAnimationFrame(raf);raf=0}}
+    else if(DUAL.on){try{paint()}catch(e){}if(anyPlaying()&&!raf)raf=requestAnimationFrame(loop)}
+  });
 
   function expState(){try{return JSON.parse(localStorage.getItem('bp-ddexp')||'{}')||{}}catch(e){return {}}}
   function applyExp(){
     const st=expState();
+    if(st.A&&st.B&&spanPanel())st.B=false;
     ['A','B'].forEach(function(w){
       const el=$el('dd-'+w);if(!el)return;
       const on=!!st[w];
       el.classList.toggle('dd-open',on);
       const b=$el('dd-'+w+'-exp');
-      if(b){b.setAttribute('aria-expanded',on?'true':'false');b.classList.toggle('on',on);b.textContent=on?'▴':'▾'}
+      if(b){b.setAttribute('aria-expanded',on?'true':'false');b.classList.toggle('on',on)}
     });
   }
+  // narrow decks: the ⋯ panel spans both deck faces (op36.css), so only one can be open at a time
+  const SPAN_Q='(max-width:699px), (orientation:landscape) and (max-height:520px)';
+  function spanPanel(){try{return !!(window.matchMedia&&matchMedia(SPAN_Q).matches)}catch(e){return false}}
   function toggleExp(w){
     w=whichOf(w);
     const st=expState();st[w]=!st[w];
+    if(st[w]&&spanPanel())st[w==='A'?'B':'A']=false;
     try{localStorage.setItem('bp-ddexp',JSON.stringify(st))}catch(e){}
     applyExp();
     try{placeUi()}catch(e){}
@@ -4822,12 +5264,24 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     }
   }
 
+  // ---- v1.0.36: the 2-deck page IS the live home. #op-dual switches compact ↔ big turntables. ----
+  function bigOn(){return document.body.classList.contains('op36-big')}
+  function setBig(on){
+    on=!!on;
+    document.body.classList.toggle('op36-big',on);
+    try{localStorage.setItem('bp-op36big',on?'1':'0')}catch(e){}
+    const btn=$el('op-dual');
+    if(btn){btn.classList.toggle('on',on);btn.setAttribute('aria-pressed',on?'true':'false')}
+    try{placeUi();paint()}catch(e){}
+  }
+  try{if(localStorage.getItem('bp-op36big')==='1')document.body.classList.add('op36-big')}catch(e){}
   function toggleDual(e){
     if(e){try{e.preventDefault();e.stopPropagation()}catch(_){}}
     const now=Date.now();
     if(now-(DUAL._togAt||0)<400)return;
     DUAL._togAt=now;
-    setOn(!DUAL.on);
+    if(!DUAL.on){setOn(true);return}
+    setBig(!bigOn());
   }
   function setOn(on){
     on=!!on;
@@ -4835,7 +5289,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     DUAL.on=on;
     document.body.classList.toggle('op-dual',on);
     const btn=$el('op-dual');
-    if(btn){btn.classList.toggle('on',on);btn.setAttribute('aria-pressed',on?'true':'false')}
+    if(btn){const b=on&&bigOn();btn.classList.toggle('on',b);btn.setAttribute('aria-pressed',b?'true':'false')}
     const ui=$el('op-dualui');
     if(on){
       ensureUi();
@@ -4850,7 +5304,6 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
         const dest=(DUAL.b.id===cur.id&&DUAL.a.id!==cur.id)?'B':'A';
         adoptInto(dest);
       }
-      try{paint()}catch(e){}
       try{cacheCap()}catch(e){}
       paint();
       if(anyPlaying()){if(!raf)raf=requestAnimationFrame(loop)}
@@ -4859,29 +5312,75 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       DUAL.a.live=null;DUAL.b.live=null;
       if(ui){ui.hidden=true;ui.setAttribute('aria-hidden','true')}
       document.body.classList.remove('dd-land','dd-stack');
+      try{closeMixSheet()}catch(e){}
       if(raf){cancelAnimationFrame(raf);raf=0}
       try{releaseToGlobal()}catch(e){}
     }
   }
+  function homeLive(){return document.body.classList.contains('live')}
+  let homeWas=null;
+  function homeEdge(){
+    const lv=homeLive();
+    if(lv===homeWas)return;
+    homeWas=lv;
+    if(lv&&!DUAL.on)setOn(true);
+    else if(!lv&&DUAL.on)setOn(false);
+  }
+  {const _sl=setLive;setLive=function(){const r=_sl.apply(this,arguments);try{homeEdge()}catch(e){}return r}}
 
   function bindTop(){
     let btn=$el('op-dual');
+    const ico='<svg class="op-dualico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="4.6"/><circle cx="7" cy="12" r="1.2"/><circle cx="17" cy="12" r="4.6"/><circle cx="17" cy="12" r="1.2"/></svg>';
     if(!btn){
       const av=$el('op-av'),top=$el('op-top');
-      if(av){
-        av.insertAdjacentHTML('beforebegin','<button type="button" id="op-dual" class="hw" aria-pressed="false" aria-label="โหมด 2 เด็ค" title="โหมด 2 เด็ค"><svg class="op-dualico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round" aria-hidden="true"><circle cx="5.2" cy="12" r="4.15"/><circle cx="5.2" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="18.8" cy="12" r="4.15"/><circle cx="18.8" cy="12" r="1.15" fill="currentColor" stroke="none"/></svg></button>');
-        btn=$el('op-dual');
-      }else if(top){
-        top.insertAdjacentHTML('beforeend','<button type="button" id="op-dual" class="hw" aria-pressed="false" aria-label="โหมด 2 เด็ค" title="โหมด 2 เด็ค"><svg class="op-dualico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round" aria-hidden="true"><circle cx="5.2" cy="12" r="4.15"/><circle cx="5.2" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="18.8" cy="12" r="4.15"/><circle cx="18.8" cy="12" r="1.15" fill="currentColor" stroke="none"/></svg></button>');
-        btn=$el('op-dual');
-      }
+      const h='<button type="button" id="op-dual" class="hw" aria-pressed="false" aria-label="โหมด 2 เด็ค" title="โหมด 2 เด็ค">'+ico+'</button>';
+      if(av)av.insertAdjacentHTML('beforebegin',h);
+      else if(top)top.insertAdjacentHTML('beforeend',h);
+      btn=$el('op-dual');
     }
     if(btn&&!btn._bound){
       btn._bound=1;
       btn.addEventListener('click',function(e){toggleDual(e)});
       btn.addEventListener('pointerdown',function(e){e.stopPropagation()});
     }
+    let lb=$el('op-lib');
+    if(!lb&&btn){
+      btn.insertAdjacentHTML('beforebegin','<button type="button" id="op-lib" class="hw" aria-label="คลังเพลง" title="คลังเพลง">'+I.lib+'<span>คลัง</span></button>');
+      lb=$el('op-lib');
+    }
+    if(lb&&!lb._bound){
+      lb._bound=1;
+      lb.addEventListener('pointerdown',function(e){e.stopPropagation()});
+      lb.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();DUAL.pick=null;try{if(window.__op18&&__op18.openLib)__op18.openLib()}catch(err){}});
+    }
+    libDecor();
     maybeHint();
+  }
+  // Library sheet rows get one-tap A / B buttons (data-op36id so the row-tap intercept leaves them alone).
+  function libDecor(){
+    if(!DUAL.on)return;
+    const m=document.getElementById('main');if(!m)return;
+    if(!m._op36){
+      m._op36=1;
+      try{new MutationObserver(function(){if(DUAL.on)libDecor()}).observe(m,{childList:true,subtree:true})}catch(e){}
+      m.addEventListener('click',function(e){
+        const b=e.target.closest('[data-op36id]');if(!b)return;
+        e.preventDefault();e.stopPropagation();
+        const id=b.getAttribute('data-op36id'),w=b.getAttribute('data-op36to');
+        if(!id||!SONG.get(id))return;
+        try{if(window.__op18&&__op18.closeSheet)__op18.closeSheet();document.body.classList.remove('sheet-open')}catch(err){}
+        DUAL.pick=null;
+        loadInto(w,id,false);
+        try{const s=SONG.get(id);toast('เด็ค '+w+' · '+(s&&s.t||''),1400,true)}catch(err){}
+      },true);
+    }
+    if(!document.body.classList.contains('sheet-open'))return;
+    m.querySelectorAll('li > button.pbtn[data-play]').forEach(function(pb){
+      const li=pb.parentElement;if(!li||li.querySelector('.op36ab'))return;
+      const id=pb.getAttribute('data-play');
+      const h='<span class="op36ab"><button type="button" data-op36id="'+esc(id)+'" data-op36to="A" aria-label="ใส่เด็ค A">A</button><button type="button" data-op36id="'+esc(id)+'" data-op36to="B" aria-label="ใส่เด็ค B">B</button></span>';
+      li.insertAdjacentHTML('beforeend',h);
+    });
   }
 
   function maybeHint(){
@@ -4914,10 +5413,11 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
 
   function tick(){
     bindTop();
+    try{homeEdge()}catch(e){}
     if(DUAL.on){
       ensureUi();placeUi();
       paint();
-      if(anyPlaying()&&!raf)raf=requestAnimationFrame(loop);
+      if(anyPlaying()&&!raf&&!document.hidden)raf=requestAnimationFrame(loop);
     }else maybeHint();
   }
 
@@ -5115,7 +5615,23 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     songTap:songTap,
     applyXf:applyXf,
     xfApplied:xfApplied,
-    isLand:isLand
+    isLand:isLand,
+    get big(){return bigOn()},
+    setBig:setBig,
+    moveSet:moveSet,
+    insertNext:insertNext,
+    search:searchSongs,
+    get frames(){return FRAMES},
+    get rafOn(){return !!raf},
+    ringReal:function(w){const sl=slot(whichOf(w||'A'));const r=sl.id?ringOf(sl.id,sl.buf):null;return !!(r&&!r._fake)},
+    openMix:openMixSheet,
+    closeMix:closeMixSheet,
+    caps:audioCaps,
+    paintDock:paintDock,
+    deckMix:function(w){return deckMix(slot(whichOf(w||'A')).id)},
+    busMix:function(w){const sl=slot(whichOf(w||'A'));if(!sl.bus||!sl.bus.f)return null;return{f:sl.bus.f.map(function(g){return +g.gain.value.toFixed(3)}),pan:sl.bus.p.map(function(p){return +p.pan.value.toFixed(3)}),M:+sl.bus.sum.gain.value.toFixed(3),sig:sl.bus.mixSig}},
+    saveDeck:saveDeck,
+    swapDeck:swapDeck
   };
 
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',function(){bindTop()});

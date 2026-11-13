@@ -1,0 +1,374 @@
+/* SetSod 1.0.36 — one-page live home: 2 decks (turntable platters) + today list + insert search + นอมสด + มิกซ์ร้าน.
+   Replaces dual23.css. Everything is scoped to #op-dualui / #dd-mxsheet / the top-bar buttons. */
+:root{--d6-or:#ff9d0a;--d6-ord:rgba(255,157,10,.16);--d6-bl:#4fb3e8;--d6-bld:rgba(79,179,232,.16);--d6-ac:#30d158;--d6-acd:rgba(48,209,88,.16);
+  --d6-card:#16161d;--d6-card2:#1f1f2a;--d6-line:#2a2a36;--d6-tx:#f2f2f7;--d6-mut:#9a9aa8;--d6-gap:6px;--d6-rad:16px}
+
+/* ---------- top bar: คลัง + 2-deck view toggle ---------- */
+#op-lib,#op-dual{flex:0 0 auto;height:44px;min-height:44px;min-width:44px;border-radius:12px;padding:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  color:#e5e7eb;background:#1f1f2a;border:1px solid #2a2a36;box-shadow:none;box-sizing:border-box;font:700 13px/1 Inter,"Noto Sans Thai",system-ui,sans-serif;margin:0}
+#op-dual{width:44px;max-width:44px}
+#op-lib{padding:0 11px;color:var(--d6-ac);background:var(--d6-acd);border-color:rgba(48,209,88,.45)}
+#op-lib svg,#op-dual svg{width:18px;height:18px;display:block;flex:none}
+#op-lib span{white-space:nowrap}
+body:not(.live) #op-lib{display:none}
+#op-dual[aria-pressed="true"],#op-dual.on{color:#111;background:#fb923c;border-color:#fb923c}
+#op-dual.hint{box-shadow:0 0 0 2px #fb923c,0 0 16px rgba(251,146,60,.55)}
+#op-dualtip{position:fixed;z-index:96;background:#1c1917;color:#fed7aa;border:1px solid #fb923c;border-radius:10px;padding:8px 12px;font:600 12px/1.3 Inter,system-ui,sans-serif;max-width:220px}
+#op-dualtip[hidden]{display:none!important}
+#op-dualtip button{margin-left:8px;background:transparent;border:0;color:#fb923c;font:700 12px Inter,system-ui;min-height:0;padding:0}
+#op-top .op-word{max-width:0;overflow:hidden;padding:0;margin:0}
+
+/* the old single-player now-card + bottom search are replaced by this page */
+html body.op18.live.op-dual #livelist,html body.live.op-dual #livelist,body.op-dual #livelist,body.op-dual #op-dock{display:none!important;visibility:hidden!important;pointer-events:none!important}
+
+/* ---------- shell ---------- */
+#op-dualui{display:none;position:fixed;left:0;right:0;top:calc(48px + var(--op-safe-t,0px));height:calc(var(--vvh,100dvh) - 48px);z-index:55;box-sizing:border-box;
+  padding:4px max(8px,env(safe-area-inset-right)) max(8px,env(safe-area-inset-bottom)) max(8px,env(safe-area-inset-left));
+  background:radial-gradient(800px 360px at 15% -10%,rgba(255,157,10,.06),transparent 60%),radial-gradient(800px 360px at 85% -10%,rgba(79,179,232,.06),transparent 60%),#0b0b0f;
+  color:var(--d6-tx);font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;-webkit-text-size-adjust:100%;text-size-adjust:100%;overflow:hidden;
+  gap:var(--d6-gap);grid-template-columns:minmax(0,1fr);
+  --dk:clamp(196px,calc(var(--dd-vvh,100dvh) * .255),246px);
+  grid-template-rows:var(--dk) 42px minmax(0,1fr) auto;grid-template-areas:"decks" "xf" "list" "dock"}
+body.op-dual #op-dualui{display:grid}
+#op-dualui[hidden]{display:none!important}
+body.op36-big #op-dualui{--dk:clamp(290px,calc(var(--dd-vvh,100dvh) * .41),520px)}
+#op-dualui *,#dd-mxsheet *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+#op-dualui button,#dd-mxsheet button{min-height:0;min-width:0;margin:0;padding:0;font:inherit;line-height:1;color:inherit;background:none;border:0;border-radius:10px;box-shadow:none;text-align:center;white-space:nowrap;cursor:pointer;flex:none;width:auto;touch-action:manipulation;-webkit-user-select:none;user-select:none}
+#op-dualui button:disabled,#dd-mxsheet button:disabled{opacity:.4;cursor:default}
+#op-dualui svg{display:block;flex:none}
+#op-dualui .dd-decks{grid-area:decks;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--d6-gap);min-height:0}
+#op-dualui .dd-master{grid-area:xf}
+#op-dualui .dd-listwrap{grid-area:list}
+#op-dualui .dd-dock{grid-area:dock}
+
+/* ---------- deck ---------- */
+#op-dualui .dd-deck{container:deck/size;min-width:0;min-height:0;border-radius:var(--d6-rad);background:linear-gradient(180deg,#1c1c28,#14141c);border:1px solid #2e2e3c;position:relative;overflow:hidden;
+  --c:var(--d6-or);--cd:var(--d6-ord)}
+#op-dualui .dd-deck.B{--c:var(--d6-bl);--cd:var(--d6-bld)}
+#op-dualui .dd-deck::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--c);opacity:.9;z-index:1}
+#op-dualui .dd-deck.audible{border-color:color-mix(in srgb,var(--c) 55%,#2e2e3c)}
+#op-dualui .dd-in{position:absolute;inset:0;padding:6px 7px 6px 10px;display:grid;gap:5px;
+  grid-template-columns:var(--p) minmax(0,1fr);grid-template-rows:28px var(--p) 30px 30px 12px;
+  grid-template-areas:"hd hd" "pl tl" "ky ky" "tp tp" "tm tm";--p:min(46cqw,calc(100cqh - 136px));align-content:center}
+#op-dualui .dd-head{grid-area:hd;display:flex;align-items:center;gap:6px;min-width:0}
+#op-dualui .dd-badge{width:22px;height:22px;border-radius:7px;background:var(--cd);color:var(--c);font-weight:800;font-size:12px;display:grid;place-items:center;flex:none}
+#op-dualui .dd-meta{min-width:0;flex:1;line-height:1.15}
+#op-dualui .dd-title{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#op-dualui .dd-artist{font-size:10.5px;color:var(--d6-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:12px}
+#op-dualui .dd-deck.empty .dd-title{color:var(--d6-mut);font-weight:600}
+#op-dualui .dd-hb{width:30px;height:30px;border-radius:9px;background:var(--d6-card2);border:1px solid var(--d6-line);display:grid;place-items:center;color:#d8d8e2}
+#op-dualui .dd-hb svg{width:16px;height:16px}
+#op-dualui .dd-load{color:var(--d6-ac);background:var(--d6-acd);border-color:rgba(48,209,88,.4)}
+#op-dualui .dd-exp.on{color:var(--c);border-color:var(--c);background:var(--cd)}
+#op-dualui .dd-plat{grid-area:pl;position:relative;width:var(--p);height:var(--p);justify-self:center;align-self:center}
+#op-dualui .dd-plat canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#op-dualui .dd-plat .play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:clamp(52px,40%,112px);height:clamp(52px,40%,112px);border-radius:50%;
+  background:var(--c);color:#111;display:grid;place-items:center;box-shadow:0 4px 18px rgba(0,0,0,.5),0 0 0 3px rgba(0,0,0,.35);z-index:2}
+#op-dualui .dd-plat .play svg{width:46%;height:46%}
+#op-dualui .dd-plat .play.on{background:#f2f2f7}
+#op-dualui .dd-plat .play:active{transform:translate(-50%,-50%) scale(.94)}
+#op-dualui .dd-rt{display:contents}
+#op-dualui .dd-adj{display:contents}
+#op-dualui .dd-tools{grid-area:tl;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:center;justify-items:stretch;min-width:0}
+#op-dualui .dd-tool{height:36px;border-radius:11px;background:#232330;border:1px solid var(--d6-line);display:grid;place-items:center;font-size:10.5px;font-weight:800;letter-spacing:.02em;color:#e5e7eb;min-width:0}
+#op-dualui .dd-tool svg{width:18px;height:18px}
+#op-dualui .dd-tool.on{background:var(--cd);border-color:var(--c);color:var(--c)}
+#op-dualui .dd-tool.dd-sync.on{background:var(--d6-acd);border-color:var(--d6-ac);color:var(--d6-ac)}
+#op-dualui .grp{display:grid;grid-template-columns:32px minmax(0,1fr) 32px;align-items:center;gap:4px;background:#111118;border:1px solid var(--d6-line);border-radius:11px;padding:2px;min-width:0;height:30px}
+#op-dualui .dd-adj>.grp.ky{grid-area:ky}#op-dualui .dd-adj>.grp.tp{grid-area:tp}
+#op-dualui .grp button{height:24px;border-radius:8px;background:#262632;display:grid;place-items:center;color:#e5e7eb}
+#op-dualui .grp button svg{width:14px;height:14px}
+#op-dualui .grp .val{text-align:center;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;min-width:0}
+#op-dualui .grp .val em{font-style:normal;color:var(--d6-mut);font-weight:600;font-size:10.5px;margin-right:4px}
+#op-dualui .grp.tmp{border-color:rgba(255,157,10,.5)}
+#op-dualui .grp.tmp b{color:var(--d6-or)}
+#op-dualui .dd-times{grid-area:tm;display:flex;align-items:center;gap:6px;font-size:10px;line-height:12px;color:var(--d6-mut);font-variant-numeric:tabular-nums;min-width:0}
+#op-dualui .dd-wave{flex:1;height:12px;position:relative;cursor:pointer;touch-action:manipulation}
+#op-dualui .dd-wave::before{content:"";position:absolute;left:0;right:0;top:4px;height:4px;border-radius:2px;background:#2a2a36}
+#op-dualui .dd-prog{position:absolute;left:0;top:4px;height:4px;border-radius:2px;background:var(--c);width:0}
+#op-dualui .dd-playhead{position:absolute;top:1px;width:2px;height:10px;margin-left:-1px;background:#fff;border-radius:1px}
+
+/* R: wide + short deck → platter left, controls right */
+@container deck (min-width:240px) and (max-height:419px) and (min-aspect-ratio:1/1){
+  #op-dualui .dd-in{grid-template-columns:var(--p) minmax(0,1fr);grid-template-rows:30px minmax(0,1fr) 12px;grid-template-areas:"hd hd" "pl rt" "tm tm";--p:min(44cqw,calc(100cqh - 62px))}
+  body.op36-big #op-dualui .dd-in{--p:min(54cqw,calc(100cqh - 58px))}
+  #op-dualui .dd-rt{grid-area:rt;display:grid;gap:5px;align-content:center;min-width:0}
+  #op-dualui .dd-tools,#op-dualui .dd-in .dd-adj>.grp{grid-area:auto}
+  #op-dualui .dd-adj{display:grid;grid-template-columns:1fr;gap:5px}
+  #op-dualui .dd-tool{height:clamp(36px,calc((100cqh - 139px)/2),46px)}
+  #op-dualui .dd-plat .play{width:clamp(56px,48%,112px);height:clamp(56px,48%,112px)}
+}
+@container deck (min-width:400px) and (max-height:419px) and (min-aspect-ratio:1/1){
+  #op-dualui .dd-tools{grid-template-columns:repeat(4,1fr)}
+  #op-dualui .dd-adj{grid-template-columns:1fr 1fr}
+}
+@container deck (min-width:240px) and (max-width:330px) and (max-height:419px) and (min-aspect-ratio:1/1){#op-dualui .grp .val em{display:none}}
+@container deck (min-width:400px) and (max-width:520px) and (max-height:419px) and (min-aspect-ratio:1/1){#op-dualui .grp .val em{display:none}}
+/* C: narrow + tall (phone portrait big view) → turntable on top */
+@container deck (max-width:299px) and (min-height:270px){
+  #op-dualui .dd-in{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:28px var(--p) 36px 30px 12px;grid-template-areas:"hd hd" "pl pl" "tl tl" "ky tp" "tm tm";--p:min(92cqw,calc(100cqh - 166px))}
+  #op-dualui .dd-tools{grid-template-columns:repeat(4,1fr);gap:4px}
+  #op-dualui .grp{grid-template-columns:24px minmax(0,1fr) 24px;gap:2px}
+  #op-dualui .grp .val em{display:none}
+}
+/* T: tall deck (Fold / desktop) → big turntable, full controls under it */
+@container deck (min-width:300px) and (min-height:420px){
+  #op-dualui .dd-in{grid-template-columns:minmax(0,1fr);grid-template-rows:32px minmax(0,1fr) auto 12px;grid-template-areas:"hd" "pl" "rt" "tm";--p:min(84cqw,calc(100cqh - 196px));padding:10px 12px 10px 14px;gap:8px}
+  #op-dualui .dd-rt{grid-area:rt;display:grid;gap:8px;min-width:0}
+  #op-dualui .dd-tools,#op-dualui .dd-in .dd-adj>.grp{grid-area:auto}
+  #op-dualui .dd-adj{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  #op-dualui .dd-tools{grid-template-columns:repeat(4,1fr);gap:8px}
+  #op-dualui .dd-tool{height:44px}
+  #op-dualui .grp{height:38px;padding:3px}
+  #op-dualui .grp button{height:30px}
+  #op-dualui .dd-hb{width:36px;height:36px}
+  #op-dualui .dd-title{font-size:15px}
+  #op-dualui .dd-artist{font-size:12px}
+}
+@container deck (min-width:300px) and (max-width:330px) and (min-height:420px){#op-dualui .grp .val em{display:none}}
+
+/* deck panel (⋯): Vol / EQ / prev-next / nudge / save — overlays the deck, never resizes the page */
+#op-dualui .dd-mix{position:absolute;inset:0;z-index:3;display:none;flex-direction:column;gap:4px;padding:7px 8px 7px 12px;background:rgba(18,18,26,.97);overflow:auto;overscroll-behavior:contain}
+#op-dualui .dd-deck.dd-open .dd-mix{display:flex}
+#op-dualui .dd-mixh{display:flex;align-items:center;gap:6px;min-width:0;height:26px;flex:none}
+#op-dualui .dd-mixh .dd-hb{width:26px;height:26px}
+#op-dualui .dd-mix>*{flex:none}
+#op-dualui .dd-mixh b{font-size:13px;color:var(--c);flex:none}
+#op-dualui .dd-mixn{font-size:10px;color:var(--d6-mut);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#op-dualui .dd-vol,#op-dualui .dd-eqi{display:grid;grid-template-columns:30px minmax(0,1fr);align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--d6-mut);min-height:22px}
+#op-dualui .dd-mix input[type=range]{width:100%;min-width:0;height:22px;margin:0;accent-color:var(--c)}
+#op-dualui .dd-row{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px}
+#op-dualui .dd-row button{height:32px;border-radius:9px;background:#232330;border:1px solid var(--d6-line);display:grid;place-items:center;color:#e5e7eb}
+#op-dualui .dd-row button.on{color:var(--c);border-color:var(--c)}
+#op-dualui .dd-row2{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+#op-dualui .dd-wide{height:32px;border-radius:9px;background:#232330;border:1px solid var(--d6-line);display:flex;align-items:center;justify-content:center;gap:5px;font-size:11px;font-weight:700;color:#e5e7eb;min-width:0;overflow:hidden}
+#op-dualui .dd-wide span{overflow:hidden;text-overflow:ellipsis}
+#op-dualui .dd-wide.on{color:var(--d6-or);border-color:rgba(255,157,10,.55)}
+
+/* ---------- crossfader row ---------- */
+#op-dualui .dd-master{display:flex;align-items:center;gap:6px;min-width:0}
+#op-dualui .dd-xfab,#op-dualui .dd-xfbb{font-weight:800;font-size:12px;width:16px;text-align:center;flex:none}
+#op-dualui .dd-xfab{color:var(--d6-or)}#op-dualui .dd-xfbb{color:var(--d6-bl)}
+#op-dualui .dd-xf{flex:1;height:38px;position:relative;touch-action:none;cursor:pointer;min-width:60px}
+#op-dualui .dd-xftrack{position:absolute;left:0;right:0;top:50%;height:6px;margin-top:-3px;border-radius:3px;background:linear-gradient(90deg,var(--d6-or),#3a3a48 45%,#3a3a48 55%,var(--d6-bl))}
+#op-dualui .dd-xfmid{position:absolute;left:50%;top:8px;bottom:8px;width:2px;margin-left:-1px;background:#777;border-radius:1px}
+#op-dualui .dd-xfknob{position:absolute;top:4px;width:26px;height:30px;margin-left:-13px;border-radius:8px;background:linear-gradient(180deg,#f4f4f8,#b9b9c4);box-shadow:0 2px 8px rgba(0,0,0,.5);z-index:1;left:50%}
+#op-dualui .dd-xfknob::after{content:"";position:absolute;left:50%;top:5px;bottom:5px;width:2px;margin-left:-1px;background:#555}
+#op-dualui .dd-mbtn{width:40px;height:38px;border-radius:12px;background:var(--d6-card2);border:1px solid var(--d6-line);display:grid;place-items:center;font-size:12px;font-weight:800;color:#e5e7eb}
+#op-dualui #dd-auto{font-size:19px}
+#op-dualui .dd-mbtn svg{width:18px;height:18px}
+#op-dualui .dd-mbtn.on{color:var(--d6-ac);border-color:rgba(48,209,88,.5);background:var(--d6-acd)}
+
+/* ---------- today list + insert search ---------- */
+#op-dualui .dd-listwrap{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--d6-card);border:1px solid var(--d6-line);border-radius:var(--d6-rad);overflow:hidden;position:relative}
+#op-dualui .dd-listhead{display:flex;align-items:center;gap:6px;padding:5px 6px 4px 12px;min-width:0;flex:none}
+#op-dualui .dd-listhead h2{margin:0;font-size:14px;font-weight:800;flex:none}
+#op-dualui .dd-listhead .n{color:var(--d6-mut);font-size:12px;flex:none}
+#op-dualui .dd-st{flex:1;min-width:0;font-size:11px;font-weight:700;color:var(--d6-or);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#op-dualui .dd-listacts{display:flex;gap:6px;flex:none;margin-left:auto}
+#op-dualui .dd-listhbtn{width:32px;height:32px;border-radius:10px;background:var(--d6-card2);border:1px solid var(--d6-line);display:grid;place-items:center;color:#d8d8e2}
+#op-dualui .dd-listhbtn svg{width:16px;height:16px}
+#op-dualui .dd-sbox{margin:0 6px 5px;display:flex;align-items:center;gap:8px;height:38px;padding:0 4px 0 11px;border-radius:12px;background:#0f0f15;border:1px solid var(--d6-line);flex:none;color:var(--d6-mut);cursor:text}
+#op-dualui .dd-sbox:focus-within{border-color:rgba(48,209,88,.55)}
+#op-dualui .dd-sbox input{flex:1;min-width:0;background:none;border:0;outline:0;font:500 16px/1.2 Inter,"Noto Sans Thai",system-ui,sans-serif;color:var(--d6-tx);padding:0;height:100%;-webkit-appearance:none;appearance:none;min-height:0;box-shadow:none}
+#op-dualui .dd-sbox input::-webkit-search-cancel-button{display:none}
+#op-dualui .dd-sbox input::placeholder{color:#6d6d7a}
+#op-dualui .dd-qx{width:32px;height:32px;display:grid;place-items:center;color:var(--d6-mut)}
+#op-dualui .dd-qx[hidden]{display:none}
+#op-dualui .dd-list,#op-dualui .dd-res{flex:1;overflow:auto;padding:0 6px 6px;min-height:0;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+#op-dualui .dd-res[hidden]{display:none}
+#op-dualui .dd-listwrap.dd-searching .dd-list{display:none}
+#op-dualui .dd-song{display:flex;align-items:center;gap:6px;height:50px;padding:0 4px 0 0;border-radius:12px;position:relative;background:transparent;min-width:0;transition:transform .12s}
+#op-dualui .dd-song+.dd-song{margin-top:2px}
+#op-dualui .dd-song.dragging{transition:none;z-index:3;background:#262634;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+#op-dualui .dd-song.ona{background:var(--d6-ord)}#op-dualui .dd-song.onb{background:var(--d6-bld)}
+#op-dualui .dd-song.ona.onb{background:linear-gradient(90deg,var(--d6-ord),var(--d6-bld))}
+#op-dualui .dd-grip{width:30px;height:44px;display:grid;place-items:center;color:#5d5d6c;touch-action:none;cursor:grab;flex:none}
+#op-dualui .dd-song .no{width:20px;color:var(--d6-mut);font-size:12px;font-weight:700;text-align:center;font-variant-numeric:tabular-nums;flex:none}
+#op-dualui .dd-song.now .no{color:var(--d6-ac)}
+#op-dualui .dd-song .ti{flex:1;min-width:0;line-height:1.2}
+#op-dualui .dd-r .ti{padding-left:8px}
+#op-dualui .dd-song .t{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#op-dualui .dd-song .a{font-size:11px;color:var(--d6-mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#op-dualui .dd-song .a .in{color:var(--d6-ac);font-weight:700}
+#op-dualui .dd-song .btns{display:flex;gap:5px;flex:none}
+#op-dualui .dd-song .btns button{width:36px;height:36px;border-radius:10px;background:#22222e;border:1px solid var(--d6-line);font-weight:800;font-size:13px;display:grid;place-items:center;color:#e5e7eb}
+#op-dualui .dd-song .btns [data-to="A"]{color:var(--d6-or)}#op-dualui .dd-song .btns [data-to="B"]{color:var(--d6-bl)}
+#op-dualui .dd-song .btns [data-to="A"].ona{background:var(--d6-or);color:#111;border-color:transparent}
+#op-dualui .dd-song .btns [data-to="B"].onb{background:var(--d6-bl);color:#111;border-color:transparent}
+#op-dualui .dd-song .btns [data-ins]{color:var(--d6-ac);background:var(--d6-acd);border-color:rgba(48,209,88,.4)}
+#op-dualui .dd-song .btns .mo{color:var(--d6-mut);width:30px}
+#op-dualui .dd-empty{padding:18px 12px;text-align:center;color:var(--d6-mut);font-size:13px;line-height:1.5}
+
+/* ---------- dock: นอมสด + มิกซ์ร้าน ---------- */
+#op-dualui .dd-dock{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--d6-gap);min-width:0}
+#op-dualui .dd-blk{container:blk/inline-size;background:var(--d6-card);border:1px solid var(--d6-line);border-radius:var(--d6-rad);padding:7px 8px 8px 10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+#op-dualui .dd-bt{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--d6-mut);min-width:0;height:22px}
+#op-dualui .dd-bt svg{width:15px;height:15px}
+#op-dualui .dd-btl{white-space:nowrap}
+#op-dualui .dd-sp{flex:1}
+#op-dualui .dd-pill{font-size:11px;font-weight:800;height:22px;padding:0 8px;border-radius:999px;background:#262632;color:#cfcfda;white-space:nowrap;display:inline-flex;align-items:center;border:1px solid transparent}
+#op-dualui button.dd-pill{border-color:var(--d6-line)}
+#op-dualui .dd-pill.on,#op-dualui .dd-pill.ok{background:var(--d6-acd);color:var(--d6-ac)}
+#op-dualui .dd-metro.on{border-color:rgba(48,209,88,.45)}
+#op-dualui .dd-mctl{display:grid;grid-template-columns:42px minmax(0,1fr);grid-template-areas:"go bpm" "tap tap";gap:6px;align-items:center}
+#op-dualui .dd-mgo{grid-area:go;width:42px;height:44px;border-radius:13px;background:var(--d6-ac);color:#04210d;display:grid;place-items:center}
+#op-dualui .dd-mgo svg{width:20px;height:20px}
+#op-dualui .dd-mgo.on{background:#f2f2f7;color:#111}
+#op-dualui .dd-mbpm{grid-area:bpm;display:grid;grid-template-columns:32px minmax(0,1fr) 32px;align-items:center;gap:4px;min-width:0}
+#op-dualui .dd-mstep{width:32px;height:40px;border-radius:11px;background:var(--d6-card2);border:1px solid var(--d6-line);display:grid;place-items:center;color:#e5e7eb}
+#op-dualui .dd-mstep:active{background:#30303e}
+#op-dualui .dd-bpm{display:flex;flex-direction:column;align-items:center;min-width:44px;line-height:1}
+#op-dualui .dd-bpm b{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+#op-dualui .dd-bpm small{font-size:9.5px;color:var(--d6-mut);font-weight:700;margin-top:2px;white-space:nowrap}
+#op-dualui .dd-beats{display:flex;gap:3px;justify-content:center;margin-top:3px;height:6px}
+#op-dualui .dd-beats i{width:6px;height:6px;border-radius:50%;background:#33333f}
+#op-dualui .dd-beats i.hit{background:var(--d6-ac);box-shadow:0 0 6px var(--d6-ac)}
+#op-dualui .dd-beats i.acc.hit{background:var(--d6-or);box-shadow:0 0 6px var(--d6-or)}
+/* TAP — big, dedicated, instant feedback (v1.0.36 user request) */
+#op-dualui .dd-tap{grid-area:tap;width:100%;height:56px;border-radius:14px;background:linear-gradient(180deg,#2b2b3a,#20202b);border:1.5px solid #4a4a5c;color:#f2f2f7;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative;overflow:hidden;transition:transform .06s,background .06s,border-color .06s}
+#op-dualui .dd-tap b{font-size:20px;font-weight:900;letter-spacing:.14em;line-height:1}
+#op-dualui .dd-tap small{font-size:9.5px;font-weight:700;color:var(--d6-mut);line-height:1}
+#op-dualui .dd-tap.press,#op-dualui .dd-tap:active{transform:scale(.96);background:linear-gradient(180deg,#1f5a32,#17442a);border-color:var(--d6-ac)}
+#op-dualui .dd-tap.press small,#op-dualui .dd-tap:active small{color:#bff5cf}
+#op-dualui .dd-tap.hit::after{content:"";position:absolute;inset:0;border-radius:inherit;background:radial-gradient(circle,rgba(48,209,88,.45),transparent 70%);animation:dd36tap .32s ease-out forwards;pointer-events:none}
+@keyframes dd36tap{from{opacity:1;transform:scale(.6)}to{opacity:0;transform:scale(1.4)}}
+@container blk (min-width:400px){
+  #op-dualui .dd-mctl{grid-template-columns:44px minmax(150px,.8fr) minmax(0,1.2fr);grid-template-areas:"go bpm tap"}
+  #op-dualui .dd-mgo{width:56px;height:56px}
+  #op-dualui .dd-mctl{grid-template-columns:56px minmax(132px,.55fr) minmax(0,1.45fr)}
+  #op-dualui .dd-mstep{height:48px;width:40px}
+  #op-dualui .dd-mbpm{grid-template-columns:40px minmax(0,1fr) 40px}
+}
+#op-dualui .dd-mxbody{flex:1;display:flex;align-items:center;gap:6px;min-width:0;width:100%;border-radius:12px;background:#111118;border:1px solid var(--d6-line);padding:6px 8px;color:#e5e7eb;text-align:left}
+#op-dualui .dd-mxbody>svg{width:20px;height:20px;color:var(--d6-mut)}
+#op-dualui .dd-chs{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#op-dualui .dd-chs span{display:block;font-size:11.5px;line-height:1.25;white-space:normal;overflow:hidden;color:#cfcfda}
+#op-dualui .dd-chs b{color:var(--d6-tx)}
+
+/* slim dock: one row each (big turntable view + short landscape) */
+body.op36-big #op-dualui .dd-dock{grid-template-columns:minmax(0,1fr) 56px}
+body.op36-big #op-dualui .dd-blk{flex-direction:row;align-items:center;padding:4px 6px;gap:6px;height:54px}
+body.op36-big #op-dualui .dd-metro .dd-bt{flex:none;height:auto}
+body.op36-big #op-dualui .dd-metro .dd-btl{display:none}
+body.op36-big #op-dualui .dd-metro .dd-bt>svg{display:none}
+body.op36-big #op-dualui .dd-metro .dd-sp{display:none}
+body.op36-big #op-dualui .dd-metro{flex-direction:row-reverse}
+body.op36-big #op-dualui .dd-mctl{flex:1;grid-template-columns:44px auto minmax(88px,1fr);grid-template-areas:"go bpm tap";min-width:0}
+body.op36-big #op-dualui .dd-mbpm{grid-template-columns:30px auto 30px}
+body.op36-big #op-dualui .dd-mstep{width:30px;height:40px}
+body.op36-big #op-dualui .dd-bpm b{font-size:18px}
+body.op36-big #op-dualui .dd-beats{display:none}
+body.op36-big #op-dualui .dd-tap{height:46px}
+body.op36-big #op-dualui .dd-tap small{display:none}
+@container blk (max-width:340px){body.op36-big #op-dualui .dd-metro .dd-bt{display:none}}
+body.op36-big #op-dualui .dd-mixer{container-type:normal;width:56px;padding:4px}
+body.op36-big #op-dualui .dd-mixer .dd-bt{display:none}
+body.op36-big #op-dualui .dd-mxbody{width:46px;height:44px;padding:0;justify-content:center}
+body.op36-big #op-dualui .dd-mxbody .dd-chs{display:none}
+body.op36-big #op-dualui .dd-mxbody::before{content:"";display:none}
+
+/* ---------- short landscape phone: decks | list ---------- */
+@media (orientation:landscape) and (max-height:520px){
+  #op-dualui{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) 38px auto;grid-template-areas:"decks list" "xf list" "dock list";gap:5px;padding-top:3px}
+  body.op36-big #op-dualui{grid-template-columns:minmax(0,1.9fr) minmax(0,1fr)}
+  #op-dualui .dd-xf{height:34px}
+  #op-dualui .dd-mbtn{height:34px;width:38px}
+  #op-dualui .dd-song{height:44px}
+  #op-dualui .dd-dock{grid-template-columns:minmax(0,1fr) 54px}
+  #op-dualui .dd-blk{flex-direction:row;align-items:center;padding:3px 6px;gap:6px;height:50px}
+  #op-dualui .dd-metro .dd-btl,#op-dualui .dd-metro .dd-sp,#op-dualui .dd-beats,#op-dualui .dd-tap small{display:none}
+  #op-dualui .dd-metro .dd-bt{flex:none}
+  #op-dualui .dd-mctl{flex:1;grid-template-columns:42px auto minmax(96px,1fr);grid-template-areas:"go bpm tap";min-width:0}
+  #op-dualui .dd-mgo{width:42px;height:42px}
+  #op-dualui .dd-mbpm{grid-template-columns:30px auto 30px}
+  #op-dualui .dd-mstep{width:30px;height:38px}
+  #op-dualui .dd-bpm b{font-size:18px}
+  #op-dualui .dd-tap{height:44px}
+  #op-dualui .dd-mixer{container-type:normal;width:54px;padding:3px}
+  #op-dualui .dd-mixer .dd-bt,#op-dualui .dd-mxbody .dd-chs{display:none}
+  #op-dualui .dd-mxbody{width:44px;height:42px;padding:0;justify-content:center}
+}
+/* ---------- Fold open / tablet portrait ---------- */
+@media (min-width:700px) and (orientation:portrait){
+  #op-dualui{--dk:clamp(280px,calc(var(--dd-vvh,100dvh) * .29),340px);grid-template-rows:var(--dk) 46px minmax(0,1fr) auto;padding:8px 14px 12px;gap:8px}
+  body.op36-big #op-dualui{--dk:clamp(420px,calc(var(--dd-vvh,100dvh) * .45),560px)}
+  #op-dualui .dd-song{height:54px}
+  #op-dualui .dd-mbtn{width:46px;height:42px}
+}
+/* ---------- wide: Fold landscape / desktop: A | xf+list | B ---------- */
+@media (min-width:1000px) and (min-height:600px){
+  #op-dualui{grid-template-columns:minmax(0,1fr) minmax(0,1.05fr) minmax(0,1fr);grid-template-rows:48px minmax(0,1fr) auto;
+    grid-template-areas:"deckA xf deckB" "deckA list deckB" "dock dock dock";padding:8px 14px 12px;gap:10px}
+  body.op36-big #op-dualui{grid-template-columns:minmax(0,1.25fr) minmax(0,.9fr) minmax(0,1.25fr)}
+  #op-dualui .dd-decks{display:contents}
+  #op-dualui .dd-deck.A{grid-area:deckA}#op-dualui .dd-deck.B{grid-area:deckB}
+  #op-dualui .dd-song{height:54px}
+  #op-dualui .dd-mbtn{width:46px;height:42px}
+  body.op36-big #op-dualui .dd-dock{grid-template-columns:minmax(0,1fr) 56px}
+}
+
+/* ---------- library sheet: one-tap A / B ---------- */
+body.op-dual.sheet-open #main li .op36ab{display:flex;gap:5px;flex:none;margin-left:4px;align-items:center}
+#main li .op36ab{display:none}
+#main li .op36ab button{width:38px;height:38px;min-height:38px;min-width:38px;padding:0;border-radius:10px;background:#22222e;border:1px solid #2a2a36;font:800 13px/1 Inter,system-ui,sans-serif}
+#main li .op36ab button[data-op36to="A"]{color:#ff9d0a}#main li .op36ab button[data-op36to="B"]{color:#4fb3e8}
+
+/* ---------- มิกซ์ร้าน sheet ---------- */
+#dd-mxsheet{position:fixed;inset:0;z-index:95;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;color:#f2f2f7}
+#dd-mxsheet[hidden]{display:none}
+#dd-mxsheet .dd-mxbox{width:min(560px,100%);max-height:88%;overflow:auto;background:#15151c;border:1px solid #2a2a36;border-radius:22px 22px 0 0;padding:12px 14px calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px}
+@media (min-width:700px){#dd-mxsheet{align-items:center}#dd-mxsheet .dd-mxbox{border-radius:22px}}
+#dd-mxsheet .dd-mxt{display:flex;align-items:center;gap:8px}
+#dd-mxsheet .dd-mxt b{flex:1;display:flex;align-items:center;gap:8px;font-size:16px}
+#dd-mxsheet .dd-hb{width:36px;height:36px;border-radius:10px;background:#1f1f2a;border:1px solid #2a2a36;display:grid;place-items:center}
+#dd-mxsheet .dd-mxdev{margin:0;font-size:12px;color:#9a9aa8}
+#dd-mxsheet section{background:#1a1a23;border:1px solid #2a2a36;border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+#dd-mxsheet h3{margin:0;font-size:14px}
+#dd-mxsheet p{margin:0;font-size:12px;line-height:1.45;color:#b4b4c2}
+#dd-mxsheet .cap{font-size:11.5px;font-weight:700;padding:3px 8px;border-radius:7px;background:#262632}
+#dd-mxsheet .cap.y{color:#30d158}#dd-mxsheet .cap.n{color:#ff9f8a}
+#dd-mxsheet .dd-seg{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;width:100%}
+#dd-mxsheet .dd-seg button{height:44px;border-radius:12px;background:#22222e;border:1px solid #2a2a36;font-weight:800;font-size:14px}
+#dd-mxsheet .dd-seg button.on{background:rgba(48,209,88,.16);border-color:rgba(48,209,88,.6);color:#30d158}
+#dd-mxsheet .dd-mxgo{height:42px;padding:0 14px;border-radius:12px;background:#22222e;border:1px solid #3a3a48;font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:6px}
+#dd-mxsheet .dd-mxgo.alt{align-self:stretch;justify-content:center;background:transparent}
+#dd-mxsheet .dd-mxfoot{font-size:11px;color:#77778a;text-align:center}
+body.op36-big #op-dualui .dd-mgo{width:44px;height:44px}
+body.op36-big #op-dualui .dd-mstep{width:30px;height:40px}
+
+/* short phone portrait (iPhone SE / mini): dock becomes one row so the list keeps room; TAP stays 56px tall */
+@media (orientation:portrait) and (max-width:699px) and (max-height:760px){
+  #op-dualui .dd-dock{grid-template-columns:minmax(0,1fr) 54px}
+  #op-dualui .dd-blk{flex-direction:row;align-items:center;padding:4px 6px;gap:6px}
+  #op-dualui .dd-metro .dd-bt,#op-dualui .dd-beats,#op-dualui .dd-tap small{display:none}
+  #op-dualui .dd-mctl{flex:1;grid-template-columns:44px auto minmax(96px,1fr);grid-template-areas:"go bpm tap";min-width:0}
+  #op-dualui .dd-mbpm{grid-template-columns:30px auto 30px}
+  #op-dualui .dd-mstep{width:30px;height:44px}
+  #op-dualui .dd-bpm b{font-size:18px}
+  #op-dualui .dd-mixer{container-type:normal;width:54px;padding:3px}
+  #op-dualui .dd-mixer .dd-bt,#op-dualui .dd-mxbody .dd-chs{display:none}
+  #op-dualui .dd-mxbody{width:46px;height:56px;padding:0;justify-content:center}
+}
+/* the global .empty helper (index.html) must not restyle an empty deck: it added 26px padding and collapsed the platter to 0 */
+#op-dualui .dd-deck.empty{display:block!important;padding:0!important;margin:0!important;border:1px solid #2e2e3c!important;border-radius:var(--d6-rad);gap:0;text-align:left;color:inherit;grid-template-columns:none}
+/* narrow decks (phones): the ⋯ panel opens across both deck faces so Vol/EQ and prev/nudge/next get finger-size targets */
+@media (max-width:699px), (orientation:landscape) and (max-height:520px){
+  #op-dualui .dd-deck.dd-open{overflow:visible;z-index:6}
+  #op-dualui .dd-deck .dd-mix{width:calc(200% + var(--d6-gap) + 2px);bottom:auto;min-height:calc(100% + 2px);top:-1px;
+    display:none;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:12px;row-gap:5px;align-content:start;
+    border:1px solid var(--c);border-radius:var(--d6-rad);box-shadow:0 14px 40px rgba(0,0,0,.6);overflow:visible;padding:8px 10px 10px 12px}
+  #op-dualui .dd-deck.A .dd-mix{left:-1px;right:auto}
+  #op-dualui .dd-deck.B .dd-mix{right:-1px;left:auto}
+  #op-dualui .dd-deck.dd-open .dd-mix{display:grid}
+  #op-dualui .dd-mixh,#op-dualui .dd-mix .dd-row,#op-dualui .dd-mix .dd-row2{grid-column:1/-1}
+  #op-dualui .dd-mixh .dd-hb{width:36px;height:36px}
+  #op-dualui .dd-mixh{height:36px}
+  #op-dualui .dd-mix .dd-row button,#op-dualui .dd-mix .dd-row2 button{height:44px}
+  #op-dualui .dd-mix input[type=range]{height:26px}
+}
+@container deck (min-width:330px) and (min-height:236px){
+  #op-dualui .dd-mix .dd-row button,#op-dualui .dd-mix .dd-row2 button{height:40px}
+  #op-dualui .dd-mixh .dd-hb{width:30px;height:30px}
+}

@@ -28,14 +28,15 @@ function click(t,acc,sec){CLK++;if(acc)ACC++;const k=acc?1:sec?.85:.72,u=acc?1.3
  case 'digi':osc(t,'square',1600*u,k*0.7,0.035);break;
  default:osc(t,'square',(acc?2000:sec?1600:1300),k*0.6,0.05);osc(t,'sine',(acc?2000:sec?1600:1300),k*0.6,0.05)}}
 function sched(){while(next<ctx.currentTime+0.12){const b=beat%S.sig;click(next,b==0&&S.sig>1,S.sig==6&&b==3);queue.push({b,t:next});next+=60/S.bpm;beat++}}
-function draw(){const now=ctx.currentTime;let cur=null;while(queue.length&&queue[0].t<=now){cur=queue.shift()}if(cur!=null&&el){el.querySelectorAll('.ml').forEach((l,i)=>l.classList.toggle('hit',i==cur.b));el.querySelector('#mbeat').textContent=cur.b+1}raf=requestAnimationFrame(draw)}
+function draw(){const now=ctx.currentTime;let cur=null;while(queue.length&&queue[0].t<=now){cur=queue.shift()}if(cur!=null)emit(cur.b);if(cur!=null&&el){el.querySelectorAll('.ml').forEach((l,i)=>l.classList.toggle('hit',i==cur.b));el.querySelector('#mbeat').textContent=cur.b+1}raf=requestAnimationFrame(draw)}
 async function start(){initCtx();const rp=ctx.resume();await Promise.race([rp.catch(()=>{}),new Promise(r=>setTimeout(r,300))]);beat=0;queue=[];next=ctx.currentTime+0.06;sched();timer=setInterval(sched,25);raf=requestAnimationFrame(draw);
  try{if('wakeLock' in navigator)wake=await navigator.wakeLock.request('screen')}catch(e){}ui()}
 function stop(){clearInterval(timer);timer=null;cancelAnimationFrame(raf);queue=[];if(wake){wake.release().catch(()=>{});wake=null}if(el)el.querySelectorAll('.ml').forEach(l=>l.classList.remove('hit'));ui()}
 document.addEventListener('visibilitychange',async()=>{if(document.visibilityState=='visible'&&timer&&!wake){try{wake=await navigator.wakeLock.request('screen')}catch(e){}}});
 function setBpm(v){S.bpm=Math.max(30,Math.min(300,Math.round(v)));save();ui()}
 function tap(){const n=performance.now();taps=taps.filter(t=>n-t<2500);taps.push(n);if(taps.length>6)taps.shift();if(taps.length>=2){const d=(taps[taps.length-1]-taps[0])/(taps.length-1);setBpm(60000/d)}}
-function ui(){if(!el)return;el.querySelector('#mbpm').textContent=S.bpm;el.querySelector('#kbpm').textContent=S.bpm;el.querySelector('#kcap').style.transform=`rotate(${(S.bpm-30)*6}deg)`;el.querySelector('#knob').setAttribute('aria-valuenow',S.bpm);const g=el.querySelector('#mgo');g.textContent=timer?'⏹ หยุด':'▶ เริ่ม';g.classList.toggle('on',!!timer);g.classList.toggle('playing',!!timer);
+const LIS=new Set();function emit(b){LIS.forEach(f=>{try{f(b,S,!!timer)}catch(e){}})}
+function ui(){emit(null);if(!el)return;el.querySelector('#mbpm').textContent=S.bpm;el.querySelector('#kbpm').textContent=S.bpm;el.querySelector('#kcap').style.transform=`rotate(${(S.bpm-30)*6}deg)`;el.querySelector('#knob').setAttribute('aria-valuenow',S.bpm);const g=el.querySelector('#mgo');g.textContent=timer?'⏹ หยุด':'▶ เริ่ม';g.classList.toggle('on',!!timer);g.classList.toggle('playing',!!timer);
  el.querySelectorAll('[data-sig]').forEach(b=>b.classList.toggle('on',+b.dataset.sig==S.sig));el.querySelectorAll('[data-snd]').forEach(b=>b.classList.toggle('on',b.dataset.snd==(S.snd||'beep')));el.querySelectorAll('[data-out]').forEach(b=>b.classList.toggle('on',b.dataset.out==S.out));
  el.querySelector('#mvol').value=Math.round(S.vol*100);el.querySelector('#mvv').textContent=Math.round(S.vol*100)+'%';
  const L=el.querySelector('#mlights');if(L.children.length!=S.sig)L.innerHTML=Array.from({length:S.sig},(_,i)=>`<span class="ml ${i==0&&S.sig>1?'acc':''}">${i+1}</span>`).join('')}
@@ -66,6 +67,10 @@ export function metroEl(){if(el)return el;el=document.createElement('div');el.id
  kn.addEventListener('keydown',e=>{if(e.key=='ArrowUp'||e.key=='ArrowRight'){e.preventDefault();step(1)}if((e.key==' '||e.key=='Enter')&&e.target.id=='mtap'){e.preventDefault();tap()}if(e.key=='ArrowDown'||e.key=='ArrowLeft'){e.preventDefault();step(-1)}});
  el.querySelector('#mvol').oninput=e=>{S.vol=e.target.value/100;save();if(CH)CH.vol.gain.setTargetAtTime(S.vol,ctx.currentTime,0.01);ui()};
  ui();return el}
-window.__metro={get ctx(){return ctx},get S(){return S},get clicks(){return CLK},get accents(){return ACC},get state(){return{...S,running:!!timer,ctxTime:ctx&&ctx.currentTime,sched:beat}},setBpm:setBpm};
+window.__metro={get ctx(){return ctx},get S(){return S},get clicks(){return CLK},get accents(){return ACC},get state(){return{...S,running:!!timer,ctxTime:ctx&&ctx.currentTime,sched:beat}},setBpm:setBpm,
+ // v1.0.36: one-page นอมสด block drives the same engine (no second metronome)
+ start:()=>{if(!timer)return start()},stop:()=>{if(timer)stop()},toggle:()=>timer?stop():start(),tap:tap,get taps(){return taps.length},
+ setOut:o=>{if(o!='left'&&o!='right')o='both';S.out=o;save();route();ui()},setSig:n=>{n=+n;if(!SIGS[n])return;S.sig=n;beat=0;save();ui()},
+ on:f=>{LIS.add(f);return()=>LIS.delete(f)},off:f=>LIS.delete(f),sigs:SIGS};
 
 window.__metroNew={async render(name,vol){const sv=[ctx,master,NB,S.snd,CH,S.vol];ctx=new OfflineAudioContext(1,22050,44100);NB=null;S.vol=vol;CH=chain(ctx);master=CH.inp;CH.out.connect(ctx.destination);S.snd=name;click(0.01,true,false);click(0.26,false,false);const b=await ctx.startRendering();[ctx,master,NB,S.snd,CH,S.vol]=sv;return b.getChannelData(0)}};
