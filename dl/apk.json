@@ -1,6 +1,6 @@
 {
-  "build": 53,
-  "ver": "1.0.37",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b53-1.0.37/SetSod.apk",
-  "notes": "เสียงดังเท่าเดิม + กันเสียงแตก · ครอสเฟดเดอร์นุ่มขึ้น · บาลานซ์ใช้ได้ในหน้า 2 เด็ค"
+  "build": 54,
+  "ver": "1.0.38",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b54-1.0.38/SetSod.apk",
+  "notes": "แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว แถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ปุ่มคลังย้ายไปในช่องค้นหา"
 }
