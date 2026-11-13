@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.36';
+const APPV='1.0.37';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -45,11 +45,19 @@ let ctx,split,merge,split2,anL,anR,src=null,sh=null,startAt=0,offset=0,playing=f
 function initAudio(){if(ctx)return;try{if(navigator.audioSession)navigator.audioSession.type='playback'}catch(e){}ctx=new (window.AudioContext||window.webkitAudioContext)();
  ctx.onstatechange=()=>{blog('info','ctx '+ctx.state);if(ctx.state!=='running'&&window.__metro&&__metro.state.running)ctx.resume().catch(()=>{});if(playing&&ctx.state!=='running')intr83()};
  split=ctx.createChannelSplitter(2);merge=ctx.createChannelMerger(2);split2=ctx.createChannelSplitter(2);anL=ctx.createAnalyser();anR=ctx.createAnalyser();anL.fftSize=anR.fftSize=8192;
- gL=ctx.createGain();gR=ctx.createGain();cL=mkLim();cR=mkLim();split.connect(gL,0);split.connect(gR,1);gL.connect(cL);gR.connect(cR);
+ gL=ctx.createGain();gR=ctx.createGain();cL=mkLim();cR=mkLim();mL=mkCeil(1);mR=mkCeil(1);split.connect(gL,0);split.connect(gR,1);gL.connect(cL);gR.connect(cR);cL.connect(mL);cR.connect(mR);
  mkMixer();split2.connect(anL,0);split2.connect(anR,1);wire(false)}
-let gL,gR,cL,cR;function mkLim(){const c=ctx.createDynamicsCompressor();c.threshold.value=-1;c.knee.value=0;c.ratio.value=20;c.attack.value=0.001;c.release.value=0.1;c.channelCount=1;c.channelCountMode='explicit';return c}
+// v1.0.37: loudness + anti-clip. A DynamicsCompressor outputs 2 channels even when set to 1, and a StereoPanner fed 2 channels at pan ±1 sums L+R,
+// so <=1.0.36 the one-page path played every song +6 dB louder AFTER its limiter (peaks ~+6 dBFS = hard clipping on the device), while the Dual/home bus
+// (= the 1.0.36 home) had no doubling = ~6 dB quieter. Now every channel: limiter (mono, same settings) -> mkCeil: a mono WaveShaper that applies the
+// +6.02 dB makeup (OUTMK) inside its curve and soft-saturates to a ceiling of -0.3 dBFS (linear below -1.9 dBFS). Never a StereoPanner after a limiter.
+// 'ของเก่า' songs keep playing at the file's own level (one-page: raw path, no limiter; Dual: input pre-scaled by 1/OUTMK).
+const OUTMK=2;const CEIL=Math.pow(10,-0.3/20);let CEILC=null;
+function ceilCurve(){if(CEILC)return CEILC;const n=16385,K=0.8,c=new Float32Array(n);for(let i=0;i<n;i++){const x=(i/(n-1)*2-1)*OUTMK,a=Math.abs(x);c[i]=a<=K?x:Math.sign(x)*(K+(CEIL-K)*Math.tanh((a-K)/(CEIL-K)))}return CEILC=c}
+function mkCeil(ch){const w=ctx.createWaveShaper();w.curve=ceilCurve();w.oversample='none';w.channelCount=ch;w.channelCountMode='explicit';w.channelInterpretation='speakers';return w}
+let gL,gR,cL,cR,mL,mR;function mkLim(){const c=ctx.createDynamicsCompressor();c.threshold.value=-1;c.knee.value=0;c.ratio.value=20;c.attack.value=0.001;c.release.value=0.1;c.channelCount=1;c.channelCountMode='explicit';return c}
 const isOld=id=>{const s=SONG.get(id);return !!s&&s.f=='ของเก่า'};
-function wire(sw,raw){for(const n of [gL,gR,cL,cR])n.disconnect();const a=raw?gL:cL,b=raw?gR:cR;if(!raw){gL.connect(cL);gR.connect(cR)}a.connect(MX.f[0]);b.connect(MX.f[1]);applyMix()}
+function wire(sw,raw){for(const n of [gL,gR,cL,cR,mL,mR])n.disconnect();const a=raw?gL:mL,b=raw?gR:mR;if(!raw){gL.connect(cL);gR.connect(cR);cL.connect(mL);cR.connect(mR)}a.connect(MX.f[0]);b.connect(MX.f[1]);applyMix()}
 let NORM=true;
 function gainDb(id){const s=SONG.get(id),p=pref(id);let g=0;if(NORM&&!isOld(id)){const f=s&&fileOf(s),r=f&&FILES.get(f);g=(r&&r.src!='web'&&r.gn!=null)?r.gn:(s&&s.gn!=null?s.gn:0)}return g+(p.trim||0)}
 function applyGain(){if(!ctx||!cur)return;const v=Math.pow(10,gainDb(cur.id)/20);gL.gain.setTargetAtTime(v,ctx.currentTime,0.02);gR.gain.setTargetAtTime(v,ctx.currentTime,0.02);showVol()}
@@ -2422,7 +2430,7 @@ window.__ui66={tidy:tidy66,more:more66Open};
 
 // ===== v1.70: notification bell (band activity + system notices) · one-tap “+ เพิ่มเพลงให้วง” · per-song upload/cached status =====
 const NT={a:{},un:{},sys:null,sun:null,have:{},hun:{},hw:{}};
-const NTCHG={'1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
+const NTCHG={'1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
 SET65.push(['nt','#ntb','กระดิ่งแจ้งเตือน','เรื่องในวง (เพลงใหม่ ลิสต์ สมาชิก) และอัปเดตระบบ','ทั่วไป']);
 function ntOn(){return !hid65().has('nt')}
 function ntSeen(){return +localStorage.getItem('bp-nts')||0}
@@ -4024,7 +4032,11 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!DUAL.master){
       DUAL.master=stereo(ctx.createGain());
       DUAL.master.gain.value=1;
-      try{DUAL.master.connect(ctx.destination)}catch(e){}
+      // v1.0.37: master -> split -> per channel: limiter (mono) -> mkCeil (+6 dB makeup, soft ceiling <= -0.3 dBFS) -> merger -> out. No StereoPanner (it sums L+R).
+      const ms=ctx.createChannelSplitter(2),lL=mkLim(),lR=mkLim(),cL2=mkCeil(1),cR2=mkCeil(1),mg=ctx.createChannelMerger(2);
+      DUAL.master.connect(ms);ms.connect(lL,0);ms.connect(lR,1);lL.connect(cL2);lR.connect(cR2);cL2.connect(mg,0,0);cR2.connect(mg,0,1);
+      DUAL.out={sp:ms,lim:[lL,lR],ceil:[cL2,cR2],mg:mg};
+      try{mg.connect(ctx.destination)}catch(e){}
     }
     return DUAL.master;
   }
@@ -4033,10 +4045,14 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!ensureMaster())return null;
     // v1.0.36: per-song L/R mix (same rules as the single player: swap, strip vol/mute/solo, strip output) before EQ.
     const sp=ctx.createChannelSplitter(2);try{sp.channelInterpretation='speakers'}catch(e){}
+    // v1.0.37: routing via gains -> ChannelMerger (L/R/C like the one-page player: C = half each side), never a StereoPanner.
     const f0=ctx.createGain(),f1=ctx.createGain();
-    const p0=ctx.createStereoPanner(),p1=ctx.createStereoPanner();
+    const mg=ctx.createChannelMerger(2);
+    const r=[[ctx.createGain(),ctx.createGain()],[ctx.createGain(),ctx.createGain()]];
     const sum=stereo(ctx.createGain());
-    sp.connect(f0,0);sp.connect(f1,1);f0.connect(p0);f1.connect(p1);p0.connect(sum);p1.connect(sum);
+    sp.connect(f0,0);sp.connect(f1,1);
+    [f0,f1].forEach(function(f,ch){f.connect(r[ch][0]);f.connect(r[ch][1]);r[ch][0].connect(mg,0,0);r[ch][1].connect(mg,0,1);r[ch][0].gain.value=ch?0:1;r[ch][1].gain.value=ch?1:0});
+    mg.connect(sum);
     const eqL=stereo(ctx.createBiquadFilter());eqL.type='lowshelf';eqL.frequency.value=250;eqL.gain.value=0;
     const eqM=stereo(ctx.createBiquadFilter());eqM.type='peaking';eqM.frequency.value=1000;eqM.Q.value=0.7;eqM.gain.value=0;
     const eqH=stereo(ctx.createBiquadFilter());eqH.type='highshelf';eqH.frequency.value=4000;eqH.gain.value=0;
@@ -4044,7 +4060,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const xf=stereo(ctx.createGain());xf.gain.value=1;
     const fade=stereo(ctx.createGain());fade.gain.value=1;
     sum.connect(eqL);eqL.connect(eqM);eqM.connect(eqH);eqH.connect(vol);vol.connect(xf);xf.connect(fade);fade.connect(DUAL.master);
-    sl.bus={in:sp,sp:sp,f:[f0,f1],p:[p0,p1],sum:sum,eqL:eqL,eqM:eqM,eqH:eqH,vol:vol,xf:xf,fade:fade,mixSig:''};
+    sl.bus={in:sp,sp:sp,f:[f0,f1],r:r,mg:mg,pan:[-1,1],sum:sum,eqL:eqL,eqM:eqM,eqH:eqH,vol:vol,xf:xf,fade:fade,mixSig:''};
     applyDeckMix(sl,true);applyVol(sl);applyEq(sl);applyXf();
     return sl.bus;
   }
@@ -4057,6 +4073,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       for(let ch=0;ch<2;ch++){
         const st=stripOf(id,ch);
         out.f[ch]=(st.m||(solo&&!st.s))?0:db2(st.v);
+        try{if(typeof balMul==='function')out.f[ch]*=balMul(id,ch)}catch(e){}
         const o=st.o||outDef(ch,sw);
         out.pan[ch]=o==='L'?-1:o==='R'?1:0;
       }
@@ -4071,7 +4088,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const t=ctx.currentTime;
     for(let ch=0;ch<2;ch++){
       try{sl.bus.f[ch].gain.setTargetAtTime(m.f[ch],t,0.015)}catch(e){sl.bus.f[ch].gain.value=m.f[ch]}
-      try{sl.bus.p[ch].pan.setTargetAtTime(m.pan[ch],t,0.015)}catch(e){sl.bus.p[ch].pan.value=m.pan[ch]}
+      const pv=m.pan[ch],gl=(1-pv)/2,gr=(1+pv)/2;sl.bus.pan[ch]=pv;
+      try{sl.bus.r[ch][0].gain.setTargetAtTime(gl,t,0.015);sl.bus.r[ch][1].gain.setTargetAtTime(gr,t,0.015)}catch(e){sl.bus.r[ch][0].gain.value=gl;sl.bus.r[ch][1].gain.value=gr}
     }
     try{sl.bus.sum.gain.setTargetAtTime(m.M,t,0.015)}catch(e){sl.bus.sum.gain.value=m.M}
   }
@@ -4079,6 +4097,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!sl||!sl.bus)return;
     let g=sl.vol==null?1:sl.vol;
     try{if(sl.id&&typeof gainDb==='function')g*=Math.pow(10,gainDb(sl.id)/20)}catch(e){}
+    try{if(sl.id&&typeof isOld==='function'&&isOld(sl.id))g/=OUTMK}catch(e){}
     const t=ctx&&ctx.currentTime;
     if(t!=null){sl.bus.vol.gain.cancelScheduledValues(t);sl.bus.vol.gain.setTargetAtTime(Math.max(0,g),t,0.015)}
     else sl.bus.vol.gain.value=Math.max(0,g);
@@ -4092,7 +4111,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   }
   function applyXf(){
     const g=xfApplied(),t=ctx&&ctx.currentTime;
-    const set=function(sl,v){if(!sl.bus)return;if(t!=null){sl.bus.xf.gain.cancelScheduledValues(t);sl.bus.xf.gain.setValueAtTime(v,t)}else sl.bus.xf.gain.value=v};
+    const set=function(sl,v){if(!sl.bus)return;if(t!=null){sl.bus.xf.gain.cancelScheduledValues(t);sl.bus.xf.gain.setTargetAtTime(v,t,0.02)}else sl.bus.xf.gain.value=v};
     set(DUAL.a,g.a);set(DUAL.b,g.b);
   }
   function fadeResetSlot(sl){
@@ -4175,6 +4194,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     sl.ended=false;
     fadeResetSlot(sl);
     try{applyDeckMix(sl)}catch(e){}
+    try{applyVol(sl)}catch(e){} // v1.0.37: the deck's normalize/trim gain follows the song now loaded (was kept from the previous song on that deck)
     const dest=sl.bus.in;
     try{
       if(!needSh(p)){
@@ -5595,7 +5615,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     get holds(){return{hold:typeof PAD!=='undefined'?PAD.hold:null,wait:typeof PAD!=='undefined'?PAD.wait:null,sid:typeof PAD!=='undefined'?PAD.sid:null}},
     get state(){return{on:DUAL.on,a:DUAL.a.id,b:DUAL.b.id,audible:DUAL.audible,last:DUAL.last,xf:DUAL.xf,pick:DUAL.pick,cur:cur&&cur.id,playing:anyPlaying(),playingA:!!DUAL.a.playing,playingB:!!DUAL.b.playing,pos:posOf(slot(DUAL.last||DUAL.audible)),posA:posOf(DUAL.a),posB:posOf(DUAL.b),gains:gainsState(),shA:!!DUAL.a.sh,shB:!!DUAL.b.sh,cpuWarned:!!DUAL.cpuWarned,nodes:{a:!!(DUAL.a.src||DUAL.a.sh),b:!!(DUAL.b.src||DUAL.b.sh)}}},
     get gains(){return gainsState()},
-    setSong:function(id,ch){const s=SONG.get(id);if(!s)return false;if(ch&&ch.t!=null)s.t=ch.t;if(ch&&ch.a!=null)s.a=ch.a;if(ch&&'b' in ch)s.b=ch.b;return true},
+    setSong:function(id,ch){const s=SONG.get(id);if(!s)return false;if(ch&&ch.t!=null)s.t=ch.t;if(ch&&ch.a!=null)s.a=ch.a;if(ch&&'b' in ch)s.b=ch.b;if(ch&&ch.f!=null)s.f=ch.f;return true},
     loadSong:function(id,auto){return load(id,auto!==false)},
     setAuto:function(p){Object.assign(AUTO,p||{});try{saveAuto()}catch(e){}},
     get auto(){return{on:!!AUTO.on,xf:+(AUTO.xf||0),gap:+(AUTO.gap||0)}},
@@ -5629,7 +5649,10 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     caps:audioCaps,
     paintDock:paintDock,
     deckMix:function(w){return deckMix(slot(whichOf(w||'A')).id)},
-    busMix:function(w){const sl=slot(whichOf(w||'A'));if(!sl.bus||!sl.bus.f)return null;return{f:sl.bus.f.map(function(g){return +g.gain.value.toFixed(3)}),pan:sl.bus.p.map(function(p){return +p.pan.value.toFixed(3)}),M:+sl.bus.sum.gain.value.toFixed(3),sig:sl.bus.mixSig}},
+    busMix:function(w){const sl=slot(whichOf(w||'A'));if(!sl.bus||!sl.bus.f)return null;return{f:sl.bus.f.map(function(g){return +g.gain.value.toFixed(3)}),pan:sl.bus.pan.slice(),r:sl.bus.r.map(function(x){return x.map(function(g){return +g.gain.value.toFixed(3)})}),M:+sl.bus.sum.gain.value.toFixed(3),sig:sl.bus.mixSig}},
+    // v1.0.37 test hooks (simulated audio checks): output chain + seed a synthetic buffer for a song id
+    outChain:function(){ensureMaster();return DUAL.out?{ctx:ctx,master:DUAL.master,lim:DUAL.out.lim,ceil:DUAL.out.ceil,mg:DUAL.out.mg}:null},
+    seedBuf:function(id,L,R){initAudio();const b=ctx.createBuffer(2,L.length,ctx.sampleRate);b.copyToChannel(Float32Array.from(L),0);b.copyToChannel(Float32Array.from(R),1);cache.set(id,Promise.resolve(b));return b.duration},
     saveDeck:saveDeck,
     swapDeck:swapDeck
   };
