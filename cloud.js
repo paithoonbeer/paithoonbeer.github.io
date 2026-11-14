@@ -13,6 +13,9 @@ export async function init(){if(auth)return;
  A.onAuthStateChanged(auth,u=>{const was=user;user=u;if(u&&!was)_ev('login','');cbs.forEach(f=>f(u))})}
 export const onUser=f=>{cbs.push(f);if(auth)f(user)};
 export const me=()=>user;
+// v1.0.42: show the in-app "หน้าแอดมิน" button only to the owner / active staff (same test as admin.js; rules allow reading your own bp_staff doc)
+export async function admRole(){const u=user;if(!u||!u.email)return '';const em=String(u.email).trim().toLowerCase();if(em==='paithooningrad@gmail.com')return 'owner';
+ try{const d=await F.getDoc(F.doc(db,'bp_staff',em));return d.exists()&&d.data().on===true?'staff':''}catch(e){return ''}}
 // v1.0.35: the web app may live on a host that is NOT the authDomain's own site (paithoonbeer.github.io → puenduang.firebaseapp.com).
 // There signInWithRedirect breaks in Safari/WebKit (storage partitioning: "missing initial state"), so use signInWithPopup,
 // called synchronously from the click (no await before it) so iOS does not block the popup. setsod.web.app/beer-player keep the old flow.

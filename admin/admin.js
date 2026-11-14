@@ -29,7 +29,7 @@ const ic=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColo
 function toast(t,ms=3500){const e=$('toast');e.textContent=t;e.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(()=>e.style.display='none',ms)}
 const day=(o=0)=>new Date(Date.now()+7*3600e3-o*864e5).toISOString().slice(0,10);
 const TY={login:'เข้าใช้งาน',band_create:'สร้างวง',band_join:'เข้าร่วมวง',song_up:'อัปเพลงเข้าวง',set_save:'บันทึกลิสต์',set_band:'บันทึกลิสต์ให้วง',err:'ข้อผิดพลาด',hidden:'ซ่อนแอปขณะเล่น',kill:'แอปถูกปิด/รีสตาร์ท',stall:'เสียงสะดุด/เรนเดอร์ล้ม'};
-const SITE={'beer-player':'วง (beer-player)','beer-player-pro':'ลูกค้า (beer-player-pro)'};
+const SITE={'paithoonbeer':'เว็บแอป (paithoonbeer.github.io)','localhost':'แอป Android (APK)','setsod':'เว็บเก่า (setsod.web.app)','beer-player':'เว็บเก่า (beer-player)','beer-player-pro':'ลูกค้า (beer-player-pro)'};
 const tms847=t=>{try{if(t==null)return 0;if(typeof t.toMillis=='function')return t.toMillis();if(typeof t=='number')return t<1e12?t*1000:t;if(typeof t=='string'){const v=Date.parse(t);return isNaN(v)?0:v}if(t.seconds!=null)return t.seconds*1000+Math.round((t.nanoseconds||0)/1e6);if(t instanceof Date)return t.getTime()}catch(e){}return 0};
 const fmtT=t=>{const v=tms847(t);if(!v)return '—';try{return new Date(v).toLocaleString('th-TH',{timeZone:'Asia/Bangkok',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' น.'}catch(e){return '—'}};
 const QUOTA=1024**3,CAP=700*1024**2;
@@ -39,7 +39,7 @@ let LMSG='';function loginUI(msg){msg=msg||LMSG;LMSG='';$('nav').hidden=true;$('
  ${msg?`<div class="tag err">${esc(msg)}</div>`:''}
  <button class="pri" id="g">${ic('google')} เข้าด้วย Google</button>
  <div class="s" style="text-align:center">หรือ</div><input id="em" type="email" placeholder="อีเมลของคุณ" value="" autocomplete="username"><input id="pw" type="password" placeholder="รหัสผ่าน" autocomplete="current-password"><button id="ep">เข้าด้วยอีเมล</button></div>`;
- $('g').onclick=async()=>{try{await A.signInWithPopup(auth,new A.GoogleAuthProvider())}catch(e){loginUI(e.code=='auth/unauthorized-domain'?'โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Auth — ใช้อีเมล/รหัสผ่าน หรือเปิดที่ beer-player.web.app/admin/':(e.code||e.message))}};
+ $('g').onclick=async()=>{try{await A.signInWithPopup(auth,new A.GoogleAuthProvider())}catch(e){loginUI(e.code=='auth/unauthorized-domain'?'โดเมนนี้ยังไม่ได้รับอนุญาตใน Firebase Auth — ใช้อีเมล/รหัสผ่าน หรือเปิดหน้าแอดมินที่ https://paithoonbeer.github.io/admin/':(e.code||e.message))}};
  $('ep').onclick=async()=>{try{await A.signInWithEmailAndPassword(auth,$('em').value.trim(),$('pw').value)}catch(e){loginUI(e.code||e.message)}}}
 $('out').onclick=()=>A.signOut(auth);
 let VT=localStorage.getItem('adm-vt')||'ov',TAB=({bd:'pl',us:'pl',tl:'pl',an:'ov'})[VT]||VT;

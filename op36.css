@@ -390,7 +390,8 @@ body.op36-big #op-dualui .dd-mstep{width:30px;height:40px}
 @media (max-width:360px){#op-studio .op-stul{display:none}#op-studio{padding:0;width:44px}}
 
 /* ---------- v1.0.41: Studio key/tempo pending-save bar ---------- */
-#stusave{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom));z-index:95;display:flex;align-items:center;gap:8px;
+/* v1.0.42: in page flow under the key/tempo cards — never floats over the mixer M/S */
+#stusave{position:relative;margin:10px 0 2px;width:100%;display:flex;align-items:center;gap:8px;
   background:#2a1d05;border:1px solid #ff9d0a;color:#ffd79a;border-radius:14px;padding:6px 8px 6px 12px;box-shadow:0 6px 24px rgba(0,0,0,.5);
   font:700 13px/1.2 Inter,"Noto Sans Thai",system-ui,sans-serif;max-width:calc(100vw - 16px);box-sizing:border-box}
 #stusave[hidden]{display:none!important}
@@ -399,3 +400,5 @@ body.op36-big #op-dualui .dd-mstep{width:30px;height:40px}
 #stusave #stusv{background:#30d158;color:#04210d;border:0}
 #stusave #sturv{background:transparent;color:#ffd79a;border:1px solid rgba(255,157,10,.5)}
 body.live #stusave{display:none!important}
+#stusave.flt42{position:fixed;left:50%;transform:translateX(-50%);top:calc(8px + env(safe-area-inset-top));width:auto;margin:0;z-index:95}
+#stusave .t{flex:1}
