@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.39';
+const APPV='1.0.40';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -140,7 +140,7 @@ function mediaMeta(){try{if(!('mediaSession' in navigator)||!cur)return;const s=
 function msSetup(){if(!('mediaSession' in navigator))return;const H=(a,f)=>{try{navigator.mediaSession.setActionHandler(a,f)}catch(e){}};
  H('play',()=>{if(cur&&!playing){ctx.resume();start(ended?0:offset)}});H('pause',()=>{if(playing)stop()});H('stop',()=>{if(CNT)ciCancel();if(playing)stop();offset=0;sync()});
  H('nexttrack',()=>{const i=cur?SET.indexOf(cur.id):-1;if(i>=0&&SET[i+1])load(SET[i+1])});H('previoustrack',()=>{if(cur){const w=playing;stop();offset=0;if(w)start(0);sync()}});
- H('seekto',d=>{if(cur){if(playing)start(d.seekTime);else offset=d.seekTime;sync()}})}
+ H('seekto',d=>{if(cur){const at=(typeof mkWin=='function'?mkWin().ts:0)+(d.seekTime||0);if(playing)start(at);else offset=at;sync()}})}
 function saveState(){try{localStorage.setItem('bp-state',JSON.stringify({id:cur&&cur.id,pos:cur?pos():0,ended,t:Date.now()}))}catch(e){}}
 setInterval(()=>{if(playing)saveState()},2000);window.addEventListener('pagehide',saveState);
 function finish(){halt();playing=false;offset=0;ended=true;$('ps').textContent='✅ จบเพลง';$('sk').value=0;$('tm').textContent='0:00';relWake();render();autoNext()}
@@ -158,7 +158,7 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState=='
 addEventListener('pageshow',()=>{if(ctx&&ctx.state!=='running'&&ctx.state!=='closed')ctx.resume().catch(()=>{})});
 async function load(id,autoplay=true){cancelCd();initAudio();ctx.resume();try{ciCancel();if(cur&&cur.id!==id){const rb=realBpm(cur.id);if(rb)LASTBPM={b:rb,id:cur.id}}}catch(e){}stop();if(cur&&cur.id!==id){const o=cur.id;cur=null;const keep=new Set([id,...((window.__dual&&__dual.keepIds&&__dual.keepIds())||[])]);if(!keep.has(o)){cache.delete(o);for(const k of [...REND.keys()])if(k.startsWith(o+'|'))REND.delete(k)}try{for(const k of [...cache.keys()])if(!keep.has(k))cache.delete(k)}catch(e){for(const k of [...cache.keys()])if(k!==id)cache.delete(k)}}LOADT=Date.now();const s=SONG.get(id);const my=Symbol();load.tok=my;loadingId=id;sync();
  $('pt').textContent=s.t+(s.a?' – '+s.a:'');$('ps').textContent='⏳ กำลังเตรียมเพลง...';
- try{const buf=await decode(id);if(load.tok!==my)return;loadingId=null;cur={id,buf};offset=0;mediaMeta();studioLoad();$('du').textContent=fmt(buf.duration);showKey();$('ps').textContent='';
+ try{const buf=await decode(id);if(load.tok!==my)return;loadingId=null;cur={id,buf};offset=0;mediaMeta();studioLoad();barDur();showKey();$('ps').textContent='';
   if(autoplay)startCI(trS(id));else if(load.resumeAt){offset=load.resumeAt;load.resumeAt=0;$('ps').textContent='⏯ กู้คืนตำแหน่ง '+fmt(offset)+' — แตะ ▶ เพื่อเล่นต่อ'}preloadNext();render()}catch(e){blog('error','play fail '+id,e.message);if(load.tok===my){loadingId=null;$('ps').textContent='❌ เล่นไม่ได้: '+e.message;try{toast('❌ เล่นไม่ได้: '+e.message,6000)}catch(x){}sync()}}}
 // v1.83: the next song is decoded only when it is about to be needed (last 45 s, cued, pad-hold, or current ended) — 1 extra buffer max
 function nxOk(nx){try{if(window.__nocap)return true;if(!cur||!cur.buf)return true;if(nx&&(nx===cue||(typeof PAD!=='undefined'&&PAD.hold===nx)))return true;if(ended||!playing)return !!ended;const p=pref(cur.id),r=(p.tempo||100)/100;const e=typeof effEnd=='function'?effEnd():cur.buf.duration;return (e-pos())/r<45+(AUTO&&AUTO.xf||0)}catch(e){return true}}
@@ -174,9 +174,12 @@ function bigPlay(){const t0=trS(cur.id),at=ended?t0:offset;if(at<=t0+0.05)startC
 $('kd').onclick=()=>cur&&setPref({key:Math.max(-6,pref(cur.id).key-1)});
 $('ku').onclick=()=>cur&&setPref({key:Math.min(6,pref(cur.id).key+1)});
 $('sw').onclick=()=>cur&&setPref({swap:!pref(cur.id).swap});
-let drag=false;$('sk').oninput=()=>{drag=true;if(cur)$('tm').textContent=fmt($('sk').value/1000*cur.buf.duration)};
-$('sk').onchange=()=>{drag=false;if(!cur)return;const at=$('sk').value/1000*cur.buf.duration;if(playing)start(at);else{offset=at;ended=false}};
-setInterval(()=>{if(cur&&playing&&pos()>=effEnd()-0.08){finish();return}if(cur&&!drag){const p=pos();$('tm').textContent=fmt(p);$('sk').value=1000*p/cur.buf.duration}},250);
+// v1.0.40: the play bar (time / seek / length) counts inside the song's marks: 0:00 = start mark, length = end mark − start mark
+function mkWin(){if(!cur||!cur.buf)return{ts:0,te:0,len:0};const d=cur.buf.duration;let ts=0,te=d;try{ts=trS(cur.id);te=trE(cur.id,d)}catch(e){}return{ts,te,len:Math.max(0.01,te-ts)}}
+function barDur(){try{if(cur&&$('du'))$('du').textContent=fmt(mkWin().len)}catch(e){}}
+let drag=false;$('sk').oninput=()=>{drag=true;if(cur)$('tm').textContent=fmt($('sk').value/1000*mkWin().len)};
+$('sk').onchange=()=>{drag=false;if(!cur)return;const w=mkWin(),at=w.ts+$('sk').value/1000*w.len;if(playing)start(at);else{offset=at;ended=false}};
+setInterval(()=>{if(cur&&playing&&pos()>=effEnd()-0.08){finish();return}if(cur&&!drag){const w=mkWin(),p=Math.max(0,Math.min(w.len,pos()-w.ts));$('tm').textContent=fmt(p);$('sk').value=1000*p/w.len;const dt=fmt(w.len);if($('du').textContent!==dt)$('du').textContent=dt}},250);
 // ---------- UI ----------
 document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{{const pl=$('pl');if(pl&&pl.classList.contains('open')){pl.classList.remove('open');const e=$('exp');if(e)e.textContent='⌃'}}document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');view=b.dataset.v;chip='ทั้งหมด';render();scrollTo(0,0)});
 $('q').oninput=()=>render();
@@ -745,9 +748,9 @@ function wzBar(){const wb=document.querySelector('#studio .counter');if(!wb||$('
 // ---- trim ----
 async function trimSet(which,t,live){if(!cur)return;const id=cur.id,d=cur.buf.duration;const p={...pref(id)};
  if(t!=null){if(which=='s')p.ts=Math.max(0,Math.min(t,(p.te>0?p.te:d)-1));else p.te=Math.min(d,Math.max(t,(p.ts||0)+1));if(which=='e'&&p.te>=d-0.05)p.te=0;PREF.set(id,p)}
- if(!live){try{lvEdit(id,which=='s'?'ts':'te');lvUser('field')}catch(e){}await put('prefs',pref(id));durUpd();toast('✂️ '+(which=='s'?'จุดเริ่ม':'จุดจบ')+' '+fmtT(which=='s'?trS(id):trE(id,d)),1800,true)}
+ if(!live){try{lvEdit(id,which=='s'?'ts':'te');lvUser('field')}catch(e){}await put('prefs',pref(id));durUpd();barDur();toast('✂️ '+(which=='s'?'จุดเริ่ม':'จุดจบ')+' '+fmtT(which=='s'?trS(id):trE(id,d)),1800,true)}
  trimUI();waveDraw()}
-async function trimReset(){if(!cur)return;const p={...pref(cur.id)};delete p.ts;delete p.te;PREF.set(cur.id,p);try{lvEdit(cur.id,['ts','te']);lvUser('field')}catch(e){}await put('prefs',p);durUpd();trimUI();waveDraw();toast('↺ ไม่ตัดหัว/ท้าย',1500,true)}
+async function trimReset(){if(!cur)return;const p={...pref(cur.id)};delete p.ts;delete p.te;PREF.set(cur.id,p);try{lvEdit(cur.id,['ts','te']);lvUser('field')}catch(e){}await put('prefs',p);durUpd();barDur();trimUI();waveDraw();toast('↺ ไม่ตัดหัว/ท้าย',1500,true)}
 const fmtT=t=>{t=Math.max(0,t||0);return Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0')+'.'+Math.floor(t*10%10)};
 function trimUI(){const el=$('trimc');if(!el)return;if(!cur){$('trv').textContent='—';return}const d=cur.buf.duration;$('trv').textContent=fmtT(trS(cur.id))+' → '+fmtT(trE(cur.id,d))+'  ('+fmtT(trE(cur.id,d)-trS(cur.id))+')'}
 // ---- sync bpm ----
@@ -813,6 +816,8 @@ function applyMeta(){for(const [id,s] of SONG){if(s.X&&!s._pp){s._pp=1;const p=p
 {const _bb=baseBpm;baseBpm=function(id){const p=pref(id);if(p.bpm)return p.bpm;const s=SONG.get(id);if(s&&s._pb)return s._pb;return _bb(id)}}
 {const _bs=bpmSrc;bpmSrc=function(id){const p=pref(id),s=SONG.get(id);if(!p.bpm&&s&&s._pb)return'list';return _bs(id)}}
 let METAQ=[];
+// v1.0.40: a plain key typed in any case/♯♭/min form is saved in one clean spelling ("f#min" → "F#m"); anything else is kept as typed
+function normKey40(v){v=String(v||'').trim();const m=v.replace(/♯/g,'#').replace(/♭/g,'b').match(/^([A-Ga-g])([#b]?)\s*(m|min|minor|ไมเนอร์|maj|major|เมเจอร์)?$/);if(!m)return v;return m[1].toUpperCase()+(m[2]||'')+(m[3]&&!/^(maj|major|เมเจอร์)$/.test(m[3])?'m':'')}
 function openMeta(ids){METAQ=[...ids];metaShow()}
 function metaShow(){let el=$('metam');const id=METAQ[0];if(!id){if(el)el.remove();return}const s=SONG.get(id);if(!s){METAQ.shift();return metaShow()}
  if(!el){el=document.createElement('div');el.id='metam';document.body.appendChild(el)}
@@ -822,12 +827,22 @@ function metaShow(){let el=$('metam');const id=METAQ[0];if(!id){if(el)el.remove(
  <label>ชื่อเพลง<input id="mtt" data-noi18n value="${esc(s.t||'')}"></label><label>ศิลปิน<input id="mta" data-noi18n value="${esc(s.a||'')}"></label>
  <div class="row"><label>นอม<select id="mts"><option value="X">ไม่ทราบ</option><option value="L">นอมซ้าย</option><option value="R">นอมขวา</option></select></label>
  <label>หมวด<select id="mtf"><option value="">—</option>${CATS.map(c=>`<option value="${c}">${c}</option>`).join('')}</select></label></div>
- <div class="row"><label>BPM<input id="mtb" type="number" inputmode="decimal" min="30" max="300" value="${s.b||''}"></label><label>คีย์<input id="mtk" value="${esc(s.k||'')}"></label></div>
+ <div class="row"><label>BPM<input id="mtb" type="number" inputmode="decimal" min="30" max="300" value="${s.b||''}"></label><label>คีย์<input id="mtk" data-noi18n value="${esc(s.k||'')}" placeholder="เช่น E, F#m, Bb" autocapitalize="characters"></label></div>
+ <div class="row mtk40"><label>โน้ตคีย์<select id="mtkr" data-noi18n><option value="">ไม่ระบุ</option>${['C','C#','Db','D','D#','Eb','E','F','F#','Gb','G','G#','Ab','A','A#','Bb','B'].map(n=>`<option value="${n}">${n}</option>`).join('')}</select></label><label>เมเจอร์/ไมเนอร์<select id="mtkq"><option value="">เมเจอร์ (Major)</option><option value="m">ไมเนอร์ (Minor)</option></select></label></div>
+ <div class="small" id="mtkp" data-noi18n></div>
  <div class="small">ว่าง BPM = ตรวจจากนอมอัตโนมัติ</div>
  <div class="row" style="justify-content:flex-end"><button id="mtsk" class="hw">ข้าม</button><button id="mtok" class="hw okb">💾 บันทึก</button></div></div>`;
  $('mts').value=s.s=='L'||s.s=='R'?s.s:'X';$('mtf').value=CATS.includes(s.f)?s.f:'';
  $('mtx').onclick=()=>{METAQ=[];metaShow()};{const g=$('mt845');if(g){const o=$('mtok');o.textContent='บันทึกเฉพาะเครื่องนี้';o.classList.remove('okb');g.onclick=()=>{window.__b845=id;o.click()}}}$('mtsk').onclick=()=>{METAQ.shift();metaShow()};
- $('mtok').onclick=async()=>{const m={t:$('mtt').value.trim(),a:$('mta').value.trim(),f:$('mtf').value,b:$('mtb').value?+$('mtb').value:'',k:$('mtk').value.trim()};const s0=s.s,sv=$('mts').value;if(s.X||sv!='X')m.s=sv;if(sv!==(s0=='L'||s0=='R'?s0:'X'))m.so=1;else if(META[id]&&META[id].so)m.so=1;
+ // v1.0.40: key picker (note + major/minor) ⇄ the key box; shows exactly how the key will read everywhere
+ {const kr=$('mtkr'),kq=$('mtkq'),kt=$('mtk'),kp=$('mtkp');const fromTxt=()=>{const k=keyParse(kt.value);if(k){const m=kt.value.trim().replace(/♯/g,'#').replace(/♭/g,'b').match(/^([A-Ga-g])([#b]?)/);kr.value=m[1].toUpperCase()+(m[2]||'');kq.value=k.m?'m':''}else if(!kt.value.trim()){kr.value='';kq.value=''}prev()};
+  const prev=()=>{const v=kt.value.trim();if(!v){kp.textContent='ไม่ระบุคีย์ — ใช้คีย์ที่ตรวจอัตโนมัติ (ถ้ามี)';kp.style.color='';return}const k=keyParse(v);if(!k){kp.textContent='⚠️ อ่านคีย์ “'+v+'” ไม่ได้ — ใช้ตัวโน้ต A–G ตามด้วย # หรือ b และ m ถ้าเป็นไมเนอร์ (เช่น F#m)';kp.style.color='#ff9f0a';return}
+   const sh=(pref(id).key||0);kp.style.color='';kp.textContent='คีย์เพลง: '+keyName(k)+(k.m?' (ไมเนอร์)':' (เมเจอร์)')+(sh?' · ตอนนี้ปรับ '+(sh>0?'+':'')+sh+' → เล่นที่ '+keyName({r:k.r+sh,m:k.m,sp:k.sp}):'')};
+  const fromSel=()=>{kt.value=kr.value?kr.value+(kq.value||''):'';prev()};
+  kr.onchange=fromSel;kq.onchange=()=>{if(kr.value)fromSel()};kt.oninput=fromTxt;fromTxt()}
+ $('mtok').onclick=async()=>{const m={t:$('mtt').value.trim(),a:$('mta').value.trim(),f:$('mtf').value,b:$('mtb').value?+$('mtb').value:'',k:normKey40($('mtk').value)};const s0=s.s,sv=$('mts').value;if(s.X||sv!='X')m.s=sv;if(sv!==(s0=='L'||s0=='R'?s0:'X'))m.so=1;else if(META[id]&&META[id].so)m.so=1;
+  // v1.0.40: the key saved here is THE song key — an older Pad-panel key (pk, this device only) used to win over it, so the saved key "did not show"
+  try{if(m.k&&pref(id).pk&&keyParse(m.k))await setPrefFor(id,{pk:null})}catch(e){}
   META[id]=m;if(!m.b){s._pb=null;if(s.X)s.b=null}if(!m.f&&s.X)s.f='ไม่อยู่ในรายชื่อ';if(s.X&&m.s=='X')s.s='X';if(!s.X&&!m.s&&s._s0)s.s=s._s0;await put('kv',{k:'meta',v:META});applyMeta();render();if(s.s!==s0)side838(id,s,s0);meta842(id,s);try{beatUI();tempoUI()}catch(e){}{let nb=0;try{nb=bsFind842(id).length}catch(_){}const go=window.__b845===id;window.__b845=null;window.__ren844={id,scope:nb?'band':go?'send':'dev'};if(go&&!nb)go845(id);else toast(nb?'✅ บันทึกแล้ว · ส่งให้ทั้งวง':'📱 บันทึกเฉพาะเครื่องนี้ (ไม่ซิงก์ไปเครื่องอื่น/วง)',nb?1500:3500,true)}METAQ.shift();metaShow()}}
 window.__meta={open:openMeta,get:()=>META};
 {const _imp=importFiles;importFiles=async function(fs){const before=new Set(FILES.keys());const r=await _imp(fs);const xs=[...FILES.keys()].filter(n=>!before.has(n)&&!n.startsWith('web:')).map(n=>'X:'+n).filter(i=>SONG.has(i));if(xs.length)openMeta(xs);return r}}
@@ -1109,7 +1124,7 @@ function msIdleClear(why){if(playing)return;if(PV.el&&!PV.el.paused)return;
  try{if('mediaSession' in navigator){navigator.mediaSession.metadata=null;navigator.mediaSession.playbackState='none';try{navigator.mediaSession.setPositionState()}catch(e){}}}catch(e){}
  try{if(ctx&&ctx.state==='running'&&!(window.__metro&&__metro.state.running)&&!PAD.on)ctx.suspend()}catch(e){}IDLE.cleared=true;IDLE.n++;IDLE.why=why}
 function msIdleArm(ms){clearTimeout(IDLE.t);IDLE.t=setTimeout(()=>msIdleClear('timer'),ms)}
-function msPos(){try{if(!('mediaSession' in navigator)||!cur||!navigator.mediaSession.setPositionState)return;const d=cur&&cur.buf&&cur.buf.duration;if(!(d>0))return;const r=(window.__bp&&__bp.tempo&&__bp.tempo.p?__bp.tempo.p/100:1)||1;navigator.mediaSession.setPositionState({duration:d,playbackRate:r,position:Math.max(0,Math.min(d,pos()))})}catch(e){}}
+function msPos(){try{if(!('mediaSession' in navigator)||!cur||!navigator.mediaSession.setPositionState)return;const d=cur&&cur.buf&&cur.buf.duration;if(!(d>0))return;const r=(window.__bp&&__bp.tempo&&__bp.tempo.p?__bp.tempo.p/100:1)||1;const w=mkWin();navigator.mediaSession.setPositionState({duration:w.len,playbackRate:r,position:Math.max(0,Math.min(w.len,pos()-w.ts))})}catch(e){}}
 {const _st=start;start=function(...a){clearTimeout(IDLE.t);try{ctx&&ctx.state!=='running'&&ctx.resume()}catch(e){}const r=_st.apply(this,a);if(IDLE.cleared||!('mediaSession' in navigator)||!navigator.mediaSession.metadata){IDLE.cleared=false;mediaMeta()}msPos();return r}}
 {const _sp=stop;stop=function(...a){const r=_sp.apply(this,a);msPos();msIdleArm(ended||!cur?1500:20000);return r}}
 setInterval(()=>{if(playing)msPos();else if(!IDLE.t&&!IDLE.cleared)msIdleArm(20000)},5000);
@@ -1247,7 +1262,9 @@ function barBtns(){const mini=document.querySelector('#pl .mini'),ex=$('exp'),fb
 
 // ---- 3. Pad: synthesized ambient pad following song key (+ live key shift), on the music side ----
 const NOTE=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];const FLAT={Db:1,Eb:3,Gb:6,Ab:8,Bb:10,Cb:11,Fb:4,'E#':5,'B#':0};
-function keyParse(k){const m=String(k||'').trim().match(/^([A-G])([#b]?)(m(?!aj))?/);if(!m)return null;const n=m[1]+(m[2]||'');let r=NOTE.indexOf(n);if(r<0)r=FLAT[n];if(r==null||r<0)return null;return{r,m:m[3]?1:0}}
+// v1.0.40: keys are read the way people type them — any case for the note (e, eb, f#m, bbm), ♯/♭, "min"/"minor" for minor,
+// "E→Eb" uses the first key; the spelling (sharp/flat) the user typed is kept (sp) so D# shows as D#, not Eb.
+function keyParse(k){const m=String(k||'').trim().replace(/♯/g,'#').replace(/♭/g,'b').match(/^([A-Ga-g])([#b]?)\s*(m(?!aj)|min(?:or)?|ไมเนอร์)?(?=$|[^A-Za-z]|maj|M|dim|aug|sus|add)/);if(!m)return null;const n=m[1].toUpperCase()+(m[2]||'');let r=NOTE.indexOf(n);if(r<0)r=FLAT[n];if(r==null||r<0)return null;return{r,m:m[3]?1:0,sp:m[2]||''}}
 const KEYD=JSON.parse(localStorage.getItem('bp-keyd')||'{}');
 function fft(re,im){const n=re.length;for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){[re[i],re[j]]=[re[j],re[i]];[im[i],im[j]]=[im[j],im[i]]}}
  for(let len=2;len<=n;len<<=1){const a=-2*Math.PI/len,wr=Math.cos(a),wi=Math.sin(a);for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let j=0;j<len/2;j++){const k=i+j,l=k+len/2,tr=re[l]*cr-im[l]*ci,ti=re[l]*ci+im[l]*cr;re[l]=re[k]-tr;im[l]=im[k]-ti;re[k]+=tr;im[k]+=ti;const nr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=nr}}}}
@@ -1293,7 +1310,7 @@ function padCard(){const fr=$('fdrow');if(!fr||$('padc'))return;const c=document
  $('padt').onclick=()=>padToggle();$('padv').oninput=e=>padVol(+e.target.value);$('padfi').onchange=e=>{PAD.fi=+e.target.value;localStorage.setItem('bp-padfi',PAD.fi)};
  $('padsel').onchange=async e=>{await setPref({pk:e.target.value||null});padUI();padRetune()};$('padvis').onchange=e=>{BARV.pad=e.target.checked;localStorage.setItem('bp-barbtn',JSON.stringify(BARV));barBtns()};padUI()}
 function padUI(){const t=$('padt'),b=$('padb');if(t){t.textContent='🎹 Pad: '+(PAD.on?'เปิด':'ปิด');t.classList.toggle('on',PAD.on)}if(b)b.classList.toggle('on',PAD.on);
- const k=cur&&songKey(cur.id),sh=cur?pref(cur.id).key||0:0;if($('padk'))$('padk').textContent=k?keyName({r:((k.r+sh)%12+12)%12,m:k.m}):'—';
+ const k=cur&&songKey(cur.id),sh=cur?pref(cur.id).key||0:0;if($('padk'))$('padk').textContent=k?keyName({r:((k.r+sh)%12+12)%12,m:k.m,sp:k.sp}):'—';
  if($('padks'))$('padks').textContent=k?({manual:'(ตั้งเอง)',list:'(จากรายชื่อ)',auto:'(ตรวจอัตโนมัติ)'}[k.src]+(sh?` · เพลงเดิม ${keyName(k)} ${sh>0?'+':''}${sh}`:'')):'(ยังไม่รู้)';
  const s=$('padsel');if(s&&cur){const v=pref(cur.id).pk||'';if(s.value!==v)s.value=v}}
 window.__pad={get s(){return{on:PAD.on,root:PAD.root,m:PAD.m,out:PAD.out,vol:PAD.vol,gain:PAD.g&&PAD.g.gain.value}},on:padOn,off:padOff,detectKey:id=>detectKey(cur.buf,padCh()),songKey,KEYD};
@@ -1948,7 +1965,7 @@ function svDate(t){try{return new Date(t).toLocaleDateString(LANG=='en'?'en-GB':
 window.__sv60={load:svLoad,add:svAdd,apply:svApply,open:(...a)=>svOpen(...a),get l(){return SV60.l}};
 
 // ===== v1.62 preview: "Stage" theme (default) — compact setlist cards with key/BPM chips + stage transport row =====
-function scChips(i){try{const k=songKey(i),sh=pref(i).key||0,b=realBpm(i);const kn=k?keyName({r:((k.r+sh)%12+12)%12,m:k.m}):'';
+function scChips(i){try{const k=songKey(i),sh=pref(i).key||0,b=realBpm(i);const kn=k?keyName({r:((k.r+sh)%12+12)%12,m:k.m,sp:k.sp}):'';
  return `<div class="scc">${kn?`<span class="chip k">${kn}</span>`:''}${b?`<span class="chip b">${Math.round(b)} BPM</span>`:''}</div>`}catch(e){return''}}
 function tp62(){const ctr=document.querySelector('#studio .counter');if(!ctr)return;let t=$('tp62');
  if(!t){t=document.createElement('div');t.id='tp62';t.className='tp62';t.dataset.noicon=1;const I=n=>(window.bpIcon&&bpIcon(n))||'';
@@ -2262,7 +2279,7 @@ let AN82=Date.now();['pointerdown','keydown'].forEach(ev=>addEventListener(ev,()
 setInterval(()=>{if(BC.anBusy)return;const ps=pstate();if(ps=='playing'||ps=='loading')return;if(document.visibilityState!=='visible'||(typeof PAD!=='undefined'&&PAD.on)||Date.now()-AN82<30000||(ctx&&ctx.state!=='running'&&cur))return;const id=SET.find(i=>!BC.an.has(i)&&(!songKey(i)&&!KEYD[i]||!(i in BPMD)&&!baseBpm(i))&&(()=>{const s=SONG.get(i);return s&&fileOf(s)&&!s.bc})());if(!id)return;
  BC.an.add(id);BC.anBusy=1;an65(id).catch(e=>blog('warn','analyse '+id,e.message)).finally(()=>BC.anBusy=0)},4000);
 // --- Studio: per-song pad + preview on the strip cards; key/BPM always shown ---
-scChips=function(i){let kn='–',bb='–';try{const k=songKey(i),sh=pref(i).key||0,b=realBpm(i);if(k)kn=keyName({r:((k.r+sh)%12+12)%12,m:k.m});if(b)bb=Math.round(b)}catch(e){}
+scChips=function(i){let kn='–',bb='–';try{const k=songKey(i),sh=pref(i).key||0,b=realBpm(i);if(k)kn=keyName({r:((k.r+sh)%12+12)%12,m:k.m,sp:k.sp});if(b)bb=Math.round(b)}catch(e){}
  return `<div class="scc"><span class="chip k">${kn}</span><span class="chip b">${bb} BPM</span></div><div class="sc65"><button type="button" class="hw" data-p65="pad" data-id="${esc(i)}" aria-label="Pad ลูปคีย์เพลง" title="Pad ลูปคีย์เพลง">${ico60('keyboard')}</button><button type="button" class="hw" data-p65="pv" data-id="${esc(i)}" aria-label="พรีวิว" title="พรีวิว (ออกฝั่งเดียวกับนอม)">${ico60('headphones')}</button></div>`};
 function clickSide65(id){try{const m=mixOf(id);const o=m.c&&m.c.o;return o=='L'||o=='R'?o:outDef(clickCh(id),pref(id).swap)}catch(e){return 'L'}}
 async function pv65(id){if(PV.id==id&&PV.el&&!PV.el.paused){pvStop();return}const o=PV.out,dev=String(o||'').startsWith('dev:');if(!dev)PV.out=clickSide65(id);try{await pvPlay(id)}finally{if(!dev)PV.out=o}}
@@ -2280,7 +2297,7 @@ padSongStart=function(){if(!PAD.on||!PAD.wait||!cur)return;if(PAD.sid&&PAD.sid!=
 // --- Live: tempo −/+, auto-continue, big key + BPM ---
 function lv65(){const lv=$('livelist');if(!lv||!document.body.classList.contains('live'))return;const nw=lv.querySelector('.lvnow');if(!nw)return;let b=lv.querySelector('.lv65');
  if(!b){b=document.createElement('div');b.className='lv65';b.innerHTML=`<div class="lv65k"><span class="lab">KEY</span><b id="lv65k">–</b></div><div class="lv65t"><button type="button" class="hw" data-l65="-1" aria-label="ลด Tempo">−</button><div class="lv65bv"><b id="lv65b">–</b><span class="lab">BPM</span></div><button type="button" class="hw" data-l65="1" aria-label="เพิ่ม Tempo">+</button></div><button type="button" class="hw lv65a" data-l65="a" aria-label="เล่นต่อเนื่องอัตโนมัติ">${ico60('repeat')}<span>ต่อเนื่อง</span></button>`;nw.after(b)}
- const id=cur&&cur.id;let kn='–',bb='–';if(id){try{const k=songKey(id),sh=pref(id).key||0,r=realBpm(id);if(k)kn=keyName({r:((k.r+sh)%12+12)%12,m:k.m});if(r)bb=Math.round(r);else bb=(pref(id).tempo||100)+'%'}catch(e){}}
+ const id=cur&&cur.id;let kn='–',bb='–';if(id){try{const k=songKey(id),sh=pref(id).key||0,r=realBpm(id);if(k)kn=keyName({r:((k.r+sh)%12+12)%12,m:k.m,sp:k.sp});if(r)bb=Math.round(r);else bb=(pref(id).tempo||100)+'%'}catch(e){}}
  const st=(e,t)=>{if(e&&e.textContent!=t)e.textContent=t};st(b.querySelector('#lv65k'),kn);st(b.querySelector('#lv65b'),bb);st(b.querySelector('.lv65bv .lab'),String(bb).endsWith('%')?'TEMPO':'BPM');const a=b.querySelector('.lv65a');a.classList.toggle('on',!!AUTO.on);if(a.getAttribute('aria-pressed')!==(AUTO.on?'true':'false'))a.setAttribute('aria-pressed',AUTO.on?'true':'false')}
 function tempoStep65(d){if(!cur){toast('เลือกเพลงก่อน',1500);return}const id=cur.id,t0=pref(id).tempo||100,b=baseBpm(id);let t=b?(Math.round(b*t0/100)+d)/b*100:t0+d;if(Math.round(t*2)/2==t0)t=t0+d*0.5;
  tempoLive(t);put('prefs',pref(id)).catch(()=>{});try{tempoUI()}catch(e){}try{syncUI()}catch(e){}stripKey='';lv65()}
@@ -2295,8 +2312,10 @@ window.__bc65={song:i=>SONG.get(i),files:()=>[...FILES.keys()],cld:()=>CLD.mod,s
 
 // --- key names everywhere (transposed): C, G#m, Bb … ---
 const KN65=[['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'],['Cm','C#m','Dm','Ebm','Em','Fm','F#m','Gm','G#m','Am','Bbm','Bm']];
-keyName=function(k){return k?KN65[k.m?1:0][((k.r%12)+12)%12]:'—'};
-function kl65(id,opt){try{const p=pref(id),k=songKey(id);if(k)return keyName({r:k.r+(p.key||0),m:k.m});}catch(e){}return opt?'':'—'}
+// v1.0.40: names follow the spelling of the saved key (typed D# → sharps, typed Eb → flats); otherwise the usual names above
+const KNS40=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],KNF40=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+keyName=function(k){if(!k)return'—';const i=((k.r%12)+12)%12;if(k.sp==='#')return KNS40[i]+(k.m?'m':'');if(k.sp==='b')return KNF40[i]+(k.m?'m':'');return KN65[k.m?1:0][i]};
+function kl65(id,opt){try{const p=pref(id),k=songKey(id);if(k)return keyName({r:k.r+(p.key||0),m:k.m,sp:k.sp});}catch(e){}return opt?'':'—'}
 
 // ===== v1.65: song thumbnails (embedded cover art → custom photo → line icon) =====
 const ART=new Map(),ARTB=new Map();let ARTV=0;
@@ -2474,7 +2493,7 @@ window.__ui66={tidy:tidy66,more:more66Open};
 
 // ===== v1.70: notification bell (band activity + system notices) · one-tap “+ เพิ่มเพลงให้วง” · per-song upload/cached status =====
 const NT={a:{},un:{},sys:null,sun:null,have:{},hun:{},hw:{}};
-const NTCHG={'1.0.39':'เพลงในคลังโหลดจากเซิร์ฟเวอร์ใหม่ (สำรองอัตโนมัติถ้าเซิร์ฟเวอร์ไหนล่ม) · เด็คบอกชัดเมื่อโหลดเพลงไม่ได้ · เพลงที่เคยเล่นเก็บในเครื่อง ไม่ต้องโหลดซ้ำ','1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
+const NTCHG={'1.0.40':'เอาหน้า 2 เด็คแบบจานใหญ่ออก (ซ้ำกับหน้าไลฟ์) · ปุ่มสตูดิโอมาอยู่ตรงนั้นแทน แตะอีกครั้งกลับหน้าไลฟ์ · มาร์คเพลง: เด็คเริ่มที่มาร์คเริ่มตั้งแต่กดเล่นครั้งแรก ไม่เล่นส่วนที่ตัดออก และแถบเวลาในสตูดิโอ/หน้าจอล็อกนับเฉพาะช่วงที่มาร์ค · คีย์แสดงตรงตามที่บันทึก (D# ไม่กลายเป็น Eb) · เลือกคีย์ไมเนอร์ได้ (โน้ต + เมเจอร์/ไมเนอร์) พิมพ์ตัวเล็กก็อ่านถูก','1.0.39':'เพลงในคลังโหลดจากเซิร์ฟเวอร์ใหม่ (สำรองอัตโนมัติถ้าเซิร์ฟเวอร์ไหนล่ม) · เด็คบอกชัดเมื่อโหลดเพลงไม่ได้ · เพลงที่เคยเล่นเก็บในเครื่อง ไม่ต้องโหลดซ้ำ','1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
 SET65.push(['nt','#ntb','กระดิ่งแจ้งเตือน','เรื่องในวง (เพลงใหม่ ลิสต์ สมาชิก) และอัปเดตระบบ','ทั่วไป']);
 function ntOn(){return !hid65().has('nt')}
 function ntSeen(){return +localStorage.getItem('bp-nts')||0}
@@ -3012,9 +3031,11 @@ th65=function(id,c){const u=c?artOf(id):thUrl(id);return `<span class="th65${c?'
 const LW={k:'',img:null,drag:null};
 function lwEl(){const lv=$('livelist');if(!lv||!document.body.classList.contains('live'))return null;const nw=lv.querySelector('.lvnow');if(!nw)return null;let w=lv.querySelector('#lvw');
  if(!w){nw.insertAdjacentHTML('afterend','<div id="lvw" class="lvw" role="slider" aria-label="ตำแหน่งเพลง — ลากแล้วปล่อยเพื่อเลื่อน" tabindex="0"><canvas></canvas><i class="lwh"></i><i class="lwg" hidden></i><b class="lwt" hidden></b></div>');w=lv.querySelector('#lvw');LW.k='';lwWire(w)}return w}
-function lwBg(w){const cv=w.querySelector('canvas');const W=Math.round(w.clientWidth*devicePixelRatio),H=Math.round(w.clientHeight*devicePixelRatio);const P=cur&&PEAKS.get(cur.id);const k=(cur?cur.id:'')+'|'+W+'|'+H+'|'+(P?P[0].length:0);if(k===LW.k)return;LW.k=k;
+function lwBg(w){const cv=w.querySelector('canvas');const W=Math.round(w.clientWidth*devicePixelRatio),H=Math.round(w.clientHeight*devicePixelRatio);const P=cur&&PEAKS.get(cur.id);let mts=0,mte=0;try{if(cur&&cur.buf){mts=trS(cur.id);mte=trE(cur.id,cur.buf.duration)}}catch(e){}const k=(cur?cur.id:'')+'|'+W+'|'+H+'|'+(P?P[0].length:0)+'|'+mts+'|'+mte;if(k===LW.k)return;LW.k=k;
  cv.width=W;cv.height=H;const g=cv.getContext('2d');g.clearRect(0,0,W,H);if(!P||!W)return;const ci=clickCh(cur.id),a=P[1-ci],b=P[ci],n=a.length;g.fillStyle='#5ac8fa';
- for(let x=0;x<W;x++){const i=Math.floor(x/W*n),v=Math.max(a[i]||0,(b[i]||0)*.6),h=Math.max(1,v*H*.9);g.fillRect(x,(H-h)/2,1,h)}}
+ for(let x=0;x<W;x++){const i=Math.floor(x/W*n),v=Math.max(a[i]||0,(b[i]||0)*.6),h=Math.max(1,v*H*.9);g.fillRect(x,(H-h)/2,1,h)}
+ // v1.0.40: dim the parts outside the song's start/end marks
+ try{const d=cur.buf.duration;if(d>0&&(mts>0||mte<d-0.05)){g.fillStyle='rgba(0,0,0,.6)';const xs=Math.round(mts/d*W),xe=Math.round(mte/d*W);if(xs>0)g.fillRect(0,0,xs,H);if(xe<W)g.fillRect(xe,0,W-xe,H);g.fillStyle='#ff453a';g.fillRect(xs,0,Math.max(1,devicePixelRatio),H);g.fillRect(Math.min(W-1,xe),0,Math.max(1,devicePixelRatio),H)}}catch(e){}}
 function lwTick(){const w=lwEl();if(!w)return;if(!cur){if(!w.hidden)w.hidden=true;return}if(w.hidden)w.hidden=false;if(!PEAKS.has(cur.id)&&cur.buf){try{peaks(cur.id,cur.buf)}catch(e){}}lwBg(w);
  const d=cur.buf?cur.buf.duration:0;const f=d?Math.min(1,Math.max(0,pos()/d)):0;const h=w.querySelector('.lwh'),tx='translateX('+(f*w.clientWidth).toFixed(1)+'px)';if(h.style.transform!==tx)h.style.transform=tx;{const av=String(Math.round(f*100));if(w.getAttribute('aria-valuenow')!==av)w.setAttribute('aria-valuenow',av)}}
 function lwWire(w){const fr=e=>{const r=w.getBoundingClientRect();return Math.min(1,Math.max(0,(e.clientX-r.left)/r.width))};
@@ -3384,7 +3405,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       '<header id="op-top">'+
         '<div class="op-logo"><div class="op-mark">S</div><div class="op-word">SetSod</div></div>'+
         '<div class="op-band"><b id="op-bandn"></b><span class="op-sync" id="op-sync" title="ซิงก์กับวงแล้ว"><i></i><span id="op-synct">ซิงก์แล้ว</span></span></div>'+
-        '<button type="button" id="op-dual" class="hw" aria-pressed="false" aria-label="โหมด 2 เด็ค" title="โหมด 2 เด็ค"><svg class="op-dualico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round" aria-hidden="true"><circle cx="5.2" cy="12" r="4.15"/><circle cx="5.2" cy="12" r="1.15" fill="currentColor" stroke="none"/><circle cx="18.8" cy="12" r="4.15"/><circle cx="18.8" cy="12" r="1.15" fill="currentColor" stroke="none"/></svg></button>'+
+        '<button type="button" id="op-studio" class="hw" aria-pressed="false" aria-label="โหมดสตูดิโอ (มิกเซอร์ / คลื่นเสียง / stems / ตัดหัว-ท้าย)" title="โหมดสตูดิโอ"><svg class="op-stuico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16"/><rect x="3.6" y="12.5" width="4.8" height="3.2" rx="1" fill="currentColor" stroke="none"/><rect x="9.6" y="6.5" width="4.8" height="3.2" rx="1" fill="currentColor" stroke="none"/><rect x="15.6" y="10" width="4.8" height="3.2" rx="1" fill="currentColor" stroke="none"/></svg><span class="op-stul">สตูดิโอ</span></button>'+
         '<button class="av" id="op-av" type="button" aria-label="เมนูบัญชี การแจ้งเตือน และอื่นๆ">?<span class="op-dot" id="op-dot">0</span></button>'+
       '</header>'+
       '<div id="op-dock"><button class="op-search" type="button" id="op-search" aria-label="ค้นคลังเพื่อเพิ่มเข้าลิสต์">'+svg.search+' ค้นคลัง แล้วแตะเพื่อเพิ่มเข้าลิสต์</button></div>'+
@@ -4010,7 +4031,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     try{
       const id=sl&&sl.id;if(!id)return opt?'':'—';
       const p=deckPref(sl),k=songKey(id);
-      if(k)return keyName({r:k.r+(p.key||0),m:k.m});
+      if(k)return keyName({r:k.r+(p.key||0),m:k.m,sp:k.sp});
     }catch(e){}
     return opt?'':'—';
   }
@@ -4250,6 +4271,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const cueAt=(typeof trS==='function'?trS(sl.id):0)||0;
     let want=at!=null?at:sl.offset;
     if(!(want>=0)||want>dur-0.08)want=cueAt;
+    // v1.0.40: a deck always plays inside its marks — never before the start mark, and at/after the end mark it restarts from the start mark
+    try{const te=trE(sl.id,dur);if(want<cueAt)want=cueAt;if(want>=te-0.08)want=cueAt}catch(e){}
     sl.offset=Math.max(0,Math.min(want,dur-0.05));
     sl.ended=false;
     fadeResetSlot(sl);
@@ -4802,7 +4825,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     if(!DUAL.on)return;
     const t=e.target.closest('[data-play],[data-sid],#main [data-id],.sc[data-sid],#livelist [data-sid],.dd-song');
     if(!t)return;
-    if(e.target.closest('[data-p65],[data-dd],.dd-song button,#op-dual,#op-dualui,[data-op36id],.op36ab'))return;
+    if(e.target.closest('[data-p65],[data-dd],.dd-song button,#op-studio,#op-dualui,[data-op36id],.op36ab'))return;
     const id=t.getAttribute('data-play')||t.getAttribute('data-sid')||t.getAttribute('data-id')||t.dataset.play||t.dataset.sid||t.dataset.id;
     if(!id||!SONG.get(id))return;
     e.preventDefault();e.stopPropagation();
@@ -4816,7 +4839,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const sl=slot(w);
     const same=sl.id===id&&sl.buf;
     assignId(sl,id);
-    if(!same){sl.offset=0;sl.ended=false}
+    if(!same){sl.offset=(typeof trS==='function'?trS(id):0)||0;sl.ended=false} // v1.0.40: a freshly loaded deck rests at the song's start mark
     if(!SET.includes(id)){try{SET.push(id)}catch(e){}}
     sl.err=null;
     try{const b=await bufOf(id);if(sl.id===id&&b)sl.buf=b;
@@ -5373,24 +5396,35 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     }
   }
 
-  // ---- v1.0.36: the 2-deck page IS the live home. #op-dual switches compact ↔ big turntables. ----
-  function bigOn(){return document.body.classList.contains('op36-big')}
-  function setBig(on){
-    on=!!on;
-    document.body.classList.toggle('op36-big',on);
-    try{localStorage.setItem('bp-op36big',on?'1':'0')}catch(e){}
-    const btn=$el('op-dual');
-    if(btn){btn.classList.toggle('on',on);btn.setAttribute('aria-pressed',on?'true':'false')}
-    try{placeUi();paint()}catch(e){}
+  // ---- v1.0.40: the separate big-turntables "2 deck" page is gone (it duplicated the live page). The live home is the
+  // compact 2-deck page (insert / SFX / crossfader / routing all stay there). The top-bar spot that toggled it is now
+  // the Studio button: live → Studio (mixer / waveform / stems / trim marks), Studio → back to live. ----
+  function bigOn(){return false}
+  function setBig(){
+    document.body.classList.remove('op36-big');
+    try{localStorage.removeItem('bp-op36big')}catch(e){}
   }
-  try{if(localStorage.getItem('bp-op36big')==='1')document.body.classList.add('op36-big')}catch(e){}
+  try{document.body.classList.remove('op36-big');localStorage.removeItem('bp-op36big')}catch(e){}
+  function stuSync(){
+    const btn=$el('op-studio');if(!btn)return;
+    const inStu=!document.body.classList.contains('live');
+    btn.classList.toggle('on',inStu);btn.setAttribute('aria-pressed',inStu?'true':'false');
+    const l=btn.querySelector('.op-stul'),t=inStu?'ไลฟ์':'สตูดิโอ';
+    if(l&&l.textContent!==t)l.textContent=t;
+    const al=inStu?'กลับหน้าไลฟ์ (2 เด็ค)':'โหมดสตูดิโอ (มิกเซอร์ / คลื่นเสียง / stems / ตัดหัว-ท้าย)';
+    if(btn.getAttribute('aria-label')!==al){btn.setAttribute('aria-label',al);btn.title=inStu?'กลับหน้าไลฟ์':'โหมดสตูดิโอ'}
+  }
   function toggleDual(e){
     if(e){try{e.preventDefault();e.stopPropagation()}catch(_){}}
     const now=Date.now();
     if(now-(DUAL._togAt||0)<400)return;
     DUAL._togAt=now;
-    if(!DUAL.on){setOn(true);return}
-    setBig(!bigOn());
+    const toStudio=document.body.classList.contains('live');
+    try{if(typeof closeMenu==='function')closeMenu()}catch(_){}
+    try{setLive(!toStudio)}catch(_){}
+    // land straight on the Studio tools (mixer / waveform / stems / trim) when a song is loaded
+    try{if(toStudio&&cur){const pl=document.getElementById('pl'),ex=document.getElementById('exp');if(pl&&ex&&!pl.classList.contains('open'))ex.click()}}catch(_){}
+    stuSync();
   }
   function setOn(on){
     on=!!on;
@@ -5398,8 +5432,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     DUAL.parked=false;
     DUAL.on=on;
     document.body.classList.toggle('op-dual',on);
-    const btn=$el('op-dual');
-    if(btn){const b=on&&bigOn();btn.classList.toggle('on',b);btn.setAttribute('aria-pressed',b?'true':'false')}
+    try{stuSync()}catch(e){}
     const ui=$el('op-dualui');
     if(on){
       ensureUi();
@@ -5459,23 +5492,24 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     try{paint()}catch(e){}
     if(anyPlaying()&&!raf)raf=requestAnimationFrame(loop);
   }
-  {const _sl=setLive;setLive=function(){const r=_sl.apply(this,arguments);try{homeEdge()}catch(e){}return r}}
+  {const _sl=setLive;setLive=function(){const r=_sl.apply(this,arguments);try{homeEdge()}catch(e){}try{stuSync()}catch(e){}return r}}
 
   function bindTop(){
-    let btn=$el('op-dual');
-    const ico='<svg class="op-dualico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="12" r="4.6"/><circle cx="7" cy="12" r="1.2"/><circle cx="17" cy="12" r="4.6"/><circle cx="17" cy="12" r="1.2"/></svg>';
+    {const old=$el('op-dual');if(old)old.remove()}
+    let btn=$el('op-studio');
     if(!btn){
       const av=$el('op-av'),top=$el('op-top');
-      const h='<button type="button" id="op-dual" class="hw" aria-pressed="false" aria-label="โหมด 2 เด็ค" title="โหมด 2 เด็ค">'+ico+'</button>';
+      const h='<button type="button" id="op-studio" class="hw" aria-pressed="false" aria-label="โหมดสตูดิโอ (มิกเซอร์ / คลื่นเสียง / stems / ตัดหัว-ท้าย)" title="โหมดสตูดิโอ"><svg class="op-stuico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 4v16M12 4v16M18 4v16"/><rect x="3.6" y="12.5" width="4.8" height="3.2" rx="1" fill="currentColor" stroke="none"/><rect x="9.6" y="6.5" width="4.8" height="3.2" rx="1" fill="currentColor" stroke="none"/><rect x="15.6" y="10" width="4.8" height="3.2" rx="1" fill="currentColor" stroke="none"/></svg><span class="op-stul">สตูดิโอ</span></button>';
       if(av)av.insertAdjacentHTML('beforebegin',h);
       else if(top)top.insertAdjacentHTML('beforeend',h);
-      btn=$el('op-dual');
+      btn=$el('op-studio');
     }
     if(btn&&!btn._bound){
       btn._bound=1;
       btn.addEventListener('click',function(e){toggleDual(e)});
       btn.addEventListener('pointerdown',function(e){e.stopPropagation()});
     }
+    stuSync();
     // v1.0.38: the top คลัง button is gone (search already covers it). The library is one tap away from the
     // book icon inside the search box (#dd-qlib) and from each deck's load icon.
     {const old=$el('op-lib');if(old)old.remove()}
@@ -5515,30 +5549,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     });
   }
 
-  function maybeHint(){
-    if(DUAL.on||DUAL.hinted)return;
-    try{if(localStorage.getItem('bp-dual-hint')==='1')return}catch(e){}
-    const w=window.innerWidth,h=window.innerHeight;
-    if(!((w>=800)||(w>h&&w>=700)))return;
-    const btn=$el('op-dual');if(!btn)return;
-    DUAL.hinted=true;
-    btn.classList.add('hint');
-    let tip=$el('op-dualtip');
-    if(!tip){
-      tip=document.createElement('div');
-      tip.id='op-dualtip';
-      tip.innerHTML='ลองโหมด 2 เด็ค — กดไอคอนนี้ (ไม่สลับให้อัตโนมัติ) <button type="button" id="op-dualtipx">ปิด</button>';
-      document.body.appendChild(tip);
-      $el('op-dualtipx').onclick=function(e){e.stopPropagation();dismissHint(true)};
-    }
-    const r=btn.getBoundingClientRect();
-    tip.style.top=(r.bottom+8)+'px';
-    tip.style.right=Math.max(8, window.innerWidth-r.right)+'px';
-    tip.hidden=false;
-    setTimeout(function(){dismissHint(true)},8000);
-  }
+  function maybeHint(){} // v1.0.40: no more "try 2-deck mode" hint (the 2-deck page is the live home)
   function dismissHint(persist){
-    const btn=$el('op-dual');if(btn)btn.classList.remove('hint');
     const tip=$el('op-dualtip');if(tip)tip.hidden=true;
     if(persist){try{localStorage.setItem('bp-dual-hint','1')}catch(e){}}
   }
@@ -5748,7 +5760,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     get gen(){return{A:DUAL.a.gen||0,B:DUAL.b.gen||0,parked:!!DUAL.parked}},
     get state(){return{on:DUAL.on,a:DUAL.a.id,b:DUAL.b.id,audible:DUAL.audible,last:DUAL.last,xf:DUAL.xf,pick:DUAL.pick,cur:cur&&cur.id,playing:anyPlaying(),playingA:!!DUAL.a.playing,playingB:!!DUAL.b.playing,pos:posOf(slot(DUAL.last||DUAL.audible)),posA:posOf(DUAL.a),posB:posOf(DUAL.b),gains:gainsState(),shA:!!DUAL.a.sh,shB:!!DUAL.b.sh,cpuWarned:!!DUAL.cpuWarned,nodes:{a:!!(DUAL.a.src||DUAL.a.sh),b:!!(DUAL.b.src||DUAL.b.sh)}}},
     get gains(){return gainsState()},
-    setSong:function(id,ch){const s=SONG.get(id);if(!s)return false;if(ch&&ch.t!=null)s.t=ch.t;if(ch&&ch.a!=null)s.a=ch.a;if(ch&&'b' in ch)s.b=ch.b;if(ch&&ch.f!=null)s.f=ch.f;if(ch&&'s' in ch)s.s=ch.s;return true},
+    setSong:function(id,ch){const s=SONG.get(id);if(!s)return false;if(ch&&ch.t!=null)s.t=ch.t;if(ch&&ch.a!=null)s.a=ch.a;if(ch&&'b' in ch)s.b=ch.b;if(ch&&ch.f!=null)s.f=ch.f;if(ch&&'s' in ch)s.s=ch.s;if(ch&&'k' in ch)s.k=ch.k;return true},
     loadSong:function(id,auto){return load(id,auto!==false)},
     setAuto:function(p){Object.assign(AUTO,p||{});try{saveAuto()}catch(e){}},
     get auto(){return{on:!!AUTO.on,xf:+(AUTO.xf||0),gap:+(AUTO.gap||0)}},
