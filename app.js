@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.38';
+const APPV='1.0.39';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -70,20 +70,61 @@ async function measure(blob,side){const ab=await blob.arrayBuffer();const b=awai
  const L=m=>-0.691+10*Math.log10(m);let g=ms.filter(m=>L(m)>-70);if(!g.length)return null;const rel=L(g.reduce((a,c)=>a+c,0)/g.length)-10;g=g.filter(m=>L(m)>rel);const I=L(g.reduce((a,c)=>a+c,0)/g.length);
  let pk=0;for(let c=0;c<b.numberOfChannels;c++){const d=b.getChannelData(c);for(let i=0;i<d.length;i+=1){const v=d[i]<0?-d[i]:d[i];if(v>pk)pk=v}}const P=20*Math.log10(pk||1e-9);
  return {I:+I.toFixed(1),P:+P.toFixed(1),gn:+Math.min(-15-I,-1-P+6).toFixed(1)}}
+// v1.0.39: catalog audio comes from an ordered list of servers. A dead server (509 quota, CORS "Failed to fetch",
+// 404, timeout, HTML error page) is skipped for 10 min and the next one is tried; the last good one is tried first.
+const AUDIO_NEW='https://setsod-audio.setsod.workers.dev/audio/'; // Cloudflare Workers static assets (setsod-audio)
+const AUDIO_BASES=[AUDIO_NEW,'https://beer-audio.web.app/audio/','drive:'];
+const AUD={bad:{},ok:null,last:null};window.__aud=AUD;
+function audBases(){const L=window.__AUDIO_BASES||(window.__AUDIO_BASE?[window.__AUDIO_BASE]:AUDIO_BASES);const v=L.filter(b=>b&&!b.includes('__SUB__'));
+ const now=Date.now(),live=v.filter(b=>!(AUD.bad[b]>now)),pool=live.length?live:v;if(AUD.ok&&pool.includes(AUD.ok))return [AUD.ok,...pool.filter(b=>b!==AUD.ok)];return pool}
+function audUrl(b,id){return b==='drive:'?'https://drive.usercontent.google.com/download?id='+encodeURIComponent(id)+'&export=download&confirm=t':b+id+'.mp3'}
 async function fetchAudio(s){if(!s.id)throw new Error('ไม่มีไฟล์บนเว็บ');if(!navigator.onLine)throw new Error('ไม่มีเน็ต และเพลงนี้ยังไม่ได้โหลดเก็บ');
- const url=(window.__AUDIO_BASE||'https://beer-audio.web.app/audio/')+s.id+'.mp3';let last;
- for(let a=0;a<3;a++){const ac=new AbortController();const to=setTimeout(()=>ac.abort(),window.__FETCH_TIMEOUT||45000);
-  try{const r=await fetch(url,{signal:ac.signal});
-   if(!r.ok){if([402,403,429,503,509].includes(r.status)){quota(r.status);blog('warn','quota/http '+r.status,url);throw Object.assign(new Error('เซิร์ฟเวอร์ตอบ '+r.status),{fatal:true})}throw new Error('เซิร์ฟเวอร์ตอบ '+r.status)}
-   const b=await r.blob();clearTimeout(to);if(!b.size)throw new Error('ไฟล์ว่าง');return b}
-  catch(e){clearTimeout(to);last=e.name=='AbortError'?new Error('โหลดช้าเกินไป (หมดเวลา)'):e;blog('warn','fetch fail try '+(a+1)+': '+last.message,url);if(e.fatal||!navigator.onLine)break;await new Promise(x=>setTimeout(x,800*(a+1)))}}
- throw new Error(navigator.onLine?last.message+' — ลองใหม่อีกครั้ง':'ไม่มีเน็ต และเพลงนี้ยังไม่ได้โหลดเก็บ')}
+ const bases=audBases();let last=null,quotaHit=0;
+ for(const b of bases){const url=audUrl(b,s.id);
+  for(let a=0;a<2;a++){const ac=new AbortController();const to=setTimeout(()=>ac.abort(),window.__FETCH_TIMEOUT||45000);let dead=false,miss=false;
+   try{const r=await fetch(url,{signal:ac.signal});
+    if(!r.ok){miss=r.status===404||r.status===410;dead=[402,403,429,503,509].includes(r.status);if(dead)quotaHit=r.status;throw new Error(miss?'ไม่มีไฟล์นี้บนเซิร์ฟเวอร์':'เซิร์ฟเวอร์ตอบ '+r.status)}
+    if(/text\/html/i.test(r.headers.get('content-type')||'')){dead=true;throw new Error('เซิร์ฟเวอร์ส่งหน้าเว็บแทนไฟล์เพลง')}
+    const bl=await r.blob();clearTimeout(to);if(!bl.size)throw new Error('ไฟล์ว่าง');AUD.ok=b;AUD.last={b,id:s.id,ok:true};return bl}
+   catch(e){clearTimeout(to);
+    if(e.name=='AbortError')last=new Error('โหลดช้าเกินไป (หมดเวลา)');
+    else if(e instanceof TypeError){dead=true;last=new Error('เชื่อมต่อเซิร์ฟเวอร์เพลงไม่ได้')} // CORS-less 509 page / DNS / network
+    else last=e;
+    blog('warn','fetch fail '+b+' try '+(a+1)+': '+last.message,url);
+    if(!navigator.onLine)break;
+    if(miss)break; // this server lacks the file: try the next one, keep using it for other songs
+    if(dead){if(!(e instanceof TypeError)||a>0){AUD.bad[b]=Date.now()+600000;break}}
+    await new Promise(x=>setTimeout(x,(window.__FETCH_GAP||600)*(a+1)))}}
+  if(!navigator.onLine)break}
+ AUD.last={id:s.id,ok:false,msg:last&&last.message};
+ if(!navigator.onLine)throw new Error('ไม่มีเน็ต และเพลงนี้ยังไม่ได้โหลดเก็บ');
+ if(quotaHit)try{quota(quotaHit)}catch(e){}
+ throw new Error('เซิร์ฟเวอร์เพลงไม่ตอบทุกที่'+(last?' ('+last.message+')':'')+' — ลองใหม่ภายหลัง')}
 function quota(c){const b=$('qb');b.style.display='block';b.textContent='⚠️ โควต้าโหลดเพลงจากเว็บวันนี้อาจเต็ม (รหัส '+c+') — เล่นได้เฉพาะเพลงที่โหลดเก็บไว้แล้ว ลองใหม่พรุ่งนี้'}
 async function safePut(rec){try{await put('files',rec)}catch(e){const q=e&&(e.name=='QuotaExceededError'||/quota/i.test(e.message));blog('error','store fail '+rec.name+': '+(e&&e.name)+' '+(e&&e.message));throw new Error(q?'พื้นที่เครื่องเต็ม — ลบเพลงที่ไม่ใช้ในแท็บ 📥 แล้วลองใหม่':'บันทึกไฟล์ไม่สำเร็จ ('+(e&&e.name)+')')}}
 async function storeBlob(s,blob){const n='web:'+s.id;await safePut({name:n,blob,size:blob.size,added:Date.now(),src:'web'});FILES.set(n,{name:n,size:blob.size,src:'web'});rebuildIndex()}
+// v1.0.39: a catalog song that was played from the web is kept on the device (marked auto), so it is not downloaded
+// again next time. Auto copies are capped (oldest-used first out); songs saved on purpose (📥) are never evicted.
+const AC={cap:null,use:null};window.__ac=AC;
+async function acUse(){if(AC.use)return AC.use;try{AC.use=(await get('kv','acuse'))?.v||{}}catch(e){AC.use={}}return AC.use}
+function acSave(){clearTimeout(acSave.t);acSave.t=setTimeout(()=>{try{put('kv',{k:'acuse',v:AC.use||{}})}catch(e){}},1500)}
+async function acCap(){if(window.__AC_CAP)return window.__AC_CAP;if(AC.cap)return AC.cap;let c=1.5e9;try{const e=await navigator.storage.estimate();if(e&&e.quota)c=Math.max(2e8,Math.min(3e9,e.quota*0.35))}catch(e){}AC.cap=c;return c}
+async function acTouch(n){try{const f=FILES.get(n);if(!f||!f.auto)return;const u=await acUse();u[n]=Date.now();acSave()}catch(e){}}
+async function acEvict(need){const u=await acUse();const cap=await acCap();const keep=new Set([cur&&cur.id]);try{const d=window.__dual&&__dual.state;if(d){keep.add(d.a);keep.add(d.b)}}catch(e){}const keepId=new Set([...keep].filter(Boolean).map(k=>{const q=SONG.get(k);return q&&q.id}));
+ const autos=[...FILES.values()].filter(f=>f.auto&&f.src=='web');let tot=autos.reduce((a,f)=>a+(f.size||0),0);
+ autos.sort((x,y)=>(u[x.name]||0)-(u[y.name]||0));let n=0;
+ for(const f of autos){if(tot+need<=cap)break;const id=f.name.slice(4);if(keepId.has(id))continue; // never drop a song that sits on a deck / is playing
+  try{await del('files',f.name);FILES.delete(f.name);delete u[f.name];tot-=f.size||0;n++}catch(e){}}
+ if(n){acSave();try{rebuildIndex()}catch(e){}blog('info','autocache evict '+n)}return tot+need<=cap}
+async function acStore(s,blob){try{if(localStorage.getItem('bp-autocache')==='0'||!s||!s.id||!blob||!blob.size)return;const n='web:'+s.id;if(FILES.has(n))return;
+  await acEvict(blob.size);
+  const put1=()=>safePut({name:n,blob,size:blob.size,added:Date.now(),src:'web',auto:1});
+  try{await put1()}catch(e){if(!/เต็ม/.test(e.message||''))throw e;AC.cap=Math.max(2e8,(AC.cap||1.5e9)*0.7);await acEvict(blob.size*2);await put1()}
+  FILES.set(n,{name:n,size:blob.size,src:'web',auto:1});const u=await acUse();u[n]=Date.now();acSave();try{rebuildIndex()}catch(e){}
+ }catch(e){blog('warn','autocache skip '+(s&&s.id)+': '+(e&&e.message))}}
 // v1.46: only one full-length decode at a time (raw bytes + decoded PCM of two songs at once spiked memory on iPhone)
 let DECQ=Promise.resolve(),LOADT=0;
-async function decode(id){if(cache.has(id))return cache.get(id);const p=DECQ.then(async()=>{const s=SONG.get(id);const fn=fileOf(s);let rec=fn&&await get('files',fn);if(rec&&rec.src=='stems')return await ST.decode(rec);let blob=rec?rec.blob:await fetchAudio(s);rec=null;let ab=await blob.arrayBuffer();blob=null;return await new Promise((ok,no)=>ctx.decodeAudioData(ab,ok,no))});DECQ=p.catch(()=>{});cache.set(id,p);cacheCap(id);
+async function decode(id){if(cache.has(id))return cache.get(id);const p=DECQ.then(async()=>{const s=SONG.get(id);const fn=fileOf(s);let rec=fn&&await get('files',fn);if(rec&&rec.src=='stems')return await ST.decode(rec);let blob=rec?rec.blob:await fetchAudio(s);if(rec)acTouch(rec.name);else acStore(s,blob);rec=null;let ab=await blob.arrayBuffer();blob=null;return await new Promise((ok,no)=>ctx.decodeAudioData(ab,ok,no))});DECQ=p.catch(()=>{});cache.set(id,p);cacheCap(id);
  p.catch(()=>cache.delete(id));return p}
 // v1.43: decoded AudioBuffers are ~10MB/min stereo; tapping (cue) many songs used to keep every one alive until the next load() -> iOS killed the tab (white flash + reload). Keep only cur/next/cue/just-requested.
 function cacheCap(also){if(window.__nocap)return;const i=cur?SET.indexOf(cur.id):-1;const extra=(window.__dual&&typeof __dual.keepIds==='function')?__dual.keepIds():[];const keep=new Set([cur&&cur.id,i>=0?SET[i+1]:null,cue,also,...extra].filter(Boolean));for(const k of [...cache.keys()])if(!keep.has(k))cache.delete(k)}
@@ -118,7 +159,7 @@ addEventListener('pageshow',()=>{if(ctx&&ctx.state!=='running'&&ctx.state!=='clo
 async function load(id,autoplay=true){cancelCd();initAudio();ctx.resume();try{ciCancel();if(cur&&cur.id!==id){const rb=realBpm(cur.id);if(rb)LASTBPM={b:rb,id:cur.id}}}catch(e){}stop();if(cur&&cur.id!==id){const o=cur.id;cur=null;const keep=new Set([id,...((window.__dual&&__dual.keepIds&&__dual.keepIds())||[])]);if(!keep.has(o)){cache.delete(o);for(const k of [...REND.keys()])if(k.startsWith(o+'|'))REND.delete(k)}try{for(const k of [...cache.keys()])if(!keep.has(k))cache.delete(k)}catch(e){for(const k of [...cache.keys()])if(k!==id)cache.delete(k)}}LOADT=Date.now();const s=SONG.get(id);const my=Symbol();load.tok=my;loadingId=id;sync();
  $('pt').textContent=s.t+(s.a?' – '+s.a:'');$('ps').textContent='⏳ กำลังเตรียมเพลง...';
  try{const buf=await decode(id);if(load.tok!==my)return;loadingId=null;cur={id,buf};offset=0;mediaMeta();studioLoad();$('du').textContent=fmt(buf.duration);showKey();$('ps').textContent='';
-  if(autoplay)startCI(trS(id));else if(load.resumeAt){offset=load.resumeAt;load.resumeAt=0;$('ps').textContent='⏯ กู้คืนตำแหน่ง '+fmt(offset)+' — แตะ ▶ เพื่อเล่นต่อ'}preloadNext();render()}catch(e){blog('error','play fail '+id,e.message);if(load.tok===my){loadingId=null;$('ps').textContent='❌ เล่นไม่ได้: '+e.message;sync()}}}
+  if(autoplay)startCI(trS(id));else if(load.resumeAt){offset=load.resumeAt;load.resumeAt=0;$('ps').textContent='⏯ กู้คืนตำแหน่ง '+fmt(offset)+' — แตะ ▶ เพื่อเล่นต่อ'}preloadNext();render()}catch(e){blog('error','play fail '+id,e.message);if(load.tok===my){loadingId=null;$('ps').textContent='❌ เล่นไม่ได้: '+e.message;try{toast('❌ เล่นไม่ได้: '+e.message,6000)}catch(x){}sync()}}}
 // v1.83: the next song is decoded only when it is about to be needed (last 45 s, cued, pad-hold, or current ended) — 1 extra buffer max
 function nxOk(nx){try{if(window.__nocap)return true;if(!cur||!cur.buf)return true;if(nx&&(nx===cue||(typeof PAD!=='undefined'&&PAD.hold===nx)))return true;if(ended||!playing)return !!ended;const p=pref(cur.id),r=(p.tempo||100)/100;const e=typeof effEnd=='function'?effEnd():cur.buf.duration;return (e-pos())/r<45+(AUTO&&AUTO.xf||0)}catch(e){return true}}
 function preloadNext(){const i=SET.indexOf(cur?.id);setIdx=i;const keep=[cur.id];if(i>=0&&SET[i+1]&&SONG.get(SET[i+1])&&fileOf(SONG.get(SET[i+1]))){keep.push(SET[i+1]);const nx=SET[i+1],me=cur.id;setTimeout(()=>{if(!cur||cur.id!==me||loadingId||SET[SET.indexOf(me)+1]!==nx||!nxOk(nx))return;decode(nx).then(()=>{if(cur&&SET[SET.indexOf(cur.id)+1]==keep[1])$('ps').textContent=(playing||ended?$('ps').textContent:'')||'';}).catch(()=>{})},8000)}trim(keep);render()}
@@ -274,7 +315,7 @@ async function catRefresh(force){if(!cat100())return false;try{const rows=await 
  if(cat100()){const cached=await catFromCache();if(cached)catApply(cached);else{await catWaitUser();await catRefresh(true)}}else{CAT=[]}
  window.__catok=1;window.__catLen=()=>CAT.length;/*v1.84.3 + v1.0.17: catalog comes from Firestore (signed-in) + IndexedDB cache; data.json is no longer public*/
 
- for(const f of await getAll('files'))if(!f.name.startsWith('stem:'))FILES.set(f.name,{name:f.name,size:f.size,gn:f.gn,bv:f.bv,src:f.src||(f.name.startsWith('web:')?'web':'import')});for(const p of await getAll('prefs'))PREF.set(p.id,p);
+ for(const f of await getAll('files'))if(!f.name.startsWith('stem:'))FILES.set(f.name,{name:f.name,size:f.size,gn:f.gn,bv:f.bv,src:f.src||(f.name.startsWith('web:')?'web':'import'),auto:f.auto?1:undefined});for(const p of await getAll('prefs'))PREF.set(p.id,p);
  {const kv=await get('kv','set');if(!window.__lvSetApplied){SET=kv?.v||[];if(!kv){try{const m=JSON.parse(localStorage.getItem('bp-set')||'null');if(m&&Array.isArray(m.v)&&m.v.length){SET=m.v;put('kv',{k:'set',v:SET});blog('warn','set restored from mirror')}}catch(e){}}}window.__setok=1}NORM=(await get('kv','norm'))?.v??true;AUTO={...AUTO,...((await get('kv','auto'))?.v||{})};try{META=(await get('kv','meta'))?.v||{}}catch(e){}try{const o=(await get('kv','folders'))?.v;if(o&&Array.isArray(o.list))FLD={list:o.list,mem:o.mem||{}}}catch(e){}if(FSEL&&FSEL!='_none'&&!FLD.list.some(f=>f.id==FSEL))FSEL='';drawAuto();rebuildIndex();render();autoSet();msSetup();
  try{if(navigator.storage&&navigator.storage.persist&&!(await navigator.storage.persisted()))navigator.storage.persist().then(p=>blog('info','persist '+p))}catch(e){}
  try{const st=JSON.parse(localStorage.getItem('bp-state')||'null');if(st&&st.id&&SONG.get(st.id)&&!st.ended){const s=SONG.get(st.id);if(fileOf(s)||(s.id&&navigator.onLine)){load.resumeAt=st.pos||0;document.addEventListener('pointerdown',function f(){document.removeEventListener('pointerdown',f,true)},true);initAudio();load(st.id,false)}}}catch(e){blog('warn','restore fail',e.message)}
@@ -814,7 +855,7 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-lang]');if
 {const _sl=studioLoad;studioLoad=function(){try{peaksHi(cur.id,cur.buf)}catch(e){}WZ.z=1;WZ.v0=0;WZ.follow=true;_sl();try{wzBar();wzPointer();cards26();durUpd();ciUI();trimUI();syncUI();wzUI()}catch(e){blog('warn','v26',e.message)}}}
 new MutationObserver(()=>{try{if($('studio')){wzBar();wzPointer()}if(document.querySelector('#plx>.grid')&&!$('trimc'))cards26();if($('beatc')&&!$('bsync'))cards26();langBtn()}catch(e){}}).observe(document.body,{childList:true,subtree:true});
 setTimeout(()=>{try{wzBar();wzPointer();cards26();langBtn()}catch(e){}i18nStart()},0);
-{const B=window.__bp;if(B){Object.assign(B,{trim:()=>cur?{ts:trS(cur.id),te:trE(cur.id,cur.buf.duration),d:cur.buf.duration}:null,WZ,CI,realBpm,trimSet,trimReset,syncBpm,effEnd,pos:()=>pos()});Object.defineProperties(B,{counting:{get:()=>!!CNT,configurable:true},lastBpm:{get:()=>LASTBPM,configurable:true}})}}
+{const B=window.__bp;if(B){Object.assign(B,{fetchAudio,storeBlob,acStore,files:()=>[...FILES.values()].map(f=>({name:f.name,size:f.size,src:f.src,auto:f.auto||0})),trim:()=>cur?{ts:trS(cur.id),te:trE(cur.id,cur.buf.duration),d:cur.buf.duration}:null,WZ,CI,realBpm,trimSet,trimReset,syncBpm,effEnd,pos:()=>pos()});Object.defineProperties(B,{counting:{get:()=>!!CNT,configurable:true},lastBpm:{get:()=>LASTBPM,configurable:true}})}}
 // ===== v27: play-while-playing chooser + visible next panel =====
 function nextId(){return cur?SET[SET.indexOf(cur.id)+1]||null:null}
 function chooser(id){const s=SONG.get(id);if(!s)return;let el=$('chs');if(!el){el=document.createElement('div');el.id='chs';document.body.appendChild(el)}
@@ -2433,7 +2474,7 @@ window.__ui66={tidy:tidy66,more:more66Open};
 
 // ===== v1.70: notification bell (band activity + system notices) · one-tap “+ เพิ่มเพลงให้วง” · per-song upload/cached status =====
 const NT={a:{},un:{},sys:null,sun:null,have:{},hun:{},hw:{}};
-const NTCHG={'1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
+const NTCHG={'1.0.39':'เพลงในคลังโหลดจากเซิร์ฟเวอร์ใหม่ (สำรองอัตโนมัติถ้าเซิร์ฟเวอร์ไหนล่ม) · เด็คบอกชัดเมื่อโหลดเพลงไม่ได้ · เพลงที่เคยเล่นเก็บในเครื่อง ไม่ต้องโหลดซ้ำ','1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
 SET65.push(['nt','#ntb','กระดิ่งแจ้งเตือน','เรื่องในวง (เพลงใหม่ ลิสต์ สมาชิก) และอัปเดตระบบ','ทั่วไป']);
 function ntOn(){return !hid65().has('nt')}
 function ntSeen(){return +localStorage.getItem('bp-nts')||0}
@@ -3948,7 +3989,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
 // ===================== v1.0.27 Dual (2-deck) — phase 2: simultaneous A+B =====================
 (function(){
   function fresh(){return {id:null,offset:0,playing:false,ended:false,src:null,sh:null,startAt:0,buf:null,vol:1,eq:{l:0,m:0,h:0},bus:null,fading:null,live:null}}
-  function assignId(sl,id){if(sl.id!==id)sl.live=null;sl.id=id}
+  function assignId(sl,id){if(sl.id!==id){sl.live=null;sl.err=null}sl.id=id}
   function deckPref(sl){
     const base=(sl&&sl.id&&typeof pref==='function')?pref(sl.id):{key:0,tempo:100};
     const live=sl&&sl.live;
@@ -4194,7 +4235,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   }
   async function bufOf(id){
     if(!id)return null;
-    try{initAudio();const b=await decode(id);return b||null}catch(e){return null}
+    try{initAudio();const b=await decode(id);return b||null}catch(e){DUAL.lastErr={id:id,msg:(e&&e.message)||String(e)};return null}
   }
   function startSlot(w,at){
     w=whichOf(w);const sl=slot(w);
@@ -4777,7 +4818,11 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     assignId(sl,id);
     if(!same){sl.offset=0;sl.ended=false}
     if(!SET.includes(id)){try{SET.push(id)}catch(e){}}
-    try{const b=await bufOf(id);if(sl.id===id&&b)sl.buf=b}catch(e){}
+    sl.err=null;
+    try{const b=await bufOf(id);if(sl.id===id&&b)sl.buf=b;
+      // v1.0.39: a failed load is shown on the deck (and never leaves the previous song's audio behind)
+      else if(sl.id===id&&!b){if(!sl.playing)sl.buf=null;const m=(DUAL.lastErr&&DUAL.lastErr.id===id&&DUAL.lastErr.msg)||'โหลดไม่สำเร็จ';sl.err=m;
+        const s0=SONG.get(id);try{toast('❌ เด็ค '+w+' โหลด “'+((s0&&s0.t)||'เพลง')+'” ไม่ได้ — '+m,6000)}catch(e){}paint();return}}catch(e){}
     try{cacheCap(id)}catch(e){}
     if(play)startSlot(w,sl.offset||((typeof trS==='function'?trS(id):0)||0));
     paint();
@@ -5109,7 +5154,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     el.classList.toggle('playing',!!sl.playing);
     el.classList.toggle('empty',!id);
     const t=$el('dd-'+w+'-t'),a=$el('dd-'+w+'-a');
-    const tt=s?s.t||'ไม่มีชื่อ':'ไม่มีเพลง — แตะเพื่อเลือก',aa=s?(s.a||''):'';
+    const tt=s?s.t||'ไม่มีชื่อ':'ไม่มีเพลง — แตะเพื่อเลือก',aa=s?(sl.err?'⚠️ โหลดไม่ได้ — กด ▶ เพื่อลองใหม่':(s.a||'')):'';
+    el.classList.toggle('err',!!(id&&sl.err));
     if(t&&t.textContent!==tt)t.textContent=tt;
     ckBadge($el('dd-'+w+'-ck'),id);
     if(a&&a.textContent!==aa)a.textContent=aa;

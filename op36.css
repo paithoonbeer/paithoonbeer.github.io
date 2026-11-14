@@ -380,3 +380,4 @@ body.op36-big #op-dualui .dd-mstep{width:30px;height:40px}
 .op-ck{height:20px;font-size:12px;padding:0 6px;margin-right:8px;vertical-align:.25em}
 #op-dualui .dd-qlib{width:32px;height:32px;flex:none;display:grid;place-items:center;border-radius:9px;color:var(--d6-ac);background:var(--d6-acd);border:0;padding:0}
 #op-dualui .dd-qlib svg{width:17px;height:17px}
+#op-dualui .dd-deck.err .dd-artist{color:#ff9f0a;font-weight:700} /* v1.0.39: load failed */
