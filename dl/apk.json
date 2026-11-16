@@ -1,6 +1,6 @@
 {
-  "build": 66,
-  "ver": "1.0.51",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b66-1.0.51/SetSod.apk",
-  "notes": "1.0.51: หยุดกระพริบสตูดิโอ · แก้ค้างนำเข้า · ลบออนไลน์หายทันที"
+  "build": 67,
+  "ver": "1.0.52",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b67-1.0.52/SetSod.apk",
+  "notes": "1.0.52: ย้อนกลับเลย์เอาต์แบบ 1.0.49 — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ"
 }
