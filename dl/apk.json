@@ -1,6 +1,6 @@
 {
-  "build": 65,
-  "ver": "1.0.50",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b65-1.0.50/SetSod.apk",
-  "notes": "สตูดิโอ A+B: ซ้ายคลัง/คืนนี้ · ขวากราฟ/เมโทร/นำเข้า/ตั้งค่า (ตรึง) · ตั้งค่าเป็นหัวข้อใหญ่"
+  "build": 66,
+  "ver": "1.0.51",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b66-1.0.51/SetSod.apk",
+  "notes": "1.0.51: หยุดกระพริบสตูดิโอ · แก้ค้างนำเข้า · ลบออนไลน์หายทันที"
 }
