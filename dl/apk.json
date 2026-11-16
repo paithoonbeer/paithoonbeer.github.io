@@ -1,6 +1,6 @@
 {
-  "build": 63,
-  "ver": "1.0.48",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b63-1.0.48/SetSod.apk",
-  "notes": "1.0.48: ☰ ลากลิสต์ไม่ไวเกิน (16px) + ย้ายห่างปุ่ม ✕"
+  "build": 64,
+  "ver": "1.0.49",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b64-1.0.49/SetSod.apk",
+  "notes": "ลบจากคลัง: กด 🗑 ยืนยันครั้งเดียว — ทั้งวงไม่เห็น (เพลงตัวอย่างออนไลน์ซ่อนให้ทั้งทีม)"
 }
