@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.50';
+const APPV='1.0.51';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -400,20 +400,29 @@ function setLive(on){document.body.classList.toggle('live',on);document.document
   const pl=$('pl');if(pl&&innerWidth<900&&!pl.classList.contains('open')){pl.classList.add('open');const e=$('exp');if(e)e.textContent='⌄'}
  }}catch(e){}}
 /* ===== v1.0.50: Studio A+B tool rail (graph / metro / import / settings) ===== */
-const ST150={tool:localStorage.getItem('bp-sttool')||'graph'};
+/* v1.0.51: stTools150 must NOT re-apply stTool150 on the 700ms ensure tick — that wiped #stpanel / toggled .wavebox display and flickered the whole Studio. */
+const ST150={tool:localStorage.getItem('bp-sttool')||'graph',applied:''};
+function stPanelEl(){const st=$('studio');return(st&&st.querySelector('#stpanel'))||$('stpanel')}
 function stTools150(){const st=$('studio');if(!st)return;
+ let born=false;
  if(!$('sttools')){const bar=document.createElement('div');bar.id='sttools';bar.className='sttools150';bar.setAttribute('role','tablist');
   bar.innerHTML=[['graph','กราฟ'],['metro','เมโทร'],['import','นำเข้า'],['settings','ตั้งค่า']].map(([k,l])=>`<button type="button" class="stt150" data-sttool="${k}" role="tab">${l}</button>`).join('');
   const strip=$('strip');if(strip)st.insertBefore(bar,strip);else st.appendChild(bar);
-  bar.addEventListener('click',e=>{const b=e.target.closest('[data-sttool]');if(b)stTool150(b.dataset.sttool)})}
- if(!$('stpanel')){const pan=document.createElement('div');pan.id='stpanel';pan.hidden=true;const strip=$('strip');if(strip&&strip.nextSibling)st.insertBefore(pan,strip.nextSibling);else st.appendChild(pan)}
- stTool150(ST150.tool)}
+  bar.addEventListener('click',e=>{const b=e.target.closest('[data-sttool]');if(b)stTool150(b.dataset.sttool)});born=true}
+ if(!st.querySelector('#stpanel')){const pan=document.createElement('div');pan.id='stpanel';pan.hidden=true;const strip=$('strip');if(strip&&strip.nextSibling)st.insertBefore(pan,strip.nextSibling);else st.appendChild(pan);born=true}
+ if(born||ST150.applied!==ST150.tool)stTool150(ST150.tool);
+ else document.querySelectorAll('#sttools [data-sttool]').forEach(b=>b.classList.toggle('on',b.dataset.sttool===ST150.tool))}
 function stGraphParts(){const st=$('studio');if(!st)return[];return [...st.querySelectorAll('.wavebox,.mkbar,.fdrow,.counter,.mixer')]}
-function stTool150(t){if(!t)t='graph';ST150.tool=t;try{localStorage.setItem('bp-sttool',t)}catch(e){}
- document.querySelectorAll('[data-sttool]').forEach(b=>b.classList.toggle('on',b.dataset.sttool===t));
- const pan=$('stpanel');if(!pan)return;const graph=t==='graph';
+function stTool150(t,force){if(!t)t='graph';ST150.tool=t;try{localStorage.setItem('bp-sttool',t)}catch(e){}
+ document.querySelectorAll('#sttools [data-sttool],#op-menu [data-sttool]').forEach(b=>b.classList.toggle('on',b.dataset.sttool===t));
+ const pan=stPanelEl();if(!pan)return;const graph=t==='graph';
+ /* skip full apply when already showing this tool (interval ensure / duplicate calls) */
+ if(!force&&ST150.applied===t){
+  stGraphParts().forEach(el=>{const want=!graph;if(el.hidden!==want)el.hidden=want;if(graph){if(el.style.display==='none')el.style.removeProperty('display')}else if(el.style.display!=='none')el.style.display='none'});
+  if(pan.hidden!==graph)pan.hidden=graph;return}
+ ST150.applied=t;
  stGraphParts().forEach(el=>{el.hidden=!graph;if(graph)el.style.removeProperty('display');else el.style.display='none'});
- pan.hidden=graph;if(graph){pan.innerHTML='';try{mixUI();waveDraw()}catch(e){}return}
+ pan.hidden=graph;if(graph){if(pan.innerHTML)pan.innerHTML='';try{mixUI();waveDraw()}catch(e){}return}
  if(t==='metro'){pan.innerHTML='';try{const n=metroEl();pan.appendChild(n)}catch(e){pan.textContent='เปิดเมโทรไม่ได้'}return}
  if(t==='import'){stFillImport150(pan);return}
  if(t==='settings'){stFillSettings150(pan);return}}
@@ -810,7 +819,7 @@ const f2x=(f,W)=>(f-WZ.v0)*WZ.z*W,x2f=(x,W)=>WZ.v0+x/W/WZ.z;
 drawMarks=function(g,W,H){if(!cur)return;const mk=marks(),d=cur.buf.duration,p=pref(cur.id),r=devicePixelRatio;
  mk.forEach((m,i)=>{const x=f2x(m.t/d,W),[a,b]=secOf(mk,i);if(m.sk||p.lp===i){g.fillStyle=m.sk?'rgba(255,69,58,.18)':'rgba(48,209,88,.16)';const xa=f2x(a/d,W);g.fillRect(xa,0,f2x(b/d,W)-xa,H)}
   if(x<-60*r||x>W)return;g.fillStyle=i==MKSEL?'#ffd60a':'#0a84ff';g.fillRect(x,0,1.5*r,H);g.font=`700 ${10*r}px system-ui`;const tw=g.measureText(m.n).width+8*r;g.fillRect(x,H-14*r,tw,14*r);g.fillStyle='#fff';g.fillText(m.n,x+4*r,H-4*r)})};
-waveDraw=function(){const cv=$('wave');if(!cv||!cv.offsetWidth)return;const r=devicePixelRatio,W=cv.width=cv.offsetWidth*r,H=cv.height=cv.offsetHeight*r;const g=cv.getContext('2d');g.clearRect(0,0,W,H);
+waveDraw=function(){const cv=$('wave');if(!cv||!cv.offsetWidth)return;const r=devicePixelRatio,nw=Math.round(cv.offsetWidth*r),nh=Math.round(cv.offsetHeight*r);if(cv.width!==nw)cv.width=nw;if(cv.height!==nh)cv.height=nh;const W=cv.width,H=cv.height;const g=cv.getContext('2d');g.clearRect(0,0,W,H);
  g.fillStyle='#0a0c10';g.fillRect(0,0,W,H);g.strokeStyle='rgba(255,255,255,.05)';for(let x=0;x<W;x+=W/16){g.beginPath();g.moveTo(x,0);g.lineTo(x,H);g.stroke()}
  if(!cur)return;const P=PEAKS.get(cur.id);if(!P)return;const d=cur.buf.duration,ci=clickCh(cur.id),fr=pos()/d;
  if(WZ.follow&&playing&&WZ.z>1&&(fr<WZ.v0||fr>WZ.v0+.85/WZ.z)){WZ.v0=fr-.15/WZ.z;wzClamp()}
@@ -2543,7 +2552,8 @@ function set65Gear(){/*v1.0.50: do not bury settings inside Import — Studio to
  const o=document.querySelector('#tb60 [data-set65]');if(o){o.remove();tbFlow65()}
  const g=document.querySelector('#main [data-set65],#main .set65e');if(g)g.remove()}
 new MutationObserver(()=>{try{set65Gear()}catch(e){}}).observe($('main'),{childList:true});
-setInterval(()=>{try{set65Gear();tbFlow65();stTools150()}catch(e){}},700);
+/* v1.0.51: do not call stTools150 here — ensure-only was re-applying the active tool and flickering Studio every 700ms */
+setInterval(()=>{try{set65Gear();tbFlow65()}catch(e){}},700);
 function set65Open(){const d=document.createElement('div');d.className='set65';const h=hid65();let g='',out='<div class="small set65i">ปิดสวิตช์ = ซ่อนปุ่มที่ไม่ได้ใช้ (เปิดกลับได้ทุกเมื่อ) · บันทึกในเครื่องนี้และสำรองไปกับบัญชี</div>';
  for(const [k,,l,ds,gr] of SET65){if(gr!=g){out+=`<div class="set65g">${gr}</div>`;g=gr}out+=`<label class="set65r"><span><b>${l}</b><span class="small">${ds}</span></span><input type="checkbox" role="switch" data-k65="${k}" ${h.has(k)?'':'checked'}></label>`}
  out+=`<div class="row" style="margin-top:12px"><button type="button" class="hw" id="set65r">${ico60('refresh-cw')} คืนค่าเริ่มต้น (แสดงทุกปุ่ม)</button></div>`;d.innerHTML=out;
@@ -2589,7 +2599,9 @@ function wrap68(m){const g=m.querySelector(':scope>[data-set65]');if(g){const w=
 function lite68(){const lt=$('litet'),ld=$('lited'),lite=$('literow');if(!lt||!ld||!lite)return;if(!lt.classList.contains('r68'))lt.classList.add('s66sw','r68');let ib=lite.querySelector(':scope>.s66i');if(!ib){ib=document.createElement('span');ib.setAttribute('role','button');ib.tabIndex=0;ib.className='s66i';ib.setAttribute('aria-label','รายละเอียด');ib.innerHTML=IC66.info;ib.onclick=e=>{e.stopPropagation();e.preventDefault();lite.classList.toggle('s66open')}}if(ib.parentElement!==lite||ib.previousElementSibling!==lt)lt.after(ib);}
 function xl69(m){const ul=m.querySelector(':scope>ul:not(.fldl)');if(!ul)return;let h=m.querySelector(':scope>.x69');if(h&&h.nextElementSibling&&h.nextElementSibling.nextElementSibling!==ul){const n=m.querySelector(':scope>.x69n');ul.before(h);if(n)ul.before(n)}if(!h){h=document.createElement('button');h.type='button';h.className='x69 r68 r68c';h.onclick=()=>{const o=localStorage.getItem('bp-x69')!=='1';localStorage.setItem('bp-x69',o?'1':'0');xl69(m)};ul.before(h);const n=document.createElement('div');n.className='x69n small';n.textContent=(typeof CUSTOMER_MODE!=='undefined'&&CUSTOMER_MODE)?'ไฟล์เก็บในเครื่องนี้ และอยู่ในแท็บ "เพลง" แล้ว · ＋ ใส่ลิสต์คืนนี้ · 🗑 ลบจากเครื่อง':'ไฟล์ที่นำเข้าแต่ชื่อไม่ตรงรายชื่อเพลงของวง — เก็บในเครื่องนี้ เล่นได้ · ＋ ใส่ลิสต์คืนนี้ · 🗑 ลบจากเครื่อง';h.after(n)}
  const open=localStorage.getItem('bp-x69')==='1',c=ul.children.length,t=`เพลงที่นำเข้า (${c})`;if(h.dataset.t!==t+open){h.dataset.t=t+open;h.innerHTML=`<span class="ici">${SV66('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>')}</span>${t}`;h.classList.toggle('x69o',open);ul.classList.toggle('x69h',!open);m.querySelector(':scope>.x69n')?.classList.toggle('x69h',!open)}}
-function tidy66(){if(!UI66)return;const m=$('main');if(!m)return;if(view=='S')m.querySelectorAll('#setul .i .m').forEach(x=>{for(const n of [...x.childNodes])if(n.nodeType==3&&n.textContent.trim()){const sp=document.createElement('span');sp.className='m68';sp.textContent=n.textContent.trim();n.replaceWith(sp)}});m.classList.toggle('n67',m.clientWidth<520);if(m.dataset.v66!==view)m.dataset.v66=view;
+let tidy66busy=0;
+function tidy66(){if(!UI66||tidy66busy)return;tidy66busy=1;try{tidy66go()}finally{tidy66busy=0}}
+function tidy66go(){const m=$('main');if(!m)return;if(view=='S')m.querySelectorAll('#setul .i .m').forEach(x=>{for(const n of [...x.childNodes])if(n.nodeType==3&&n.textContent.trim()){const sp=document.createElement('span');sp.className='m68';sp.textContent=n.textContent.trim();n.replaceWith(sp)}});m.classList.toggle('n67',m.clientWidth<520);if(m.dataset.v66!==view)m.dataset.v66=view;
  // put back sheet content when the sheet closed
  if(OPEN60!='s66m'){const d=$('s66mb');if(d&&d.children.length){const h=more66Host();[...d.children].forEach(e=>h.appendChild(e))}}
  if(view=='S'){const sec=m.querySelector(':scope>.sec');if(!sec)return;
@@ -3005,10 +3017,21 @@ window.__bs80={replace:bs80Replace,del:bs80Del,find:bs80Find,local:bs80Local,mon
 // for the band via reserved bands/{b}/saved/cathide149 (no Firebase rules change).
 const CATHIDE_ID='cathide149';
 const HIDE149={local:new Set(),band:new Set()};
-function libIsCat145(s){if(!s||s.X||s.bc||s._nf)return false;try{return !!(typeof CAT!=='undefined'&&CAT&&CAT.includes(s))}catch(e){return false}}
+function libIsCat145(s){if(!s||s.X||s.bc||s._nf)return false;try{
+  if(typeof CAT==='undefined'||!CAT||!CAT.length)return false;
+  if(CAT.includes(s))return true;/*same object*/
+  const id=idOf(s),fn=s.fn&&norm(s.fn);
+  /*v1.0.51: SONG may hold a clone / re-keyed row — still a catalog sample if fn/id matches CAT*/
+  if(CAT.some(c=>c&&(c===s||idOf(c)===id||(fn&&c.fn&&norm(c.fn)===fn))))return true;
+  return !!(s.id&&!s.bc&&cat100())}catch(e){return false}}
 function libCanBand145(id){return bsFind842(id).filter(({b,x})=>bs80CanDel(b,x))}
 function libBandBlocked145(id){return bsFind842(id).filter(({b,x})=>!bs80CanDel(b,x))}
 function libHidden149(id){return !!(id&&(HIDE149.local.has(id)||HIDE149.band.has(id)))}
+function libUiDrop149(id){try{const i=SET.indexOf(id);if(i>=0){SET.splice(i,1);saveSet()}}catch(_){}
+ try{if(window.__dual&&__dual.eject)__dual.eject(id)}catch(_){}
+ if(cur&&cur.id===id){try{stop()}catch(_){}cur=null}if(cue===id){cue=null;try{drawCue()}catch(_){}}
+ try{const mm=$('main');if(mm){mm.__h847=null;mm.__hS=null}stripKey='';rebuildIndex();stripDraw();render()}catch(_){}
+ try{if(window.__dual&&__dual.paint)__dual.paint()}catch(_){}}
 function libHideLoadLocal149(){try{const a=JSON.parse(localStorage.getItem('bp-cathide')||'[]');HIDE149.local=new Set(Array.isArray(a)?a.map(String):[])}catch(e){HIDE149.local=new Set()}}
 function libHideSaveLocal149(){try{localStorage.setItem('bp-cathide',JSON.stringify([...HIDE149.local].slice(0,400)))}catch(e){}try{put('kv',{k:'cathide',v:[...HIDE149.local].slice(0,400)})}catch(e){}}
 function libHideSyncBand149(){const n=new Set();
@@ -3029,38 +3052,41 @@ async function libDelLocalFile149(id){const s=SONG.get(id);if(!s)return false;co
   if(s.id&&FILES.has('web:'+s.id)){await del('files','web:'+s.id);FILES.delete('web:'+s.id)}
   cache.delete(id);rebuildIndex();try{render()}catch(_){}try{if(window.__dual&&__dual.paint)__dual.paint()}catch(_){}
   toast('🗑 ลบไฟล์ในเครื่องแล้ว (ยังอยู่ในคลังออนไลน์)',2600,true);return true}catch(e){toast('❌ ลบไม่ได้: '+(e.message||e),3500);return false}}
+function libHideIds149(id){const s=SONG.get(id),out=new Set([id]);if(!s)return[...out];
+ /*same title+artist catalog variants (ช้า/เร็ว) — hide together so 🗑 doesn't look like a miss*/
+ try{const T=nk(s.t||''),A=nk(s.a||'');if(T)for(const c of(CAT||[])){if(!c||!libIsCat145(c))continue;if(nk(c.t||'')===T&&nk(c.a||'')===A)out.add(idOf(c))}}catch(e){}
+ return[...out]}
 async function libHideTeam149(id){const s=SONG.get(id);if(!s)return false;
- HIDE149.local.add(id);libHideSaveLocal149();
+ /*v1.0.51: hide locally + drop from UI first (band sync used to await before render → 🗑 looked like a no-op)*/
+ const ids=libHideIds149(id);
+ for(const hid of ids){HIDE149.local.add(hid);const x=SONG.get(hid);if(!x)continue;
+  const fn=fileOf(x);if(fn&&FILES.has(fn)){del('files',fn).catch(()=>{});FILES.delete(fn)}
+  if(x.id&&FILES.has('web:'+x.id)){del('files','web:'+x.id).catch(()=>{});FILES.delete('web:'+x.id)}
+  cache.delete(hid);libUiDrop149(hid)}
+ libHideSaveLocal149();libHideSyncBand149();
  const bands=(BD.bands||[]).filter(b=>bdRole(b)!=='viewer');
  let bandN=0,err=null;
  if(CLD.user&&CLD.mod&&CLD.mod.bandSavedPut){
-  for(const b of bands){try{const cur=(SVB.l[b.id]||[]).find(x=>x.id===CATHIDE_ID);const o=new Set((cur&&cur.o)||[]);o.add(id);
+  for(const b of bands){try{const cur=(SVB.l[b.id]||[]).find(x=>x.id===CATHIDE_ID);const o=new Set((cur&&cur.o)||[]);for(const hid of ids)o.add(hid);
    await CLD.mod.bandSavedPut(b.id,CATHIDE_ID,{n:'ซ่อนคลัง',o:[...o].slice(0,200),d:JSON.stringify({v:1,kind:'cathide'})});
    if(!SVB.l[b.id])SVB.l[b.id]=[];const i=(SVB.l[b.id]||[]).findIndex(x=>x.id===CATHIDE_ID);const row={id:CATHIDE_ID,n:'ซ่อนคลัง',o:[...o].slice(0,200),d:'{"v":1,"kind":"cathide"}',by:BD.uid||'',byn:'',t:Date.now()};
-   if(i>=0)SVB.l[b.id][i]=row;else SVB.l[b.id].push(row);bandN++;blog('info','cathide '+b.id+' '+id)}catch(e){err=e;blog('warn','cathide',e.code||e.message)}}}
+   if(i>=0)SVB.l[b.id][i]=row;else SVB.l[b.id].push(row);bandN++;blog('info','cathide '+b.id+' '+ids.join(','))}catch(e){err=e;blog('warn','cathide',e.code||e.message)}}}
  libHideSyncBand149();
- try{const i=SET.indexOf(id);if(i>=0){SET.splice(i,1);await saveSet()}}catch(_){}
- try{if(window.__dual&&__dual.eject)__dual.eject(id)}catch(_){}
- if(cur&&cur.id===id){try{stop()}catch(_){}cur=null}if(cue===id){cue=null;try{drawCue()}catch(_){}}
- const fn=fileOf(s);if(fn&&FILES.has(fn)){await del('files',fn).catch(()=>{});FILES.delete(fn)}
- if(s.id&&FILES.has('web:'+s.id)){await del('files','web:'+s.id).catch(()=>{});FILES.delete('web:'+s.id)}
- cache.delete(id);try{rebuildIndex();stripKey='';stripDraw();render()}catch(_){}try{if(window.__dual&&__dual.paint)__dual.paint()}catch(_){}
  if(err&&!bandN)toast('❌ ซ่อนให้วงไม่ได้: '+bdErr(err)+' — ซ่อนในเครื่องนี้แล้ว',4500);
  else toast(bandN?'🙈 ซ่อนแล้ว · ทั้งวงไม่เห็นเพลงนี้':'🙈 ซ่อนจากคลังแล้ว'+(bands.length?' (รอซิงก์วง)':' (บัญชีนี้)'),3000,true);
  return true}
 async function libDelDo145(id,opt){opt=opt||{};const s=SONG.get(id);if(!s)return false;
+ /*v1.0.51: never "delete" a catalog sample via this path — it stays in CAT and the row comes back*/
+ if(libIsCat145(s)&&!s.X&&!bsFind842(id).length)return libHideTeam149(id);
  const can=opt.band===false?[]:libCanBand145(id);let bandN=0,err=null;
  for(const o of can){try{await CLD.mod.bandSongDel(o.b.id,o.x.id,o.x.fc||null);if(BS.l[o.b.id])BS.l[o.b.id]=BS.l[o.b.id].filter(y=>y.id!==o.x.id);bandN++;blog('info','libDel band '+o.b.id+' '+o.x.id)}catch(e){err=e;blog('warn','libDel band',e.code||e.message)}}
- try{const i=SET.indexOf(id);if(i>=0){SET.splice(i,1);await saveSet()}
-  try{if(window.__dual&&__dual.eject)__dual.eject(id)}catch(_){}
-  if(cur&&cur.id===id){try{stop()}catch(_){}cur=null}if(cue===id){cue=null;try{drawCue()}catch(_){}}
-  const fn=fileOf(s)||s.fn;if(fn&&FILES.has(fn)){await del('files',fn).catch(()=>{});FILES.delete(fn);if(FLD.mem&&FLD.mem[fn]){delete FLD.mem[fn];try{fldSave()}catch(_){}}}
+ try{const fn=fileOf(s)||s.fn;if(fn&&FILES.has(fn)){await del('files',fn).catch(()=>{});FILES.delete(fn);if(FLD.mem&&FLD.mem[fn]){delete FLD.mem[fn];try{fldSave()}catch(_){}}}
   if(s.id&&FILES.has('web:'+s.id)){await del('files','web:'+s.id).catch(()=>{});FILES.delete('web:'+s.id)}
   cache.delete(id);try{for(const k of [...REND.keys()])if(k.startsWith(id+'|'))REND.delete(k)}catch(_){}
   if(s.X||s.bc||s._nf)SONG.delete(id);
   if(META[id]){delete META[id];await put('kv',{k:'meta',v:META}).catch(()=>{})}
   PREF.delete(id);try{await del('prefs',id)}catch(_){}
-  rebuildIndex();try{stripKey='';stripDraw()}catch(_){}try{render()}catch(_){}try{if(window.__dual&&__dual.paint)__dual.paint()}catch(_){}
+  libUiDrop149(id);
   if(err&&!bandN)toast('❌ ลบออกจากวงไม่ได้: '+bdErr(err),4000);
   else toast('🗑 ลบจากคลังแล้ว'+(bandN?' · ทุกคนในวงไม่เห็นแล้ว':''),2800,true);
   return true}catch(e){toast('❌ ลบไม่ได้: '+(e.message||e),3500);return false}}
@@ -3094,6 +3120,7 @@ window.__test145={plant(id,o){o=o||{};const fn=String(id).replace(/^X:/,'')||('t
    CLD.mod=CLD.mod||{};window.__del145=[];CLD.mod.bandSongDel=async(b,sid,fc)=>{window.__del145.push({b,id:sid,fc});return true}}
   SONG.set(id,s);if(!SET.includes(id))SET.push(id);return{inSong:SONG.has(id),inSet:SET.includes(id)}},
  plantCat(o){o=o||{};const fn=o.fn||('cat'+Date.now()+'.mp3');const s={s:'W',fn,t:o.t||fn,a:o.a||'Sample',g:'',k:'',_pp:1};if(!Array.isArray(CAT))CAT=[];if(!CAT.includes(s))CAT.push(s);const id=idOf(s);SONG.set(id,s);return{id,isCat:libIsCat145(s)}},
+ hangHide(id){BD.uid=BD.uid||'u1';if(!CLD.user)CLD.user={uid:BD.uid,email:'t@t'};BD.bands=[{id:'band1',name:'วงทดสอบ',members:{[BD.uid]:'owner'}}];CLD.mod=CLD.mod||{};CLD.mod.bandSavedPut=()=>new Promise(()=>{});return libHideTeam149(id)},
  has(id){return{inSong:SONG.has(id),inSet:SET.includes(id),bandLeft:(BS.l&&BS.l.band1||[]).length}},dels(){return(window.__del145||[]).slice()}};
 
 // ===================== v1.81: contact channels + support chat =====================
@@ -3676,13 +3703,16 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   function openImport(){
     closeSheet();
     if(!document.body.classList.contains('live')){goStudioTool('import');return}
-    try{view='F';document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('on',t.dataset.v==='F')});render()}catch(e){}
+    /* v1.0.51: do NOT set view=F + render() + move #main into overlay.
+       That path re-entered tidy66 via MutationObserver on #main and froze the Live/Dual UI ("ค้าง" on นำเข้าเพลง).
+       Use the same light import panel as Studio tools. */
     $id('op-ovt').textContent='นำเข้าเพลง';
+    const box=$id('op-ovb');if(!box)return;
+    box.innerHTML='';
+    const wrap=document.createElement('div');wrap.id='op-stimp';wrap.className='stimp-ov';
+    box.appendChild(wrap);
+    try{stFillImport150(wrap)}catch(e){wrap.textContent='เปิดนำเข้าไม่ได้'}
     document.body.classList.add('op-ov');
-    try{
-      const m=$id('main'), box=$id('op-ovb');
-      if(m&&box&&m.parentNode!==box)box.appendChild(m);
-    }catch(e){}
   }
   function openSettings(){
     closeSheet();
@@ -3690,7 +3720,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     $id('op-ovt').textContent='ตั้งค่า';
     const box=$id('op-ovb');if(!box)return;
     box.innerHTML='';
-    const wrap=document.createElement('div');wrap.id='stpanel';wrap.hidden=false;
+    /* v1.0.51: never reuse id=stpanel here — that stole document.getElementById('stpanel') from Studio and caused tool-rail flicker */
+    const wrap=document.createElement('div');wrap.id='op-stset';wrap.className='stset-ov';wrap.hidden=false;
     box.appendChild(wrap);
     try{stFillSettings150(wrap)}catch(e){wrap.textContent='เปิดตั้งค่าไม่ได้'}
     document.body.classList.add('op-ov');
@@ -3927,7 +3958,9 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
           const r=typeof realBpm==='function'?realBpm(id):0;
           bb=r?String(Math.round(r)):((pref(id).tempo&&pref(id).tempo!==100)?(pref(id).tempo+'%'):'');
         }catch(e){}
-        tags.innerHTML='<span class="op-kb">'+esc(kn)+'</span>'+(bb?'<span class="op-bpm">'+esc(bb)+'</span>':'');
+        /* v1.0.51: only rewrite tags when key/BPM text changed — tick@400ms used to thrash Live rows */
+        const html='<span class="op-kb">'+esc(kn)+'</span>'+(bb?'<span class="op-bpm">'+esc(bb)+'</span>':'');
+        if(tags.dataset.h!==html){tags.dataset.h=html;tags.innerHTML=html}
       }
       bindRowPress(c);
     });
@@ -3959,9 +3992,9 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       tv.textContent=lab;
     }
     const pb=$id('op-play');
-    if(pb){const on=!!playing;pb.innerHTML=on?svg.pause:svg.play;pb.setAttribute('aria-label',on?'หยุด':'เล่น')}
+    if(pb){const on=!!playing,want=on?'pause':'play';if(pb.dataset.ic!==want){pb.dataset.ic=want;pb.innerHTML=on?svg.pause:svg.play;pb.setAttribute('aria-label',on?'หยุด':'เล่น')}}
     const pad=$id('op-pad'),pl=$id('op-padl');
-    if(pad){const on=!!(typeof PAD!=='undefined'&&PAD.on);pad.classList.toggle('on',on);pad.setAttribute('aria-pressed',on?'true':'false');if(pl)pl.textContent=on?' Pad เปิด':' Pad'}
+    if(pad){const on=!!(typeof PAD!=='undefined'&&PAD.on);pad.classList.toggle('on',on);pad.setAttribute('aria-pressed',on?'true':'false');if(pl){const lt=on?' Pad เปิด':' Pad';if(pl.textContent!==lt)pl.textContent=lt}}
     try{syncOpAuto()}catch(e){}
     const nx=$id('op-nxt');if(nx)nx.innerHTML='';
     const ln=$id('op-listn');if(ln)ln.textContent=SET.length+' เพลง';
