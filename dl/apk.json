@@ -1,6 +1,6 @@
 {
-  "build": 61,
-  "ver": "1.0.46",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b61-1.0.46/SetSod.apk",
-  "notes": "1.0.46: สตูดิโอ/คลังมีปุ่ม 🗑 ลบจากคลังข้าง ＋ ชัดเจน (ลบเพลงของวงแล้วทีมไม่เห็น)"
+  "build": 62,
+  "ver": "1.0.47",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b62-1.0.47/SetSod.apk",
+  "notes": "1.0.47: ปุ่ม 🗑 ลบจากคลังโชว์ทุกแถว รวมเพลงออนไลน์ที่ยังไม่โหลดเก็บ"
 }
