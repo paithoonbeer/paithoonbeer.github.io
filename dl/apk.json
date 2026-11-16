@@ -1,6 +1,6 @@
 {
-  "build": 60,
-  "ver": "1.0.45",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b60-1.0.45/SetSod.apk",
-  "notes": "1.0.45: ลบเพลงจากคลังได้ (ลบจากวงด้วย ทีมไม่เห็น) + แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ"
+  "build": 61,
+  "ver": "1.0.46",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b61-1.0.46/SetSod.apk",
+  "notes": "1.0.46: สตูดิโอ/คลังมีปุ่ม 🗑 ลบจากคลังข้าง ＋ ชัดเจน (ลบเพลงของวงแล้วทีมไม่เห็น)"
 }
