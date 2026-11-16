@@ -1,6 +1,6 @@
 {
-  "build": 64,
-  "ver": "1.0.49",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b64-1.0.49/SetSod.apk",
-  "notes": "ลบจากคลัง: กด 🗑 ยืนยันครั้งเดียว — ทั้งวงไม่เห็น (เพลงตัวอย่างออนไลน์ซ่อนให้ทั้งทีม)"
+  "build": 65,
+  "ver": "1.0.50",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b65-1.0.50/SetSod.apk",
+  "notes": "สตูดิโอ A+B: ซ้ายคลัง/คืนนี้ · ขวากราฟ/เมโทร/นำเข้า/ตั้งค่า (ตรึง) · ตั้งค่าเป็นหัวข้อใหญ่"
 }
