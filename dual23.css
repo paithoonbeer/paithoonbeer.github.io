@@ -615,9 +615,15 @@ body.dd-stack #op-dualui .dd-listhead{
   white-space:nowrap !important;
 }
 #op-dualui .dd-listhead .n{
-  font:700 12px/1 Inter,"Noto Sans Thai",system-ui !important;
+  font:700 12px/1.2 Inter,"Noto Sans Thai",system-ui !important;
   color:#9ca3af !important;
-  margin-left:auto !important;
+  margin-left:0 !important;
+  flex:0 1 auto !important;
+  min-width:0 !important;
+  white-space:nowrap !important;
+  overflow:hidden !important;
+  text-overflow:ellipsis !important;
+  max-width:58% !important;
 }
 #op-dualui .dd-listacts{display:flex !important;align-items:center !important;gap:2px !important;flex:0 0 auto !important}
 #op-dualui .dd-listhbtn{

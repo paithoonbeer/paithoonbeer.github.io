@@ -1,27 +1,102 @@
-/* v1.77 PREVIEW ONLY (not deployed): นำเข้า keeps only import actions; everything else moves to one ⚙️ ตั้งค่า page, grouped by importance */
+/* v1.0.53: นำเข้า = เพลงเท่านั้น; การตั้งค่าเป็นหน้าหมวดหมู่ (เมนูบัญชี + ในสตูดิโอ)
+   Categories: แอป · บัญชี · การแสดงผล · ช่วยเหลือ · ระบบ */
 (function(){const $=id=>document.getElementById(id);
-const G=[['app','แอป'],['acc','บัญชี วง และแพ็กเกจ'],['look','การแสดงผลและเสียง'],['tools','เครื่องมือ'],['help','ช่วยเหลือและความเป็นส่วนตัว'],['sys','ระบบ (ขั้นสูง)']];
+const G=[
+  ['app','แอป'],
+  ['acc','บัญชีและวง'],
+  ['look','การแสดงผลและเสียง'],
+  ['help','ช่วยเหลือ'],
+  ['sys','ระบบ (ขั้นสูง)']
+];
+function live(){return document.body.classList.contains('live')}
+function fromMenu(){return !!window.__setFromMenu}
 function tick(){const m=$('main');if(!m||!document.querySelector('.tab.on[data-v="F"]'))return;
- let st=$('st77');if(!st){st=document.createElement('div');st.id='st77';st.innerHTML='<button type="button" class="hw st77b" data-st77="back">‹ กลับไปนำเข้า</button><h2 class="st77t">ตั้งค่า</h2>'+G.map(([k,t])=>`<h3 class="g66h st77h" data-g="${k}">${t}</h3><div class="st77g" data-g="${k}"></div>`).join('');}
+ let st=$('st77');if(!st){st=document.createElement('div');st.id='st77';st.innerHTML=
+  '<button type="button" class="hw st77b" data-st77="back">‹ กลับไปนำเข้า</button>'+
+  '<h2 class="st77t">การตั้งค่า</h2>'+
+  G.map(([k,t])=>`<h3 class="g66h st77h" data-g="${k}">${t}</h3><div class="st77g" data-g="${k}"></div>`).join('');}
  if(!m.contains(st))m.appendChild(st);
  const g=k=>st.querySelector(`.st77g[data-g="${k}"]`);
  // app: update + version
  const sys=[...m.querySelectorAll(':scope>.sec')].find(e=>e.querySelector('#lgv'));
- const up=document.querySelector('#main .upd77s');if(up&&!g('app').contains(up)){const wr=document.createElement('div');wr.appendChild(up);g('app').appendChild(wr);const v=document.createElement('div');v.className='small st77v';v.textContent='เวอร์ชัน '+(document.querySelector('meta[name="bp-ver"]')||{}).content;wr.appendChild(v)}
- // account / band / plans / backup → the existing account panel (one link, no duplicate controls)
- if(!g('acc').children.length){const b=document.createElement('button');b.type='button';b.className='hw r68 r68c';b.innerHTML='<span class="ici">👤</span><span>บัญชี · วงของฉัน · แพ็กเกจ<br><span class="small">สำรอง/กู้คืนข้อมูล</span></span>';b.onclick=()=>window.__acp&&__acp.open();g('acc').appendChild(b)}
+ const up=document.querySelector('#main .upd77s');
+ if(up&&!g('app').contains(up)){
+  const wr=document.createElement('div');wr.appendChild(up);g('app').appendChild(wr);
+  const v=document.createElement('div');v.className='small st77v';
+  v.textContent='เวอร์ชัน '+(document.querySelector('meta[name="bp-ver"]')||{}).content;
+  wr.appendChild(v);
+ }
+ // account / band / backup
+ if(!g('acc').querySelector('[data-st77="acc"]')){
+  const b=document.createElement('button');b.type='button';b.className='hw r68 r68c';b.dataset.st77='acc';
+  b.innerHTML='<span class="ici">👤</span><span>บัญชีและวงของฉัน<br><span class="small">เข้าสู่ระบบ · วง · สำรองข้อมูล</span></span>';
+  b.onclick=function(){try{window.__acp&&__acp.open()}catch(e){}};
+  g('acc').appendChild(b);
+ }
  const mv=(el,k)=>{if(el&&el.parentNode&&!g(k).contains(el))g(k).appendChild(el)};
- mv($('langb'),'look');mv($('literow'),'look');mv($('mosec'),'look');mv(m.querySelector(':scope>.set65e'),'look');mv($('pcmrow'),'look');
- const ai=[...m.querySelectorAll('button')].find(b=>/Stems/.test(b.textContent)&&!st.contains(b));if(ai){ai.classList.remove('r68','r68c');ai.classList.add('st77row');g('tools').appendChild(ai)}
- mv([...m.querySelectorAll(':scope>.sec')].find(e=>e.querySelector('[data-help]')),'help');mv(m.querySelector(':scope>.pv75f'),'help');
+ mv($('langb'),'look');mv($('literow'),'look');mv($('mosec'),'look');
+ mv(m.querySelector(':scope>.set65e'),'look');mv($('pcmrow'),'look');
+ // help: feedback + chat + วิธีใช้
+ if(!g('help').querySelector('[data-st77="fb"]')){
+  const fb=document.createElement('button');fb.type='button';fb.className='hw r68 r68c';fb.dataset.st77='fb';
+  fb.innerHTML='<span class="ici">💬</span><span>ส่งความเห็น<br><span class="small">บั๊ก · ไอเดีย · คะแนน</span></span>';
+  fb.onclick=function(){try{window.__op18&&__op18.openFeedback&&__op18.openFeedback()}catch(e){}};
+  g('help').appendChild(fb);
+ }
+ if(!g('help').querySelector('[data-st77="chat"]')){
+  const ch=document.createElement('button');ch.type='button';ch.className='hw r68 r68c';ch.dataset.st77='chat';
+  ch.innerHTML='<span class="ici">🤖</span><span>แชทกับน้องเซ็ต<br><span class="small">ถามวิธีใช้กับผู้ช่วย</span></span>';
+  ch.onclick=function(){try{if(typeof ch81Open==='function')ch81Open();else toast('เปิดแชทไม่ได้',2000)}catch(e){toast('เปิดแชทไม่ได้',2000)}};
+  g('help').appendChild(ch);
+ }
+ mv([...m.querySelectorAll(':scope>.sec')].find(e=>e.querySelector('[data-help]')),'help');
+ mv(m.querySelector(':scope>.pv75f'),'help');
  mv(sys,'sys');
  m.querySelectorAll(':scope>.g66h').forEach(h=>{if(h.textContent.trim()!='เพลง')h.remove()});
- let go=$('st77go');if(!go){go=document.createElement('button');go.id='st77go';go.type='button';go.className='hw st77row';go.innerHTML='<span>⚙️</span><span>ตั้งค่า</span><span class="small">ภาษา · ธีม · อัปเดต · บัญชี · ช่วยเหลือ ›</span>';}
- if(go.nextElementSibling!==st)st.before(go);
+ // Studio still offers a door into settings from Import; Live uses the avatar menu.
+ // Park a single #st77go on #main even when hidden so Live ticks do not orphan-create buttons.
+ let go=$('st77go')||tick._go;
+ if(!go){
+  go=document.createElement('button');go.id='st77go';go.type='button';go.className='hw st77row';
+  go.innerHTML='<span>⚙️</span><span>การตั้งค่า</span><span class="small">ภาษา · ธีม · บัญชี · ช่วยเหลือ ›</span>';
+ }
+ tick._go=go;
+ const showGo=!live()&&!fromMenu()&&!m.classList.contains('st77on');
+ go.style.display=showGo?'':'none';
+ if(showGo){if(go.nextElementSibling!==st)st.before(go)}
+ else if(!go.parentNode){m.appendChild(go)}
+ // back label depends on entry path
+ const bk=st.querySelector('[data-st77="back"]');
+ if(bk){
+  if(fromMenu()||(live()&&m.classList.contains('st77on'))){
+   bk.textContent='‹ ปิดการตั้งค่า';
+  }else{
+   bk.textContent='‹ กลับไปนำเข้า';
+  }
+ }
  m.dataset.g66=m.childElementCount+'|'+(m.firstElementChild&&m.firstElementChild.className)}
-document.addEventListener('click',e=>{const m=$('main');if(e.target.closest('#st77go')){m.classList.add('st77on');scrollTo(0,0)}else if(e.target.closest('[data-st77="back"]')){m.classList.remove('st77on');scrollTo(0,0)}else if(e.target.closest('.tab'))m&&m.classList.remove('st77on')},true);
+document.addEventListener('click',e=>{
+ const m=$('main');if(!m)return;
+ if(e.target.closest('#st77go')){m.classList.add('st77on');window.__setFromMenu=0;scrollTo(0,0);try{tick()}catch(_){}}
+ else if(e.target.closest('[data-st77="back"]')){
+  if(fromMenu()||(live()&&document.body.classList.contains('op-ov'))){
+   try{document.body.classList.remove('op-ov');window.__setFromMenu=0;window.__fbFromSettings=0;
+    const left=$('left'),main=$('main');if(main&&left&&main.parentNode!==left)left.appendChild(main);
+    const box=$('op-ovb');if(box)box.innerHTML='';
+    m.classList.remove('st77on');
+    // Live: clear sticky view=F so tidy66 stops regrouping Import under Dual
+    try{if(typeof view!=='undefined'&&view==='F'&&(live()||(window.__dual&&__dual.on))){view='P';document.querySelectorAll('.tab').forEach(function(t){t.classList.toggle('on',t.dataset.v==='P')})}}catch(_){}
+   }catch(err){}
+  }else{
+   m.classList.remove('st77on');scrollTo(0,0);
+  }
+  try{tick()}catch(_){}
+ }else if(e.target.closest('.tab')){m.classList.remove('st77on');window.__setFromMenu=0}
+},true);
 const css=document.createElement('style');css.textContent=`
-#st77{display:none;max-width:760px;margin:0 auto;padding:4px 0 120px}#main.st77on>*:not(#st77){display:none!important}#main.st77on>#st77{display:block}
+#st77{display:none;max-width:760px;margin:0 auto;padding:4px 0 120px}
+#main.st77on>*:not(#st77){display:none!important}
+#main.st77on>#st77{display:block}
 .st77b{background:transparent;border:0;padding:8px 2px;min-height:40px;color:var(--mut,#9a9aa8);font-size:15px}
 .st77t{font-size:26px;margin:2px 0 14px}
 #st77 .st77h{font-size:13px;font-weight:600;letter-spacing:.02em;color:#9a9aa8;margin:22px 4px 8px;padding:0;border:0;text-transform:none}
@@ -35,7 +110,8 @@ const css=document.createElement('style');css.textContent=`
 #st77 .upd77s{display:flex;gap:8px;padding:12px 14px;margin:0;align-items:center;flex-wrap:wrap}#st77 .upd77s button{flex:1 1 160px;justify-content:center}
 #st77 .st77v{padding:0 14px 12px;color:#9a9aa8;font-size:13px}
 #st77 .pv75f{padding:14px;text-align:left}
-#st77go{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;margin:16px 0;padding:12px 16px;font-size:16px;text-align:left}#st77go .small{margin-left:auto;opacity:.6}
+#st77go{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;margin:16px 0;padding:12px 16px;font-size:16px;text-align:left}
+#st77go .small{margin-left:auto;opacity:.6}
 #st77{padding-left:12px;padding-right:12px}
 #st77 .st77g button{text-align:left!important;justify-content:flex-start!important}
 #st77 .st77g>.sec>button,#st77 .st77g>.sec>details>summary,#st77 .st77g>.sec>.hw,#st77 .st77g>button.set65e{background:transparent!important;border:0!important;box-shadow:none!important;padding-left:0!important;padding-right:0!important;width:100%}
@@ -52,4 +128,6 @@ const css=document.createElement('style');css.textContent=`
 @media (min-width:1000px){#st77{padding-top:12px}}
 @media (orientation:landscape) and (max-height:500px){.st77t{font-size:20px;margin:0 0 6px}#st77 .st77h{margin-top:14px}}
 `;document.head.appendChild(css);
-setInterval(()=>{try{tick()}catch(e){console.warn('imp77',e)}},400);window.__imp77=tick})();
+setInterval(()=>{try{tick()}catch(e){console.warn('imp77',e)}},400);
+window.__imp77=tick;
+})();
