@@ -1,6 +1,6 @@
 {
-  "build": 68,
-  "ver": "1.0.56",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b68-1.0.56/SetSod.apk",
-  "notes": "1.0.56: แก้ลบเพลงแล้วทีมยังเห็น · เอาแท็บเขียวเล่นต่อออก · เด้งอัปเดตแอปชัดขึ้น"
+  "build": 69,
+  "ver": "1.0.57",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b69-1.0.57/SetSod.apk",
+  "notes": "1.0.57: ปุ่มกู้คืนเพลงที่ซ่อนจากคลัง (นอมซ้าย/ขวา)"
 }
