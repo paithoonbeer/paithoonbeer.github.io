@@ -17,8 +17,14 @@ function tick(){const m=$('main');if(!m||!document.querySelector('.tab.on[data-v
   G.map(([k,t])=>`<h3 class="g66h st77h" data-g="${k}">${t}</h3><div class="st77g" data-g="${k}"></div>`).join('');}
  if(!m.contains(st))m.appendChild(st);
  const g=k=>st.querySelector(`.st77g[data-g="${k}"]`);
- // app: update + version
+ // app: unhide (v1.0.58 — was buried under ระบบ) + update + version
  const sys=[...m.querySelectorAll(':scope>.sec')].find(e=>e.querySelector('#lgv'));
+ if(!g('app').querySelector('[data-unhide149]')){
+  const uh=document.createElement('button');uh.type='button';uh.className='hw r68 r68c';uh.dataset.unhide149='st';
+  uh.innerHTML='<span class="ici">👁</span><span>กู้คืนเพลงที่ซ่อน<br><span class="small">เพลงตัวอย่างที่กด 🗑 ไว้ · กดเพื่อเอาคืน</span></span><span class="uhn nb" hidden>0</span>';
+  g('app').appendChild(uh);
+ }
+ try{if(typeof window.__syncUnhide==='function')window.__syncUnhide()}catch(e){}
  const up=document.querySelector('#main .upd77s');
  if(up&&!g('app').contains(up)){
   const wr=document.createElement('div');wr.appendChild(up);g('app').appendChild(wr);
@@ -26,6 +32,8 @@ function tick(){const m=$('main');if(!m||!document.querySelector('.tab.on[data-v
   v.textContent='เวอร์ชัน '+(document.querySelector('meta[name="bp-ver"]')||{}).content;
   wr.appendChild(v);
  }
+ // keep buried sys copy as fallback; also move any leftover data-unhide149 from Import HTML into app
+ try{const old=m.querySelector('[data-unhide149="1"]');if(old&&!g('app').contains(old)){old.remove()}}catch(e){}
  // account / band / backup
  if(!g('acc').querySelector('[data-st77="acc"]')){
   const b=document.createElement('button');b.type='button';b.className='hw r68 r68c';b.dataset.st77='acc';
@@ -105,6 +113,9 @@ const css=document.createElement('style');css.textContent=`
 #st77 .st77g>*:first-child{border-top:0!important}
 #st77 .st77g>.sec{padding:12px 14px!important}#st77 .st77g>.sec>h2{font-size:16px;margin:0 0 8px}
 #st77 .st77g button.hw,#st77 .st77row{min-height:50px;font-size:16px;text-align:left;justify-content:flex-start}
+#st77 [data-unhide149]{display:flex!important;align-items:center;gap:12px;padding:12px 14px!important}
+#st77 [data-unhide149] .uhn{margin-left:auto;background:#ff453a;color:#fff;font-size:12px;font-weight:800;min-width:20px;height:20px;border-radius:10px;display:none;place-items:center}
+#st77 [data-unhide149] .uhn.on{display:grid}
 #st77 .st77row{display:flex;align-items:center;gap:12px;padding:12px 14px;width:100%;background:transparent;border:0;color:inherit}
 #st77 .st77row .chev{margin-left:auto;opacity:.5}#st77 .st77row .ico{width:22px;text-align:center;flex:none}
 #st77 .upd77s{display:flex;gap:8px;padding:12px 14px;margin:0;align-items:center;flex-wrap:wrap}#st77 .upd77s button{flex:1 1 160px;justify-content:center}
