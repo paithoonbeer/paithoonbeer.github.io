@@ -15,6 +15,8 @@ Each file in this folder was trimmed, faded, loudness-normalized, and encoded as
 | roll | `roll.mp3` | ~3.8 s (almost full take, fade-out; 5.1 downmixed to stereo) | Iwan Sounds and DIY | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | “Drum roll intro” field/studio recording. [Commons: Drum Roll Intro.ogg](https://commons.wikimedia.org/wiki/File:Drum_Roll_Intro.ogg) |
 
 
+Count-in voice pads (`ci-one.mp3` … `ci-six.mp3`) were synthesized with **eSpeak NG** for on-beat scheduling in the app (not third-party recordings).
+
 Rejected (license or type not acceptable):
 
 - Commons `Crash cymbal.ogg` — CC BY-SA / GFDL, not CC0
