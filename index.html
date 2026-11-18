@@ -16,7 +16,7 @@ document.body.appendChild(d);function cp(t){var ok=function(){document.getElemen
 function fb(t){var i=document.createElement('textarea');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy')}catch(e){}i.remove()}
 document.getElementById('lbcl').onclick=function(){cp(link)};var c=document.getElementById('lbcc');if(c)c.onclick=function(){cp(code)};if(auto){auto=false;setTimeout(function(){L.href=IT},400)}}
 if(document.body)show();else document.addEventListener('DOMContentLoaded',show);setInterval(show,1000)}catch(e){}})();</script><script>try{var q=(location.search.match(/[?&]theme=(\w+)/)||[])[1];if(q)localStorage.setItem("bp-theme",q);var t=localStorage.getItem("bp-theme")||"stage";if(t&&t!="studio")document.documentElement.classList.add("th-"+t)}catch(e){}</script>
-<meta name="bp-ver" content="1.0.62"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
+<meta name="bp-ver" content="1.0.63"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0b0b0f"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-512.png">
 <title>SetSod</title><meta name="apple-mobile-web-app-title" content="SetSod"><meta name="application-name" content="SetSod">
@@ -875,11 +875,9 @@ setInterval(()=>{const s=document.getElementById('sk');document.getElementById('
 <script src="icons.js"></script>
 <script type="module" src="app.js"></script>
 <script src="imp77.js?v=158"></script></body></html>
-<style>/* v39 PC mode · v1.0.62: pin studio tools/graph while the left song list scrolls */
+<style>/* v39 PC mode · v1.0.62/63: pin studio tools/graph while the left song list scrolls */
 .ovl.on{display:flex}
-/* Lock the two-pane viewport so body does not scroll.
-   Must beat op18's `html.op18:not(.op18-live), … body.op18:not(.live){height:auto;overflow:hidden auto}`
-   and `#left{height:auto;overflow:visible}` — otherwise the page scrolls as one sheet and studio tools/wave float away. */
+/* Fallback CSS (pcmCss() in app.js is authoritative — appended last, position:fixed). */
 html.op18.pcm:not(.op18-live),
 html.op18:not(.op18-live) body.pcm,
 html body.pcm.op18:not(.live),
@@ -904,10 +902,15 @@ html body.pcm #right{
   height:100%!important;max-height:100%!important;min-height:0!important;
   overflow:hidden!important;position:relative!important;top:auto!important;
   display:flex!important;flex-direction:column!important;box-sizing:border-box!important}
-html body.pcm #right>#pl{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-html body.pcm #pl.open{flex:1 1 auto;min-height:0;height:auto!important;max-height:100%;overflow:hidden!important;display:flex!important;flex-direction:column}
-html body.pcm #pl.open #plx{flex:1 1 auto;min-height:0!important;overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain}
-body.pcm #studio{grid-template-columns:minmax(0,1fr) 340px!important;grid-template-areas:"bar bar" "strip strip" "wave wave" "mk mix" "ctr mix" "fd mix" ". mix"!important}
+html body.pcm #right>#pl,html body.pcm #pl,html body.pcm #pl.open{
+  flex:1 1 auto!important;min-height:0!important;height:100%!important;max-height:100%!important;
+  overflow:hidden!important;display:flex!important;flex-direction:column!important}
+html body.pcm #plx{
+  flex:1 1 auto!important;min-height:0!important;max-height:100%!important;
+  overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain!important;
+  display:flex!important;flex-direction:column!important}
+html body.pcm #studio{flex:1 1 auto!important;min-height:0!important;
+  grid-template-columns:minmax(0,1fr) 340px!important;grid-template-areas:"bar bar" "strip strip" "wave wave" "mk mix" "ctr mix" "fd mix" ". mix"!important}
 body.pcm #studio #wave{height:300px!important}
 body.pcm #cue{top:auto!important;bottom:16px!important;max-height:45vh;overflow:auto}
 .pctb{display:none;gap:6px;flex-wrap:wrap;margin-left:auto}body.pcm .pctb{display:inline-flex}.pctb .hw{min-height:44px;padding:0 12px}

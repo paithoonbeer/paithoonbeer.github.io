@@ -1031,10 +1031,12 @@ body.op-ov #op-ovb #main{
 
 
 /* ===== 1.0.26: Studio tabs (คลัง / Live / Metronome / Import) must page-scroll =====
-   1.0.20 locked html.op18 + html.op18 body even after leaving the one-page view. */
-html.op18:not(.op18-live),
-html.op18:not(.op18-live) body,
-body.op18:not(.live){
+   1.0.20 locked html.op18 + html.op18 body even after leaving the one-page view.
+   v1.0.63: exclude PC mode (.pcm) — two-pane DAW must NOT page-scroll or the right
+   column (wave + tools/mixer) floats away while browsing songs on the left. */
+html.op18:not(.op18-live):not(.pcm),
+html.op18:not(.op18-live):not(.pcm) body,
+body.op18:not(.live):not(.pcm){
   overflow:auto !important;
   overflow-x:hidden !important;
   height:auto !important;
@@ -1043,12 +1045,12 @@ body.op18:not(.live){
   touch-action:pan-y;
   -webkit-overflow-scrolling:touch;
 }
-body.op18:not(.live){
+body.op18:not(.live):not(.pcm){
   position:static !important;
   left:auto;right:auto;top:auto;bottom:auto;
 }
-body.op18:not(.live) #left,
-body.op18:not(.live) #main{
+body.op18:not(.live):not(.pcm) #left,
+body.op18:not(.live):not(.pcm) #main{
   overflow:visible !important;
   height:auto !important;
   max-height:none !important;
