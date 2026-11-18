@@ -16,7 +16,7 @@ document.body.appendChild(d);function cp(t){var ok=function(){document.getElemen
 function fb(t){var i=document.createElement('textarea');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy')}catch(e){}i.remove()}
 document.getElementById('lbcl').onclick=function(){cp(link)};var c=document.getElementById('lbcc');if(c)c.onclick=function(){cp(code)};if(auto){auto=false;setTimeout(function(){L.href=IT},400)}}
 if(document.body)show();else document.addEventListener('DOMContentLoaded',show);setInterval(show,1000)}catch(e){}})();</script><script>try{var q=(location.search.match(/[?&]theme=(\w+)/)||[])[1];if(q)localStorage.setItem("bp-theme",q);var t=localStorage.getItem("bp-theme")||"stage";if(t&&t!="studio")document.documentElement.classList.add("th-"+t)}catch(e){}</script>
-<meta name="bp-ver" content="1.0.73"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
+<meta name="bp-ver" content="1.0.74"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0b0b0f"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-512.png">
 <title>SetSod</title><meta name="apple-mobile-web-app-title" content="SetSod"><meta name="application-name" content="SetSod">
@@ -199,7 +199,7 @@ body.live #left,body.live #right{display:none}
 .lvnow{display:flex;align-items:center;gap:18px;margin:8px 0 18px}.lvbig{width:120px;height:120px;flex:0 0 120px;border-radius:50%;font-size:52px;border:2px solid #000;color:#fff;background:radial-gradient(circle at 35% 30%,#4aa3ff,#0a5fd0 60%,#06306a);box-shadow:0 8px 24px rgba(10,132,255,.5),inset 0 2px 0 rgba(255,255,255,.3)}
 .lvt{font-size:24px;font-weight:700}.lvc{font:600 22px "JetBrains Mono",ui-monospace,Menlo,monospace;color:#ff453a;margin-top:4px}
 .lvl{display:flex;flex-direction:column;gap:8px}.lvl .sc{flex:none;padding:14px 16px}.lvl .sct{font-size:20px}.lvl .sca{font-size:14px}.lvl .scn{font-size:14px}
-@media (min-width:900px){
+@media (min-width:900px) and (min-height:501px){
  body{grid-template-columns:minmax(0,1fr) 720px}
  #studio #wave{height:170px!important}
  #plx{display:grid!important;grid-template-columns:1fr;gap:6px}
@@ -875,10 +875,10 @@ setInterval(()=>{const s=document.getElementById('sk');document.getElementById('
 <script src="icons.js"></script>
 <script type="module" src="app.js"></script>
 <script src="imp77.js?v=158"></script></body></html>
-<style>/* v39 PC mode · v1.0.64: pin studio tools/graph on ≥900px two-pane (not only .pcm) */
+<style>/* v39 PC mode · v1.0.64/74: pin studio tools/graph on ≥900×501 two-pane (not only .pcm; not phone landscape) */
 .ovl.on{display:flex}
 /* Fallback — pcmCss() in app.js is authoritative (last-word). */
-@media (min-width:900px){
+@media (min-width:900px) and (min-height:501px){
 html.op18:not(.op18-live),
 html.op18:not(.op18-live) body,
 html body.op18:not(.live){
@@ -1030,13 +1030,13 @@ html.th-easy .bs60p,html.th-analog .bs60p{background:var(--bg2,#1b1c21)}
  #plx>.grid{order:7}#plx>#studio>.mkbar{order:8}#plx>#studio>.fdrow{order:9}#plx>#studio>.padc{order:10}#plx>#studio>.mixer{order:11}#plx>.seek{order:12}#plx>#ps{order:13}#plx>#auto{order:14}#plx>#vol{order:15}
 }}
 </style>
-<style>/* v1.61: desktop/tablet wide layout fix — tools row in the studio grid; sidebar never squeezed at 900–1099px */
-@media (min-width:900px){
+<style>/* v1.61/74: desktop/tablet wide layout — tools row; exclude phone landscape (h≤500) */
+@media (min-width:900px) and (min-height:501px){
  #studio{grid-template-areas:"bar bar" "strip strip" "wave mix" "mk mix" "ctr mix" "tools mix" "fd mix" ". mix"}
  #studio>.tb60{grid-area:tools;margin:0;min-width:0}
  body.pcm #studio{grid-template-areas:"bar bar" "strip strip" "wave wave" "mk mix" "ctr mix" "tools mix" "fd mix" ". mix"!important}
 }
-@media (min-width:900px) and (max-width:1099px) and (not ((orientation:landscape) and (max-height:500px))){
+@media (min-width:900px) and (max-width:1099px) and (min-height:501px){
  body:not(.pcm){grid-template-columns:minmax(330px,38%) minmax(0,1fr)}
  body:not(.pcm) #studio{grid-template-columns:minmax(0,1fr);grid-template-areas:"bar" "strip" "wave" "ctr" "tools" "mk" "fd" "mix"}
 }
@@ -1185,14 +1185,14 @@ html.th-easy .bs60p,html.th-analog .bs60p{background:var(--bg2,#1b1c21)}
 .svbtn{position:relative}.sv63n{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;border-radius:9px;background:#fff;color:#000;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px}
 .bs63r{justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid rgba(255,255,255,.08)}.bs63t{min-width:0;flex:1}.bs63w{color:#ffcc66}.bs63h{opacity:.75;margin-top:4px}
 @media (max-width:899px){.tb60{grid-template-columns:repeat(5,minmax(0,1fr))}#plx>#studio>.mixer,#plx>#studio>.sh63,#plx>#studio>#stm63{order:4!important}html body #studio .fz{height:104px!important;min-height:0!important}html body #plx #studio .mixer .mst .ms{display:none!important}html body #studio .mixer{padding:6px;gap:5px}html body #studio .chs{padding:6px 2px;gap:4px}}
-@media (min-width:900px){
+@media (min-width:900px) and (min-height:501px){
  #plx>#studio{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;grid-template-areas:"bar bar" "strip strip" "wave wave" "mix mix" "sh sh" "ctr ctr" "tools tools"!important}
  #studio>.sh63,#studio>#stm63{grid-area:sh}#studio .mixer{grid-area:mix}html body #studio .fz{height:140px!important}html body #studio #wave,html body.pcm #studio #wave{height:150px!important}
  .tb60{grid-template-columns:repeat(10,minmax(0,1fr))}
 
 }
 #studio .mst .rst{min-width:64px;white-space:nowrap}
-@media (min-width:900px) and (max-width:1199px){.tb60{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media (min-width:900px) and (max-width:1199px) and (min-height:501px){.tb60{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media (orientation:landscape) and (max-height:500px){
  html body #pl.open #plx{overflow-y:auto!important;grid-template-columns:minmax(0,1.7fr) minmax(150px,.7fr)!important;grid-template-areas:"wave bar" "mix strip" "sh strip" "ctr strip" "tools strip" "seek strip" "rest strip"!important;grid-template-rows:repeat(7,max-content)!important}
  #pl.open #studio .mixer{grid-area:mix;position:static!important;height:auto!important;contain:none!important;grid-template-rows:auto!important}

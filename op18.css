@@ -1035,7 +1035,7 @@ body.op-ov #op-ovb #main{
    v1.0.64: page-scroll is PHONE/NARROW only. Two-pane layout starts at 900px — at that
    width the right column (wave + tools/mixer) must stay pinned while browsing songs.
    (1.0.62–63 keyed off .pcm / 1200px DAW mode; laptops 900–1199 still scrolled as one sheet.) */
-@media (max-width:899px){
+@media (max-width:899px), (orientation:landscape) and (max-height:500px){
 html.op18:not(.op18-live),
 html.op18:not(.op18-live) body,
 body.op18:not(.live){
@@ -1050,6 +1050,8 @@ body.op18:not(.live){
 body.op18:not(.live){
   position:static !important;
   left:auto;right:auto;top:auto;bottom:auto;
+  display:block !important;
+  grid-template-columns:none !important;
 }
 body.op18:not(.live) #left,
 body.op18:not(.live) #main{
@@ -1060,8 +1062,9 @@ body.op18:not(.live) #main{
   -webkit-overflow-scrolling:touch;
 }
 }
-/* Wide studio (≥900px, matches two-pane): lock viewport — left scrolls, right stays */
-@media (min-width:900px){
+/* Wide studio (≥900×501): lock viewport — left scrolls, right stays.
+   Exclude phone landscape (width often ≥900 but height ≤500) so mobile landscape CSS wins. */
+@media (min-width:900px) and (min-height:501px){
 html.op18:not(.op18-live),
 html.op18:not(.op18-live) body,
 body.op18:not(.live){
