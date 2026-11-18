@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.67';
+const APPV='1.0.69';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -781,16 +781,20 @@ function effEnd(){return cur?trE(cur.id,cur.buf.duration):0}
 function realBpm(id){const b=baseBpm(id);return b?b*((pref(id).tempo||100)/100):null}
 function durUpd(){if(!cur)return;try{DUR[cur.id]=Math.max(1,Math.round(effEnd()-trS(cur.id)));localStorage.setItem('bp-dur',JSON.stringify(DUR))}catch(e){}try{stripDraw()}catch(e){}try{if(window.__dual&&typeof window.__dual.refreshDur==='function')window.__dual.refreshDur()}catch(e){}try{if(view==='S'&&$('stoth')){const TL=setTotLabel(),el=$('stoth'),tx='คืนนี้ · '+TL;if(el.textContent!==tx)el.textContent=tx}}catch(e){}}
 // ---- count-in ----
-/* v1.0.67: sample-accurate voice locked to song BPM; music starts on the next beat AFTER the last count (no overlap) */
-let CI={bars:1,snd:'voice',...JSON.parse(localStorage.getItem('bp-ci')||'{}')};let CNT=null;
-if(localStorage.getItem('bp-ci66')!=='1'){try{const raw=localStorage.getItem('bp-ci');const o=raw?JSON.parse(raw):null;
- if(!o||(+o.bars===0&&(!o.snd||o.snd==='beep'))){CI.bars=1;CI.snd='voice';localStorage.setItem('bp-ci',JSON.stringify({bars:CI.bars,snd:CI.snd}))}
- localStorage.setItem('bp-ci66','1')}catch(e){}}
+/* v1.0.68: default OFF — opt in per song (1 bar). Prefer catalog/manual BPM over auto-detect (half/double). Music on next beat after last count. */
+let CI={bars:0,snd:'voice',...JSON.parse(localStorage.getItem('bp-ci')||'{}')};let CNT=null;
+if(localStorage.getItem('bp-ci66')!=='1'){try{localStorage.setItem('bp-ci66','1')}catch(e){}}
+// Flip global default back to off (1.0.66–67 auto-enabled every song; songs that already have a count-in in the file should not get another)
+if(localStorage.getItem('bp-ci68')!=='1'){try{CI.bars=0;CI.snd=CI.snd||'voice';localStorage.setItem('bp-ci',JSON.stringify({bars:0,snd:CI.snd}));localStorage.setItem('bp-ci68','1')}catch(e){}}
 const CI_WORDS=['one','two','three','four','five','six'];
 const CI_BUF={};let CI_LOAD=null;const CI_LEAD=0.012; // sample pre-roll so attack lands on the beat
 function ciBars(id){const v=pref(id).ci;return v==null||v===''?+CI.bars:+v}
-function ciBpm(id){if(cur&&cur.buf&&cur.id===id&&!(id in BPMD)){try{const r=detectBpm(cur.buf,clickCh(id));BPMD[id]=r||{b:null};localStorage.setItem('bp-bpmd',JSON.stringify(BPMD))}catch(e){}}
- return realBpm(id)||(+SONG.get(id)?.b)||null}
+function ciBpm(id){const p=pref(id),rate=(p.tempo||100)/100;
+ // Prefer manual / catalog BPM — auto-detect often lands at half or double tempo and throws the count off
+ if(p.bpm)return p.bpm*rate;
+ const cat=+SONG.get(id)?.b;if(cat)return cat*rate;
+ if(cur&&cur.buf&&cur.id===id&&!(id in BPMD)){try{const r=detectBpm(cur.buf,clickCh(id));BPMD[id]=r||{b:null};localStorage.setItem('bp-bpmd',JSON.stringify(BPMD))}catch(e){}}
+ const det=BPMD[id]&&BPMD[id].b;return det?det*rate:null}
 function ciEnsure(){if(CI_LOAD)return CI_LOAD;CI_LOAD=(async()=>{try{initAudio();await Promise.all(CI_WORDS.map(async w=>{try{const r=await fetch('sfx/ci-'+w+'.mp3');if(!r.ok)return;CI_BUF[w]=await ctx.decodeAudioData((await r.arrayBuffer()).slice(0))}catch(e){blog('warn','ci sample '+w,e&&e.message)}}))}catch(e){blog('warn','ci load',e&&e.message)}})();return CI_LOAD}
 function ciCancel(){if(!CNT)return;clearTimeout(CNT.to);clearTimeout(CNT.arm);(CNT.tos||[]).forEach(t=>clearTimeout(t));try{CNT.nodes.forEach(n=>{try{n.stop()}catch(e){}})}catch(e){}CNT=null;ciShow();ciFlash(0)}
 function ciShow(){const el=$('cist');if(el)el.textContent=CNT?'🥁 นับเข้า…':''}
@@ -811,16 +815,19 @@ function ciArmMusic(id,at,when){const tick=()=>{if(!CNT||CNT.id!==id)return;cons
 async function startCI(at){if(typeof PAD!=='undefined'&&PAD.force){start(at);return}const id=cur.id,bars=ciBars(id);if(!(bars>0)){start(at);return}
  ciCancel();initAudio();await ctx.resume();
  if(CI.snd==='voice')await ciEnsure();
- const bpm=ciBpm(id)||120,sg=sigOf(id),bpb=sg==6?6:Math.max(1,sg),beats=bpb*bars,sp=(sg==6?30:60)/bpm;
+ let bpm=ciBpm(id);if(!(bpm>0)){try{beatLoad()}catch(e){}bpm=ciBpm(id)}
+ bpm=bpm||120;
+ const sg=sigOf(id),bpb=sg==6?6:Math.max(1,sg),beats=bpb*bars,sp=(sg==6?30:60)/bpm;
  const pan=ctx.createStereoPanner();pan.pan.value=ciSide(id);const out=ctx.createGain();out.gain.value=db2(mixOf(id).c.v||0);out.connect(pan);pan.connect(ctx.destination);
- // Leave a little headroom so samples schedule cleanly; music starts exactly one beat after the last count.
+ // 1 bar of counts, then music on the next downbeat (no overlap with the last spoken beat).
  const t0=ctx.currentTime+.05,musicAt=t0+beats*sp,nodes=[],tos=[],useVoice=CI.snd==='voice'&&CI_WORDS.some(w=>CI_BUF[w]);
  for(let i=0;i<beats;i++){const acc=bpb>1?i%bpb==0:i==0,t=t0+i*sp,w=CI_WORDS[i%bpb]||String((i%bpb)+1);
   if(useVoice){const n=ciVoiceAt(t,w,out);if(n)nodes.push(n);else nodes.push(ciTone(t,acc,out))}
   else nodes.push(ciTone(t,acc,out));
   tos.push(setTimeout(()=>{if(CNT&&CNT.id===id)ciFlash((i%bpb)+1)},Math.max(0,(t-ctx.currentTime)*1000)))}
- window.__ci={beats,sp,bpm,snd:useVoice?'voice':CI.snd,musicAt,count:(window.__ci?.count||0)+1};
- CNT={id,nodes,tos,to:0,arm:0};ciShow();ciArmMusic(id,at,musicAt)}
+ window.__ci={beats,sp,bpm,bars,sg,snd:useVoice?'voice':CI.snd,musicAt,count:(window.__ci?.count||0)+1};
+ CNT={id,nodes,tos,to:0,arm:0};ciShow();ciArmMusic(id,at,musicAt);
+ try{const el=$('cist');if(el)el.textContent='🥁 นับ '+bars+' ห้อง · '+Math.round(bpm)+' BPM'}catch(e){}}
 // ---- waveform zoom / pan ----
 const WZ={z:1,v0:0,follow:true};
 function wzClamp(){WZ.z=Math.max(1,Math.min(16,WZ.z));WZ.v0=Math.max(0,Math.min(1-1/WZ.z,WZ.v0))}
@@ -886,10 +893,10 @@ function cards26(){const g=document.querySelector('#plx>.grid');if(!g)return;
   c.innerHTML=`<div class="lb">✂️ ตัดหัว/ท้ายเพลง <span class="small" id="trv">—</span></div><div class="brow"><button class="hw" id="trs1">[ เริ่มตรงนี้</button><button class="hw" id="tre1">จบตรงนี้ ]</button><button class="hw" id="trr">↺</button><button class="hw" data-meta="cur">✏️ แก้ข้อมูลเพลง</button></div><div class="small">ลากขีดแดงบนเวฟเพื่อปรับ</div>`;g.appendChild(c);
   $('trs1').onclick=()=>cur&&trimSet('s',pos());$('tre1').onclick=()=>cur&&trimSet('e',pos());$('trr').onclick=trimReset}
  if(!$('cic')){const c=document.createElement('div');c.className='card c26';c.id='cic';
-  c.innerHTML=`<div class="lb">🥁 นับเข้าก่อนเพลง <span class="small" id="cist"></span></div><div class="brow"><span class="small">เพลงนี้</span><select id="cis"><option value="">ตามค่าหลัก</option><option value="0">ไม่นับ</option><option value="1">1 ห้อง</option><option value="2">2 ห้อง</option></select></div>
+  c.innerHTML=`<div class="lb">🥁 นับเข้าก่อนเพลง <span class="small" id="cist"></span></div><div class="brow"><span class="small">เพลงนี้</span><select id="cis"><option value="">ตามค่าหลัก</option><option value="0">ไม่นับ (ไฟล์มีนับแล้ว)</option><option value="1">นับ 1 ห้อง</option><option value="2">นับ 2 ห้อง</option></select></div>
   <div class="brow"><span class="small">ค่าหลัก</span><select id="cig"><option value="0">ไม่นับ</option><option value="1">1 ห้อง</option><option value="2">2 ห้อง</option></select><select id="cisnd">${[['voice','พูด one–two–three–four'],['beep','บี๊บ'],['wood','เคาะไม้'],['clave','คลาฟ'],['rim','ริมช็อต'],['cow','คาวเบลล์'],['digi','ดิจิทัล']].map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div>
-  <div class="small">นับตาม BPM ของเพลง แล้วค่อยเริ่มดนตรีในจังหวะถัดไป (ไม่ซ้อนเสียง) · เพลงที่ไฟล์มีนับอยู่แล้วตั้ง “ไม่นับ”</div>`;g.appendChild(c);
-  $('cis').onchange=async e=>{if(!cur)return;const v=e.target.value;const p={...pref(cur.id)};if(v==='')delete p.ci;else p.ci=+v;PREF.set(cur.id,p);await put('prefs',p)};
+  <div class="small">ค่าเริ่มต้น = ไม่นับ · เปิด “นับ 1 ห้อง” เฉพาะเพลงที่ไฟล์ยังไม่มีนับ · ใช้ BPM จากข้อมูลเพลง (ไม่ใช้จับอัตโนมัติที่มักผิดครึ่งจังหวะ)</div>`;g.appendChild(c);
+  $('cis').onchange=async e=>{if(!cur)return;const v=e.target.value;const p={...pref(cur.id)};if(v==='')delete p.ci;else p.ci=+v;PREF.set(cur.id,p);await put('prefs',p);try{toast(p.ci>0?'🥁 เปิดนับ '+p.ci+' ห้องก่อนเพลงนี้':'ไม่นับเข้าสำหรับเพลงนี้',1800,true)}catch(x){}};
   const sv=()=>localStorage.setItem('bp-ci',JSON.stringify(CI));$('cig').onchange=e=>{CI.bars=+e.target.value;sv()};$('cisnd').onchange=e=>{CI.snd=e.target.value;sv()}}
  if(!$('pvc')){const c=document.createElement('div');c.className='card c26';c.id='pvc';
   c.innerHTML=`<div class="lb">🎧 พรีวิว (ฟังเพลงอื่นแยก ขณะเพลงหลักเล่น)</div><div class="brow"><select id="pvs" style="max-width:100%;flex:1"></select></div>
@@ -1007,7 +1014,8 @@ function ptSync(){try{const el=$('pt');if(!el||loadingId)return;const s=cur&&SON
 {const _sy=sync;sync=function(){const r=_sy.apply(this,arguments);ptSync();return r}}
 setInterval(ptSync,700);
 {const _ld=load;load=function(id){try{for(const k of [...SP41.keys()])if(k!==id)stuRevert(k,true)}catch(e){}return _ld.apply(this,arguments)}}
-{const B=window.__bp;if(B){Object.assign(B,{pkMig:()=>pkMig41(),stuSave,stuRevertAll,stp:()=>Object.fromEntries(SP41),fetchAudio,storeBlob,acStore,files:()=>[...FILES.values()].map(f=>({name:f.name,size:f.size,src:f.src,auto:f.auto||0})),trim:()=>cur?{ts:trS(cur.id),te:trE(cur.id,cur.buf.duration),d:cur.buf.duration}:null,WZ,CI,realBpm,trimSet,trimReset,syncBpm,effEnd,pos:()=>pos()});Object.defineProperties(B,{counting:{get:()=>!!CNT,configurable:true},lastBpm:{get:()=>LASTBPM,configurable:true}})}}
+{const B=window.__bp;if(B){Object.assign(B,{pkMig:()=>pkMig41(),stuSave,stuRevertAll,stp:()=>Object.fromEntries(SP41),fetchAudio,storeBlob,acStore,files:()=>[...FILES.values()].map(f=>({name:f.name,size:f.size,src:f.src,auto:f.auto||0})),trim:()=>cur?{ts:trS(cur.id),te:trE(cur.id,cur.buf.duration),d:cur.buf.duration}:null,WZ,CI,realBpm,ciBars,ciBpm,trimSet,trimReset,syncBpm,effEnd,pos:()=>pos(),
+  ciProbe:(id,o)=>{const p={...((typeof pref==='function'?pref(id):{})||{}),id,...(o.pref||{})};if(o.ci===null)delete p.ci;else if('ci' in o)p.ci=o.ci;PREF.set(id,p);if('b' in o){const s=SONG.get(id)||{id,t:id};s.b=o.b;SONG.set(id,s)}if('det' in o){if(o.det==null)delete BPMD[id];else BPMD[id]=o.det}return{bars:ciBars(id),bpm:ciBpm(id),CI:CI.bars}}});Object.defineProperties(B,{counting:{get:()=>!!CNT,configurable:true},lastBpm:{get:()=>LASTBPM,configurable:true}})}}
 // ===== v27: play-while-playing chooser + visible next panel =====
 function nextId(){return cur?SET[SET.indexOf(cur.id)+1]||null:null}
 function chooser(id){const s=SONG.get(id);if(!s)return;let el=$('chs');if(!el){el=document.createElement('div');el.id='chs';document.body.appendChild(el)}
@@ -2352,7 +2360,7 @@ svbSync=function(){const on=typeof BD!=='undefined'&&CLD.user&&CLD.mod&&CLD.mod.
  for(const k in BS.un)if(!ids.has(k)){try{BS.un[k]()}catch(e){}delete BS.un[k];delete BS.l[k]}
  if(!on)return;
  for(const b of BD.bands){if(!SVB.un[b.id])SVB.un[b.id]=CLD.mod.bandSavedSub(b.id,ls=>{const first=!(b.id in SVB.l);SVB.l[b.id]=ls.sort((a,b)=>b.t-a.t);try{libHideSyncBand149();if(!first)libHideRefresh149()}catch(e){}if(!first)ls.forEach(x=>bsNote('l',b.id,x));if(OPEN60=='saved')svOpen();sv63Badge()},e=>blog('warn','band saved',e.code||e.message));
-  if(!BS.un[b.id]&&CLD.mod.bandSongsSub)BS.un[b.id]=CLD.mod.bandSongsSub(b.id,ls=>{const first=!(b.id in BS.l);BS.l[b.id]=ls;try{all842()}catch(e){}if(!first)ls.forEach(x=>bsNote('s',b.id,x));try{bdSDraw()}catch(e){}bsPubSoon()},e=>blog('warn','band songs',e.code||e.message))}};
+  if(!BS.un[b.id]&&CLD.mod.bandSongsSub)BS.un[b.id]=CLD.mod.bandSongsSub(b.id,ls=>{const first=!(b.id in BS.l);BS.l[b.id]=ls;try{all842()}catch(e){}if(!first)ls.forEach(x=>{if(isBandSfxId(x.id)){try{if(window.__sfx&&__sfx.bandNote)__sfx.bandNote(b.id,x)}catch(e){}}else bsNote('s',b.id,x)});try{bdSDraw()}catch(e){}bsPubSoon();try{if(window.__sfx&&__sfx.bandPull)__sfx.bandPull()}catch(e){}},e=>blog('warn','band songs',e.code||e.message))}};
 function sv63Seen(){try{return JSON.parse(localStorage.getItem('bp-sv63seen')||'[]')}catch(e){return[]}}
 function sv63New(){const s=sv63Seen();let n=0;for(const b in SVB.l)for(const x of SVB.l[b])if(x.by!==bsMe()&&!s.includes(x.id+x.t))n++;return n}
 function sv63Badge(){const b=$('svlist');if(!b)return;const n=sv63New();let d=b.querySelector('.sv63n');if(!n){if(d)d.remove();return}if(!d){d=document.createElement('span');d.className='sv63n';b.appendChild(d)}d.textContent=n}
@@ -2369,10 +2377,11 @@ setInterval(()=>{try{if(CLD.user&&BD.bands.length)bsPub().catch(()=>{})}catch(e)
 {const _la=lvApply;lvApply=async function(d){if(LIVE&&d)LIVE.__d=d;for(const [k,v] of LVMAP)if(v==null)LVMAP.delete(k);const r=await _la(d);try{bdSDraw()}catch(e){}return r}}
 function bsRematch(){clearTimeout(bsRematch.t);bsRematch.t=setTimeout(()=>{try{if(LIVE&&LIVE.__d&&[...LVMAP.values()].some(v=>v==null)){LIVE.o=[];lvApply(LIVE.__d).then(()=>render()).catch(()=>{})}else bdSDraw()}catch(e){}},400)}
 function bsLiveMiss(){const d=LIVE&&LIVE.__d;if(!d||!d.s)return [];const r=[];for(const k of d.o||[]){if(LVMAP.get(k))continue;try{const x=JSON.parse(d.s[k]);r.push({id:k,ti:x[0]||'',ar:x[1]||''})}catch(e){}}return r}
+function isBandSfxId(id){return /^sfx[0-9A-Za-z]{3,21}$/.test(id||'')} // v1.0.69: band SFX pads reuse songs/{id} with sfx* ids — keep them out of the song library
 function bsMiss(b){const out=[],ids=new Set();const lv=LIVE&&LIVE.b===b.id?bsLiveMiss():[];
  for(const x of lv){ids.add(x.id);out.push({...x,inl:1})}
- for(const x of BS.l[b.id]||[]){if(ids.has(x.id)||!x.ti)continue;if(slMatch(x.ti,x.ar,x.sd))continue;ids.add(x.id);out.push(x)}return out}
-{const _h=bdSHtml;bdSHtml=function(){const r=_h();let h=r.h;for(const b of BD.bands){const all=(BS.l[b.id]||[]).length,ms=bsMiss(b);if(!all&&!ms.length)continue;
+ for(const x of BS.l[b.id]||[]){if(isBandSfxId(x.id)||ids.has(x.id)||!x.ti)continue;if(slMatch(x.ti,x.ar,x.sd))continue;ids.add(x.id);out.push(x)}return out}
+{const _h=bdSHtml;bdSHtml=function(){const r=_h();let h=r.h;for(const b of BD.bands){const all=(BS.l[b.id]||[]).filter(x=>!isBandSfxId(x.id)).length,ms=bsMiss(b);if(!all&&!ms.length)continue;
   h+=`<div class="bdsb bs63" data-b="${b.id}"><div class="small"><b>เพลงของวง</b> <span data-noi18n>${esc(b.name)}</span> · ${all} เพลง${ms.length?` · <span class="bs63w">ต้องมีไฟล์ในเครื่อง ${ms.length}</span>`:' · มีครบในเครื่อง'}</div>`;
   for(const x of ms.slice(0,30))h+=`<div class="row bs63r"><span class="bs63t"><b data-noi18n>${esc(x.ti)}</b>${x.ar?` <span class="small" data-noi18n>– ${esc(x.ar)}</span>`:''}<span class="small"> · ต้องมีไฟล์ในเครื่อง${x.inl?' · อยู่ในลิสต์ที่ซิงก์':''}${x.byn?` · <span data-noi18n>จาก ${esc(x.byn)}</span>`:''}</span></span><button type="button" class="hw" data-a63="imp">นำเข้าไฟล์</button></div>`;
   if(ms.length)h+=`<div class="small bs63h">เพลงเหล่านี้ยังไม่มีไฟล์ในวง — แอปของคนที่มีไฟล์จะส่งขึ้นให้อัตโนมัติเมื่อเขาเปิดแอป · ถ้ารีบ ขอไฟล์แล้วกด “นำเข้าไฟล์”</div>`;
@@ -2436,7 +2445,7 @@ async function bcTick(){if(Date.now()<QX77.until)return;if(BC.busy||!CLD.user||!
  finally{BC.busy=0;bcPill('');try{bdSDraw()}catch(e){}if(bcPending().length)setTimeout(()=>bcTick().catch(()=>{}),1500)}}
 setInterval(()=>{try{bcTick().catch(()=>{})}catch(e){}},20000);
 // songs other members shared become playable entries right away; the audio downloads on first play
-function bcVirt(){let n=0;for(const b of BD.bands||[])for(const x of BS.l[b.id]||[]){if(!x.fc||!x.fn||!x.ti)continue;const id='X:'+x.fn;const fo=FILES.get(x.fn);if(fo&&fo.src=='band'&&((x.fz&&fo.size!==x.fz)||(x.v&&(fo.bv||0)!==x.v))&&!BC.dl.has(x.fn)){FILES.delete(x.fn);del('files',x.fn).catch(()=>{});cache.delete(id);const e=SONG.get(id);if(e){e.bc={b:b.id,id:x.id,fc:x.fc,fm:x.fm,v:x.v||0};if(x.sd)e.s=x.sd}blog('info','band file stale '+x.fn);continue}
+function bcVirt(){let n=0;for(const b of BD.bands||[])for(const x of BS.l[b.id]||[]){if(isBandSfxId(x.id))continue;if(!x.fc||!x.fn||!x.ti)continue;const id='X:'+x.fn;const fo=FILES.get(x.fn);if(fo&&fo.src=='band'&&((x.fz&&fo.size!==x.fz)||(x.v&&(fo.bv||0)!==x.v))&&!BC.dl.has(x.fn)){FILES.delete(x.fn);del('files',x.fn).catch(()=>{});cache.delete(id);const e=SONG.get(id);if(e){e.bc={b:b.id,id:x.id,fc:x.fc,fm:x.fm,v:x.v||0};if(x.sd)e.s=x.sd}blog('info','band file stale '+x.fn);continue}
   if(SONG.has(id)){const e=SONG.get(id);if(e.bc)e.bc={b:b.id,id:x.id,fc:x.fc,fm:x.fm,v:x.v||0};sd838(id,e,x);continue}if(FILES.has(x.fn)||cat845(x.fn).length||slMatch(x.ti,x.ar,x.sd))continue;
   SONG.set(id,{X:1,s:x.sd||'X',fn:x.fn,t:x.ti,a:x.ar||'',f:'เพลงของวง',g:'',k:x.k||'',_pp:1,bc:{b:b.id,id:x.id,fc:x.fc,fm:x.fm,v:x.v||0}});n++}
  if(n){try{render()}catch(e){}try{bsRematch()}catch(e){}}return n}
@@ -2454,7 +2463,7 @@ async function bc65Del(fn){const s=SONG.get('X:'+fn);if(!s||!s.t||!CLD.user||!CL
  if(!confirm('ลบเพลง “'+s.t+'” ออกจากวง ('+hit.map(o=>o.b.name).join(', ')+') ด้วยไหม?\nคนในวงจะไม่เห็นเพลงนี้อีก และพื้นที่จะคืนกลับมา'))return;
  for(const o of hit){try{await CLD.mod.bandSongDel(o.b.id,k,o.x.fc||null);toast('🗑 ลบออกจากวง '+o.b.name+' แล้ว',2500,true)}catch(e){toast('❌ ลบออกจากวงไม่ได้: '+bdErr(e),4000)}}}
 // per-band storage indicator
-{const _h=bdSHtml;bdSHtml=function(){const r=_h();let h=r.h;for(const b of BD.bands||[]){const L=BS.l[b.id]||[];if(!L.length)continue;const sh=L.filter(x=>x.fc).length,up=bcPending().filter(p=>p.b==b.id).length;
+{const _h=bdSHtml;bdSHtml=function(){const r=_h();let h=r.h;for(const b of BD.bands||[]){const L=(BS.l[b.id]||[]).filter(x=>!isBandSfxId(x.id));if(!L.length&&!(BS.l[b.id]||[]).some(isBandSfxId))continue;const sh=L.filter(x=>x.fc).length,up=bcPending().filter(p=>p.b==b.id).length;
   h+=`<div class="small bs65s" data-b="${b.id}">${ico60('cloud')} <span data-noi18n>${esc(b.name)}</span> · ไฟล์ในวง ${sh}/${L.length} เพลง · ใช้พื้นที่ ${bcMB(bcUsed(b.id))} / ${bcMB(bcCap(b.id))}${up?` · กำลังส่ง ${up}`:''}</div>`}return {h,n:r.n}}}
 // --- key / BPM for every setlist song (analysed in the background while nothing plays) ---
 async function an65(id){const s=SONG.get(id);if(!s)return;const fn=fileOf(s);const rec=fn&&await get('files',fn);if(!rec||!rec.blob||rec.src=='stems')return;let buf=await bcDecode(rec.blob);const nc=buf.numberOfChannels;
@@ -2577,7 +2586,7 @@ const SET65=[
  ['t:fade','#tb60 [data-t="fade"]','เฟด','ตั้งเฟดเข้า/เฟดออกอัตโนมัติ','เครื่องมือ (แถบใต้เพลง)'],
  ['t:pad','#tb60 [data-t="pad"]','Pad','เสียงลูปตามคีย์เพลง ใช้ปูพื้นระหว่างเพลง','เครื่องมือ (แถบใต้เพลง)'],
  ['t:trim','#tb60 [data-t="trim"]','ตัดหัว/ท้าย','ข้ามช่วงเงียบตอนต้นและท้ายเพลง','เครื่องมือ (แถบใต้เพลง)'],
- ['t:ci','#tb60 [data-t="ci"]','นับเข้า','นับจังหวะก่อนเพลงเริ่ม','เครื่องมือ (แถบใต้เพลง)'],
+ ['t:ci','#tb60 [data-t="ci"]','นับเข้า','เปิดนับ 1 ห้องเฉพาะเพลงที่ไฟล์ยังไม่มีนับ','เครื่องมือ (แถบใต้เพลง)'],
  ['t:pv','#tb60 [data-t="pv"]','พรีวิว','ฟังเพลงอื่นล่วงหน้าโดยไม่หยุดเพลงที่เล่น','เครื่องมือ (แถบใต้เพลง)'],
  ['t:bal','#tb60 [data-t="bal"]','บาลานซ์','ปรับซ้าย/ขวาของเสียง','เครื่องมือ (แถบใต้เพลง)'],
  ['t:eq','#tb60 [data-t="eq"]','ความดัง/EQ','ปรับความดังและเสียงทุ้ม-แหลมรายเพลง','เครื่องมือ (แถบใต้เพลง)'],
@@ -2686,7 +2695,7 @@ window.__ui66={tidy:tidy66,more:more66Open};
 
 // ===== v1.70: notification bell (band activity + system notices) · one-tap “+ เพิ่มเพลงให้วง” · per-song upload/cached status =====
 const NT={a:{},un:{},sys:null,sun:null,have:{},hun:{},hw:{}};
-const NTCHG={'1.0.67':'นับเข้าตรงจังหวะเพลง + ไม่ซ้อนดนตรี — นับตาม BPM ของเพลงนั้น แล้วค่อยเริ่มเพลงในจังหวะถัดไป','1.0.66':'นับเข้าตอนขึ้นเพลง: พูด one–two–three–four ตามจังหวะ (ค่าเริ่มต้น 1 ห้อง) — เพลงที่ไฟล์มีนับอยู่แล้วตั้ง “ไม่นับ” ได้ที่เครื่องมือ › นับเข้า','1.0.65':'สตูดิโอบนพีซี: เลื่อนดูเครื่องมือครบแล้ว (ไม่ทับแถบเวลา) · ลดจอกระพริบตอนกดเล่น','1.0.64':'พีซี/จอ ≥900px: ตรึงเครื่องมือ/กราฟตอนเลื่อนหาเพลงแล้ว — ไม่ต้องเปิดโหมด DAW และไม่ต้องจอ ≥1200','1.0.63':'โหมดพีซีสตูดิโอ: ตรึงเครื่องมือ/กราฟแน่นขึ้น — ล็อกทั้งหน้า (ไม่เลื่อนตามคลัง) และยกเว้นกฎเลื่อนทั้งหน้าของสตูดิโอบนมือถือ','1.0.62':'โหมดพีซีสตูดิโอ: ตรึงฝั่งเครื่องมือ/กราฟไว้ตอนเลื่อนหาเพลงในคลัง (เลื่อนเฉพาะคอลัมน์ซ้าย)','1.0.61':'แก้หน้าจอกระพริบบนพีซี โดยเฉพาะบัญชีและวง — ไม่รีสร้างการ์ดบัญชี/วงซ้ำ · คง QR · ไม่ถอด EQ บนลิสต์สดทุก 0.4 วิ','1.0.60':'แก้คลังโชว์เพลงซ้ำหลังกู้คืน/รีเฟรชแคตตาล็อก (นอมซ้าย·ขวาคนละฝั่งยังมี 2 แถวตามปกติ)','1.0.59':'แก้กู้คืนเพลงแล้วกดเล่นแล้วเด้ง error (reading X) — ผูกเพลงกลับเข้าคลังก่อนเล่น','1.0.58':'ปุ่มกู้คืนเพลงที่ซ่อนอยู่ชัดแล้ว — เมนูบัญชีด้านบน + หัวการตั้งค่า (ไม่ต้องไล่หาในระบบขั้นสูง)','1.0.57':'ปุ่มกู้คืนเพลงที่ซ่อนจากคลัง (เช่น ขอบคุณที่รักกัน นอมซ้าย/ขวา) — การตั้งค่า › ระบบ หรือเมนูลิสต์','1.0.56':'แอป Android เด้งอัปเดตชัดขึ้นเมื่อมี APK ใหม่ · เว็บเช็คอัปเดตถี่ขึ้นและมีปุ่มอัปเดตใหญ่','1.0.55':'เอาแท็บเขียว “▶ เล่นต่อ …” ออก — รกจอตอนขึ้นงาน','1.0.54':'แก้ลบเพลงจากลิสต์แล้วทีมยังเห็น — กัน snapshot ของวงทับการลบท้องถิ่นก่อนส่งขึ้นคลาวด์ และลบจากหน้า Dual ส่งขึ้นวงทันที','1.0.53':'เมนูบัญชีเหลือแค่ การแจ้งเตือน · นำเข้าเพลง · การตั้งค่า — ส่งความเห็น/แชท/บัญชี ย้ายเข้าหมวดตั้งค่าแล้ว · ลิสต์วันนี้/คืนนี้โชว์เวลารวม · แก้กระพริบลิสต์ตอนอัปเดตความยาว · ปิดตั้งค่าบนไลฟ์ไม่ค้างแท็บนำเข้า · มิกซ์ร้าน→แยกช่องเปิดการตั้งค่า','1.0.52':'ย้อนกลับไปเลย์เอาต์แบบ 1.0.49 (ก่อนจัดสตูดิโอใหม่) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ','1.0.51':'หยุดกระพริบสตูดิโอ · แก้ค้างนำเข้า · ลบออนไลน์','1.0.50':'สตูดิโอจัดใหม่ A+B','1.0.49':'ลบจากคลัง: กด 🗑 แล้วยืนยันครั้งเดียว — ทั้งวงไม่เห็นเพลงนั้นแล้ว (เพลงตัวอย่างออนไลน์ซ่อนให้ทั้งทีม ไม่โชว์ข้อความยุ่งยาก)','1.0.48':'ลิสต์คืนนี้: ปุ่ม ☰ ลากย้ายไปไว้ซ้าย (ห่าง ✕) และต้องเลื่อนประมาณ 16px ก่อนถึงจะขยับเพลง — แตะเบา ๆ ไม่เลื่อนแล้ว','1.0.47':'ปุ่ม 🗑 ลบจากคลังโชว์ทุกแถวในคลังแล้ว รวมเพลงออนไลน์ที่ยังไม่โหลดเก็บ (กดแล้วระบบบอกได้ถ้าเป็นเพลงตัวอย่างส่วนกลาง)','1.0.46':'สตูดิโอ/คลัง: ปุ่ม 🗑 ลบจากคลังโผล่ข้าง ＋ ทุกรายการ (ไม่ต้องเข้าเมนู ⋯) — ลบเพลงของวงแล้วทุกคนในทีมไม่เห็น','1.0.45':'ลบเพลงจากคลังได้แล้ว (เมนู ⋯ / ค้นคลัง / ชีตคลัง) — ถ้าเป็นเพลงของวง จะลบออกจากวงด้วย ทุกคนในทีมไม่เห็น · แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ','1.0.44':'แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ — แถบ SETLIST ด้านบนไม่ถูกสร้างใหม่ทั้งก้อนทุกครั้งที่เล่น/หยุด หรือตอนวิเคราะห์คีย์-BPM','1.0.43':'กดคีย์ − / + ที่เด็ค (หน้าไลฟ์) และการ์ดคีย์ในสตูดิโอ = บันทึกกับเพลงทันที ซิงก์เข้าลิสต์ของวงให้ทุกคนเห็นแบบเรียลไทม์ (ขึ้น "บันทึกคีย์แล้ว ทุกคนในวงเห็น") · ความเร็ว ± ยังเป็นชั่วคราวเหมือนเดิม (กด 💾 เพื่อบันทึก) · สมาชิกสิทธิ์ดูอย่างเดียวบันทึกได้เฉพาะในเครื่อง','1.0.42':'สตูดิโอ: แถบ "ยังไม่บันทึก" (💾/↺) ย้ายมาอยู่ใต้การ์ดคีย์/ความเร็ว ไม่ลอยทับปุ่ม M/S ของมิกซ์แล้ว · หัวสตูดิโอแสดงชื่อเพลงที่โหลดอยู่จริง (ไม่ขึ้น "ยังไม่ได้เลือกเพลง" อีก) · หน้าแอดมินย้ายมาอยู่ที่ paithoonbeer.github.io/admin/ (ปุ่ม 🛠 หน้าแอดมิน ในบัญชี สำหรับเจ้าของ/พนักงาน)','1.0.41':'เก็บกวาดเมนูซ้ำ: เอาปุ่ม/เมนูที่ซ้ำกับหน้าไลฟ์ออก (สตูดิโอในเมนูบัญชี, เมนู ⋯ การ์ดเก่า, ▶ ในเมนูเด็ค, แชร์/ลิสต์ที่บันทึกในเมนูลิสต์, 🎤 Live และ 🔗 BPM ในสตูดิโอ, คีย์ในแผง Pad) · แท็บ Live ในสตูดิโอเปลี่ยนชื่อเป็น “คืนนี้” · ปรับคีย์/เทมโปในสตูดิโอเป็นแบบชั่วคราวเหมือนเด็ค ต้องกด 💾 บันทึก (↺ คืนค่า) · คีย์จากแผง Pad เดิมย้ายเข้าข้อมูลเพลงให้ถ้ายังไม่มีคีย์','1.0.40':'เอาหน้า 2 เด็คแบบจานใหญ่ออก (ซ้ำกับหน้าไลฟ์) · ปุ่มสตูดิโอมาอยู่ตรงนั้นแทน แตะอีกครั้งกลับหน้าไลฟ์ · มาร์คเพลง: เด็คเริ่มที่มาร์คเริ่มตั้งแต่กดเล่นครั้งแรก ไม่เล่นส่วนที่ตัดออก และแถบเวลาในสตูดิโอ/หน้าจอล็อกนับเฉพาะช่วงที่มาร์ค · คีย์แสดงตรงตามที่บันทึก (D# ไม่กลายเป็น Eb) · เลือกคีย์ไมเนอร์ได้ (โน้ต + เมเจอร์/ไมเนอร์) พิมพ์ตัวเล็กก็อ่านถูก','1.0.39':'เพลงในคลังโหลดจากเซิร์ฟเวอร์ใหม่ (สำรองอัตโนมัติถ้าเซิร์ฟเวอร์ไหนล่ม) · เด็คบอกชัดเมื่อโหลดเพลงไม่ได้ · เพลงที่เคยเล่นเก็บในเครื่อง ไม่ต้องโหลดซ้ำ','1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
+const NTCHG={'1.0.69':'SFX: เมนู ⋯ ไม่ทับลิสต์แล้ว · เสียงที่เพิ่ม/แก้แชร์ให้ทั้งวงอัตโนมัติ (เหมือนเพลง)','1.0.68':'นับเข้า: ค่าเริ่มต้นไม่นับ — เปิด “นับ 1 ห้อง” ทีละเพลง (เพลงที่มีนับในไฟล์แล้วไม่ต้องเปิด) · ใช้ BPM จากข้อมูลเพลงให้ตรงจังหวะขึ้น','1.0.67':'นับเข้าตรงจังหวะเพลง + ไม่ซ้อนดนตรี — นับตาม BPM ของเพลงนั้น แล้วค่อยเริ่มเพลงในจังหวะถัดไป','1.0.66':'นับเข้าตอนขึ้นเพลง: พูด one–two–three–four ตามจังหวะ (ค่าเริ่มต้น 1 ห้อง) — เพลงที่ไฟล์มีนับอยู่แล้วตั้ง “ไม่นับ” ได้ที่เครื่องมือ › นับเข้า','1.0.65':'สตูดิโอบนพีซี: เลื่อนดูเครื่องมือครบแล้ว (ไม่ทับแถบเวลา) · ลดจอกระพริบตอนกดเล่น','1.0.64':'พีซี/จอ ≥900px: ตรึงเครื่องมือ/กราฟตอนเลื่อนหาเพลงแล้ว — ไม่ต้องเปิดโหมด DAW และไม่ต้องจอ ≥1200','1.0.63':'โหมดพีซีสตูดิโอ: ตรึงเครื่องมือ/กราฟแน่นขึ้น — ล็อกทั้งหน้า (ไม่เลื่อนตามคลัง) และยกเว้นกฎเลื่อนทั้งหน้าของสตูดิโอบนมือถือ','1.0.62':'โหมดพีซีสตูดิโอ: ตรึงฝั่งเครื่องมือ/กราฟไว้ตอนเลื่อนหาเพลงในคลัง (เลื่อนเฉพาะคอลัมน์ซ้าย)','1.0.61':'แก้หน้าจอกระพริบบนพีซี โดยเฉพาะบัญชีและวง — ไม่รีสร้างการ์ดบัญชี/วงซ้ำ · คง QR · ไม่ถอด EQ บนลิสต์สดทุก 0.4 วิ','1.0.60':'แก้คลังโชว์เพลงซ้ำหลังกู้คืน/รีเฟรชแคตตาล็อก (นอมซ้าย·ขวาคนละฝั่งยังมี 2 แถวตามปกติ)','1.0.59':'แก้กู้คืนเพลงแล้วกดเล่นแล้วเด้ง error (reading X) — ผูกเพลงกลับเข้าคลังก่อนเล่น','1.0.58':'ปุ่มกู้คืนเพลงที่ซ่อนอยู่ชัดแล้ว — เมนูบัญชีด้านบน + หัวการตั้งค่า (ไม่ต้องไล่หาในระบบขั้นสูง)','1.0.57':'ปุ่มกู้คืนเพลงที่ซ่อนจากคลัง (เช่น ขอบคุณที่รักกัน นอมซ้าย/ขวา) — การตั้งค่า › ระบบ หรือเมนูลิสต์','1.0.56':'แอป Android เด้งอัปเดตชัดขึ้นเมื่อมี APK ใหม่ · เว็บเช็คอัปเดตถี่ขึ้นและมีปุ่มอัปเดตใหญ่','1.0.55':'เอาแท็บเขียว “▶ เล่นต่อ …” ออก — รกจอตอนขึ้นงาน','1.0.54':'แก้ลบเพลงจากลิสต์แล้วทีมยังเห็น — กัน snapshot ของวงทับการลบท้องถิ่นก่อนส่งขึ้นคลาวด์ และลบจากหน้า Dual ส่งขึ้นวงทันที','1.0.53':'เมนูบัญชีเหลือแค่ การแจ้งเตือน · นำเข้าเพลง · การตั้งค่า — ส่งความเห็น/แชท/บัญชี ย้ายเข้าหมวดตั้งค่าแล้ว · ลิสต์วันนี้/คืนนี้โชว์เวลารวม · แก้กระพริบลิสต์ตอนอัปเดตความยาว · ปิดตั้งค่าบนไลฟ์ไม่ค้างแท็บนำเข้า · มิกซ์ร้าน→แยกช่องเปิดการตั้งค่า','1.0.52':'ย้อนกลับไปเลย์เอาต์แบบ 1.0.49 (ก่อนจัดสตูดิโอใหม่) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ','1.0.51':'หยุดกระพริบสตูดิโอ · แก้ค้างนำเข้า · ลบออนไลน์','1.0.50':'สตูดิโอจัดใหม่ A+B','1.0.49':'ลบจากคลัง: กด 🗑 แล้วยืนยันครั้งเดียว — ทั้งวงไม่เห็นเพลงนั้นแล้ว (เพลงตัวอย่างออนไลน์ซ่อนให้ทั้งทีม ไม่โชว์ข้อความยุ่งยาก)','1.0.48':'ลิสต์คืนนี้: ปุ่ม ☰ ลากย้ายไปไว้ซ้าย (ห่าง ✕) และต้องเลื่อนประมาณ 16px ก่อนถึงจะขยับเพลง — แตะเบา ๆ ไม่เลื่อนแล้ว','1.0.47':'ปุ่ม 🗑 ลบจากคลังโชว์ทุกแถวในคลังแล้ว รวมเพลงออนไลน์ที่ยังไม่โหลดเก็บ (กดแล้วระบบบอกได้ถ้าเป็นเพลงตัวอย่างส่วนกลาง)','1.0.46':'สตูดิโอ/คลัง: ปุ่ม 🗑 ลบจากคลังโผล่ข้าง ＋ ทุกรายการ (ไม่ต้องเข้าเมนู ⋯) — ลบเพลงของวงแล้วทุกคนในทีมไม่เห็น','1.0.45':'ลบเพลงจากคลังได้แล้ว (เมนู ⋯ / ค้นคลัง / ชีตคลัง) — ถ้าเป็นเพลงของวง จะลบออกจากวงด้วย ทุกคนในทีมไม่เห็น · แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ','1.0.44':'แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ — แถบ SETLIST ด้านบนไม่ถูกสร้างใหม่ทั้งก้อนทุกครั้งที่เล่น/หยุด หรือตอนวิเคราะห์คีย์-BPM','1.0.43':'กดคีย์ − / + ที่เด็ค (หน้าไลฟ์) และการ์ดคีย์ในสตูดิโอ = บันทึกกับเพลงทันที ซิงก์เข้าลิสต์ของวงให้ทุกคนเห็นแบบเรียลไทม์ (ขึ้น "บันทึกคีย์แล้ว ทุกคนในวงเห็น") · ความเร็ว ± ยังเป็นชั่วคราวเหมือนเดิม (กด 💾 เพื่อบันทึก) · สมาชิกสิทธิ์ดูอย่างเดียวบันทึกได้เฉพาะในเครื่อง','1.0.42':'สตูดิโอ: แถบ "ยังไม่บันทึก" (💾/↺) ย้ายมาอยู่ใต้การ์ดคีย์/ความเร็ว ไม่ลอยทับปุ่ม M/S ของมิกซ์แล้ว · หัวสตูดิโอแสดงชื่อเพลงที่โหลดอยู่จริง (ไม่ขึ้น "ยังไม่ได้เลือกเพลง" อีก) · หน้าแอดมินย้ายมาอยู่ที่ paithoonbeer.github.io/admin/ (ปุ่ม 🛠 หน้าแอดมิน ในบัญชี สำหรับเจ้าของ/พนักงาน)','1.0.41':'เก็บกวาดเมนูซ้ำ: เอาปุ่ม/เมนูที่ซ้ำกับหน้าไลฟ์ออก (สตูดิโอในเมนูบัญชี, เมนู ⋯ การ์ดเก่า, ▶ ในเมนูเด็ค, แชร์/ลิสต์ที่บันทึกในเมนูลิสต์, 🎤 Live และ 🔗 BPM ในสตูดิโอ, คีย์ในแผง Pad) · แท็บ Live ในสตูดิโอเปลี่ยนชื่อเป็น “คืนนี้” · ปรับคีย์/เทมโปในสตูดิโอเป็นแบบชั่วคราวเหมือนเด็ค ต้องกด 💾 บันทึก (↺ คืนค่า) · คีย์จากแผง Pad เดิมย้ายเข้าข้อมูลเพลงให้ถ้ายังไม่มีคีย์','1.0.40':'เอาหน้า 2 เด็คแบบจานใหญ่ออก (ซ้ำกับหน้าไลฟ์) · ปุ่มสตูดิโอมาอยู่ตรงนั้นแทน แตะอีกครั้งกลับหน้าไลฟ์ · มาร์คเพลง: เด็คเริ่มที่มาร์คเริ่มตั้งแต่กดเล่นครั้งแรก ไม่เล่นส่วนที่ตัดออก และแถบเวลาในสตูดิโอ/หน้าจอล็อกนับเฉพาะช่วงที่มาร์ค · คีย์แสดงตรงตามที่บันทึก (D# ไม่กลายเป็น Eb) · เลือกคีย์ไมเนอร์ได้ (โน้ต + เมเจอร์/ไมเนอร์) พิมพ์ตัวเล็กก็อ่านถูก','1.0.39':'เพลงในคลังโหลดจากเซิร์ฟเวอร์ใหม่ (สำรองอัตโนมัติถ้าเซิร์ฟเวอร์ไหนล่ม) · เด็คบอกชัดเมื่อโหลดเพลงไม่ได้ · เพลงที่เคยเล่นเก็บในเครื่อง ไม่ต้องโหลดซ้ำ','1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
 SET65.push(['nt','#ntb','กระดิ่งแจ้งเตือน','เรื่องในวง (เพลงใหม่ ลิสต์ สมาชิก) และอัปเดตระบบ','ทั่วไป']);
 function ntOn(){return !hid65().has('nt')}
 function ntSeen(){return +localStorage.getItem('bp-nts')||0}
@@ -2852,10 +2861,10 @@ function bs70Chip(b,x){const c=BC.cur&&BC.cur.b==b.id&&BC.cur.id==x.id?BC.cur:nu
  if(bcPending().some(p=>p.b==b.id&&p.x.id==x.id))return '<span class="c70">รอส่งขึ้นวง</span>';return '<span class="c70 no">ยังไม่มีไฟล์ในวง</span>'}
 function bs70Have(b,x){const h=NT.have[b.id]||{},m=(b.mu||Object.keys(b.members||{})).length||1;let n=0;for(const u in h)if(b.members&&b.members[u]&&h[u].includes(x.id))n++;return `<span class="c70 hv">มีแล้ว ${n}/${m}</span>`}
 function bs70Chips(){document.querySelectorAll('.bs70r').forEach(r=>{const b=(BD.bands||[]).find(y=>y.id==r.dataset.b),x=b&&(BS.l[b.id]||[]).find(y=>y.id==r.dataset.s);if(!x)return;const h=bs70Chip(b,x)+bs70Have(b,x),c=r.querySelector('.bs70c');if(c&&c.innerHTML!==h)c.innerHTML=h})}
-{const _h=bdSHtml;bdSHtml=function(){const r=_h();let h=r.h;for(const b of BD.bands||[]){const ed=bdRole(b)!=='viewer',L=(BS.l[b.id]||[]).slice().sort((a,c)=>c.t-a.t);if(!ed&&!L.length)continue;
+{const _h=bdSHtml;bdSHtml=function(){const r=_h();let h=r.h;for(const b of BD.bands||[]){const ed=bdRole(b)!=='viewer',L=(BS.l[b.id]||[]).filter(x=>!isBandSfxId(x.id)).slice().sort((a,c)=>c.t-a.t);if(!ed&&!L.length)continue;
   h+=`<div class="bdsb bs70" data-b="${b.id}"><div class="small"><b>เพลงของวง</b> <span data-noi18n>${esc(b.name)}</span> · ${L.length} เพลง</div>`;
   if(ed)h+=`<button type="button" class="bs70add" data-b70="${b.id}">${ico60('plus')}<span>เพิ่มเพลงให้วง</span></button><div class="small bs70h">เลือกได้หลายไฟล์ — แอปจะใส่ชื่อจากไฟล์ ย่อขนาด และส่งขึ้นวงให้เอง สมาชิกกด ▶ ก็เล่นได้</div>`;
-  for(const x of L.slice(0,40)){const sid='X:'+x.fn,pl=SONG.has(sid);h+=`<div class="row bs70r" data-b="${b.id}" data-s="${x.id}">${pl?`<button type="button" class="hw bs70p" data-play="${esc(sid)}" aria-label="เล่น">${ico60('play')}</button>`:'<span class="bs70p"></span>'}<span class="bs70t"><b data-noi18n>${esc(x.ti)}</b>${x.ar?` <span class="small" data-noi18n>– ${esc(x.ar)}</span>`:''}<span class="bs70c">${bs70Chip(b,x)}${bs70Have(b,x)}</span></span>${SONG.has(sid)&&SONG.get(sid).bc&&!FILES.has(x.fn)?`<button type="button" class="hw bs80dl" data-dl="${esc(sid)}" aria-label="โหลดเก็บ">${DLQ.has(sid)?'⏳':'⬇️<span class="sr16">โหลดเก็บ</span>'}</button>`:FILES.has(x.fn)?'<span class="c70 ok">✅ ในเครื่อง</span>':''}${ed?`<button type="button" class="hw bs80m" data-bs80="${esc(x.id)}" data-b="${b.id}" aria-label="เมนูเพลงในวง">⋯</button>`:''}</div>`}
+  for(const x of L.filter(x=>!isBandSfxId(x.id)).slice(0,40)){const sid='X:'+x.fn,pl=SONG.has(sid);h+=`<div class="row bs70r" data-b="${b.id}" data-s="${x.id}">${pl?`<button type="button" class="hw bs70p" data-play="${esc(sid)}" aria-label="เล่น">${ico60('play')}</button>`:'<span class="bs70p"></span>'}<span class="bs70t"><b data-noi18n>${esc(x.ti)}</b>${x.ar?` <span class="small" data-noi18n>– ${esc(x.ar)}</span>`:''}<span class="bs70c">${bs70Chip(b,x)}${bs70Have(b,x)}</span></span>${SONG.has(sid)&&SONG.get(sid).bc&&!FILES.has(x.fn)?`<button type="button" class="hw bs80dl" data-dl="${esc(sid)}" aria-label="โหลดเก็บ">${DLQ.has(sid)?'⏳':'⬇️<span class="sr16">โหลดเก็บ</span>'}</button>`:FILES.has(x.fn)?'<span class="c70 ok">✅ ในเครื่อง</span>':''}${ed?`<button type="button" class="hw bs80m" data-bs80="${esc(x.id)}" data-b="${b.id}" aria-label="เมนูเพลงในวง">⋯</button>`:''}</div>`}
   if(bdRole(b)==='owner'&&L.some(x=>x.fc))h+=`<button type="button" class="hw bs80mono" data-b80m="${b.id}">🔎 หาเพลงโมโน (ไฟล์เก่า)</button><div class="bs80ml" id="bs80ml-${b.id}"></div>`;
   h+='</div>'}return {h,n:r.n}}}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-b70]');if(!t)return;let i=$('bs70i');
@@ -6424,7 +6433,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       custom:true,
       replaced:!!d,
       mime:rec.mime||'',
-      orig:!!d
+      orig:!!d,
+      v:rec.v||(SFX.meta[rec.id]&&SFX.meta[rec.id].v)||0
     };
   }
   async function preload(){
@@ -6468,10 +6478,13 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     return true;
   }
   function flash(el){if(!el)return;el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash')}
-  function hideMenu(){const m=$el('op-sfxmenu');if(m)m.hidden=true}
+  function hideMenu(){
+    const m=$el('op-sfxacts');if(m)m.hidden=true;
+    const sh=$el('op-sfxsheet');if(sh)sh.querySelectorAll('.sfx-pad.on-menu').forEach(function(p){p.classList.remove('on-menu')});
+  }
   function showMenu(id,anchor){
     ensureSheet();
-    const m=$el('op-sfxmenu');if(!m)return;
+    const m=$el('op-sfxacts');if(!m)return;
     const item=listMeta().filter(function(x){return x.id===id})[0];
     if(!item)return;
     const btns=[];
@@ -6479,14 +6492,93 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     btns.push('<button type="button" data-act="rename" data-id="'+id+'">เปลี่ยนชื่อ</button>');
     if(item.replaced)btns.push('<button type="button" data-act="reset" data-id="'+id+'">คืนค่าเริ่มต้น</button>');
     if(item.custom&&!item.builtin)btns.push('<button type="button" class="danger" data-act="delete" data-id="'+id+'">ลบ</button>');
-    m.innerHTML=btns.join('');
+    const title=$el('op-sfxacts-t');if(title)title.textContent='ตัวเลือก · '+item.lab+(item.en?' ('+item.en+')':'');
+    const row=m.querySelector('.sfx-acts-b');if(row)row.innerHTML=btns.join('');
     m.hidden=false;
-    const r=(anchor&&anchor.getBoundingClientRect)?anchor.getBoundingClientRect():{left:12,right:12,bottom:80,top:80};
-    const w=m.offsetWidth||180,h=m.offsetHeight||120;
-    let x=Math.min(window.innerWidth-w-8,Math.max(8,r.right-w));
-    let y=r.bottom+6;
-    if(y+h>window.innerHeight-8)y=Math.max(8,r.top-h-6);
-    m.style.left=x+'px';m.style.top=y+'px';
+    const sh=$el('op-sfxsheet');
+    if(sh){sh.querySelectorAll('.sfx-pad.on-menu').forEach(function(p){p.classList.remove('on-menu')});
+      const pad=sh.querySelector('.sfx-pad[data-sfx="'+id+'"]');if(pad)pad.classList.add('on-menu')}
+    try{m.scrollIntoView({block:'nearest',behavior:'smooth'})}catch(e){}
+  }
+  function toBandId(id){return ('sfx'+String(id||'').replace(/[^0-9A-Za-z]/g,'')).slice(0,24)}
+  function fromBandId(bid){
+    if(typeof isBandSfxId==='function'?!isBandSfxId(bid):!/^sfx[0-9A-Za-z]{3,21}$/.test(bid||''))return null;
+    const rest=String(bid).slice(3);const cm=rest.match(/^custom(\d+)$/i);if(cm)return 'custom-'+cm[1];
+    for(let i=0;i<DEFAULTS.length;i++)if(DEFAULTS[i].id===rest.toLowerCase())return DEFAULTS[i].id;
+    return null;
+  }
+  function editBands(){
+    try{return (typeof BD!=='undefined'&&BD.bands||[]).filter(function(b){return typeof bdRole==='function'&&bdRole(b)!=='viewer'})}catch(e){return[]}
+  }
+  async function blobOf(id){
+    try{const all=await idbAll();const rec=all.filter(function(x){return x.id===id})[0];if(!rec)return null;
+      if(rec.blob)return rec.blob;if(rec.data)return new Blob([rec.data],{type:rec.mime||'audio/mpeg'});return null}catch(e){return null}
+  }
+  async function bandPush(id,opts){
+    opts=opts||{};
+    try{
+      if(!(typeof CLD!=='undefined'&&CLD.user&&CLD.mod&&CLD.mod.bandSongsPut&&CLD.mod.bandFilePut))return {ok:false,skip:1};
+      const bands=editBands();if(!bands.length)return {ok:false,skip:1};
+      const bid=toBandId(id);if(bid.length<6)return {ok:false,error:'bad id'};
+      const meta=SFX.meta[id]||{};const d=defOf(id);
+      const lab=meta.lab||(d&&d.lab)||id;const en=meta.en||(d&&d.en)||'custom';
+      const blob=await blobOf(id);if(!blob&&!opts.metaOnly)return {ok:false,error:'no audio'};
+      let u8=null;if(blob)u8=new Uint8Array(await blob.arrayBuffer());
+      const mime=(meta.mime||(blob&&blob.type)||'audio/mpeg');
+      let n=0;
+      for(let i=0;i<bands.length;i++){
+        const b=bands[i];const old=((typeof BS!=='undefined'&&BS.l&&BS.l[b.id])||[]).find(function(x){return x.id===bid});
+        if(!old)await CLD.mod.bandSongsPut(b.id,[{id:bid,ti:String(lab).slice(0,200),ar:'SFX',sd:'X',fn:('sfx/'+id+'.mp3').slice(0,300)}]);
+        else if(opts.metaOnly||old.ti!==lab){try{await CLD.mod.bandSongMeta(b.id,bid,{ti:String(lab).slice(0,200)})}catch(e){}}
+        if(u8){await CLD.mod.bandFilePut(b.id,bid,u8,mime,null,old&&old.fc?{fc:old.fc,fz:old.fz}:null);n++}
+      }
+      if(SFX.meta[id])SFX.meta[id].v=Date.now();
+      return {ok:true,n:n,bands:bands.length};
+    }catch(e){try{blog('warn','sfx band push',e&&(e.code||e.message))}catch(_){}
+      return {ok:false,error:(e&&(e.message||e.code))||'push fail'}}
+  }
+  async function bandDel(id){
+    try{
+      if(!(typeof CLD!=='undefined'&&CLD.user&&CLD.mod&&CLD.mod.bandSongDel))return;
+      const bands=editBands();const bid=toBandId(id);
+      for(let i=0;i<bands.length;i++){
+        const b=bands[i];const old=((typeof BS!=='undefined'&&BS.l&&BS.l[b.id])||[]).find(function(x){return x.id===bid});
+        if(old)try{await CLD.mod.bandSongDel(b.id,bid,old.fc||null)}catch(e){blog('warn','sfx band del',e&&(e.code||e.message))}
+      }
+    }catch(e){}
+  }
+  const SFX_PULL={busy:0,seen:{}};
+  async function bandPull(){
+    if(SFX_PULL.busy)return;SFX_PULL.busy=1;
+    try{
+      if(!(typeof CLD!=='undefined'&&CLD.user&&CLD.mod&&CLD.mod.bandFileGet))return;
+      if(typeof BS==='undefined'||!BS.l)return;
+      for(const bid in BS.l){
+        const L=BS.l[bid]||[];
+        for(let i=0;i<L.length;i++){
+          const x=L[i];if(!(typeof isBandSfxId==='function'?isBandSfxId(x.id):/^sfx/.test(x.id))||!x.fc)continue;
+          const lid=fromBandId(x.id);if(!lid)continue;
+          const local=SFX.meta[lid];const ver=x.v||x.t||0;
+          if(local&&local.v&&local.v>=ver&&SFX.bufs[lid])continue;
+          const key=bid+':'+x.id+':'+ver;if(SFX_PULL.seen[key])continue;SFX_PULL.seen[key]=1;
+          try{
+            const parts=await CLD.mod.bandFileGet(bid,x.id,x.fc);const blob=new Blob(parts,{type:x.fm||'audio/mpeg'});
+            const rec={id:lid,lab:x.ti||lid,en:(defOf(lid)&&defOf(lid).en)||'custom',mime:x.fm||'audio/mpeg',blob:blob,custom:true,v:ver};
+            await idbPut(rec);await applyRec(rec);if(SFX.meta[lid])SFX.meta[lid].v=ver;
+            renderGrid();
+          }catch(e){delete SFX_PULL.seen[key];try{blog('warn','sfx band pull '+lid,e&&(e.code||e.message))}catch(_){}}
+        }
+      }
+    }finally{SFX_PULL.busy=0}
+  }
+  function bandNote(b,x){
+    try{
+      if(!x||x.by===(typeof bsMe==='function'?bsMe():''))return;
+      const lid=fromBandId(x.id);if(!lid)return;
+      const bn=((typeof BD!=='undefined'&&BD.bands||[]).find(function(y){return y.id===b})||{}).name||'';
+      toast('👥 '+(x.byn||'สมาชิก')+' แชร์เสียง SFX “'+(x.ti||lid)+'” ให้วง '+bn,3200,true);
+      bandPull();
+    }catch(e){}
   }
   function ensureFile(){
     let inp=$el('op-sfxfile');
@@ -6504,7 +6596,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       if(!f)return;
       importFile(f,{replace:pend.replace,add:!!pend.add}).then(function(res){
         if(!res||!res.ok){try{toast(res&&res.error||'ไม่สามารถนำเข้าเสียงได้')}catch(e){}}
-        else try{toast('บันทึกเสียงไว้ในเครื่องแล้ว',3000,true)}catch(e){}
+        else try{toast(res.band?'บันทึกแล้ว · สมาชิกในวงเห็นด้วย':(editBands().length?'บันทึกในเครื่องแล้ว (ส่งเข้าวงไม่สำเร็จ)':'บันทึกเสียงไว้ในเครื่องแล้ว'),3500,true)}catch(e){}
       }).catch(function(e){try{toast(e&&e.message||'ไม่สามารถนำเข้าเสียงได้')}catch(_){}});
     });
     document.body.appendChild(inp);
@@ -6529,6 +6621,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       html+='<button type="button" class="sfx-pad sfx-add" data-sfxadd="1" aria-label="เพิ่มเสียงของฉัน"><span class="sfx-en">add</span><span class="sfx-lab">+ เพิ่ม</span></button>';
     }
     g.innerHTML=html;
+    const note=sh.querySelector('.sfx-bandnote');
+    if(note)note.textContent=editBands().length?'เสียงที่เพิ่ม/แก้/ลบ จะแชร์ให้ทุกคนในวงอัตโนมัติ (เหมือนเพลงของวง)':'เข้าสู่ระบบและอยู่ในวง — เสียงที่เพิ่มจะแชร์ให้สมาชิกทุกคน';
   }
   function bindPadGestures(d){
     if(d._sfxg)return;d._sfxg=1;
@@ -6561,9 +6655,10 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   }
   function ensureSheet(){
     if($el('op-sfxsheet')){
-      if(!$el('op-sfxmenu')){
-        const m=document.createElement('div');m.id='op-sfxmenu';m.hidden=true;m.setAttribute('role','menu');document.body.appendChild(m);
-        m.addEventListener('click',onMenu);
+      if(!$el('op-sfxacts')){
+        const acts=document.createElement('div');acts.id='op-sfxacts';acts.className='sfx-acts';acts.hidden=true;acts.setAttribute('role','menu');
+        acts.innerHTML='<div class="sfx-acts-h"><span class="sfx-acts-t" id="op-sfxacts-t">ตัวเลือก</span><button type="button" class="sfx-acts-x" data-act="close" aria-label="ปิดเมนู">×</button></div><div class="sfx-acts-b"></div>';
+        $el('op-sfxsheet').appendChild(acts);acts.addEventListener('click',onMenu);
       }
       ensureFile();
       return;
@@ -6579,10 +6674,11 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
         '<label class="sfx-vol"><span>ระดับ</span><input type="range" id="op-sfxvol" min="0" max="100" value="'+Math.round(SFX.vol*100)+'" aria-label="ระดับเสียงประกอบ"></label>'+
         '<button type="button" class="sfx-x" id="op-sfxx" aria-label="ปิด">×</button>'+
       '</div>'+
-      '<div class="sfx-grid"></div>';
+      '<div class="sfx-grid"></div>'+
+      '<div id="op-sfxacts" class="sfx-acts" hidden role="menu"><div class="sfx-acts-h"><span class="sfx-acts-t" id="op-sfxacts-t">ตัวเลือก</span><button type="button" class="sfx-acts-x" data-act="close" aria-label="ปิดเมนู">×</button></div><div class="sfx-acts-b"></div></div>'+
+      '<div class="sfx-bandnote"></div>';
     document.body.appendChild(d);
-    const m=document.createElement('div');m.id='op-sfxmenu';m.hidden=true;m.setAttribute('role','menu');document.body.appendChild(m);
-    m.addEventListener('click',onMenu);
+    $el('op-sfxacts').addEventListener('click',onMenu);
     ensureFile();
     bindPadGestures(d);
     renderGrid();
@@ -6596,11 +6692,12 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const b=e.target.closest('[data-act]');if(!b)return;
     e.preventDefault();e.stopPropagation();
     const act=b.getAttribute('data-act'),id=b.getAttribute('data-id');
+    if(act==='close'){hideMenu();return}
     hideMenu();
     if(act==='replace')pickFile({replace:id});
     else if(act==='rename')renamePrompt(id);
-    else if(act==='reset')reset(id).then(function(r){if(r&&r.ok)try{toast('คืนค่าเริ่มต้นแล้ว',2500,true)}catch(e){}});
-    else if(act==='delete')remove(id).then(function(r){if(r&&r.ok)try{toast('ลบแล้ว',2500,true)}catch(e){}});
+    else if(act==='reset')reset(id).then(function(r){if(r&&r.ok)try{toast(r.band?'คืนค่าเริ่มต้น · ลบออกจากวงแล้ว':'คืนค่าเริ่มต้นแล้ว',2500,true)}catch(e){}});
+    else if(act==='delete')remove(id).then(function(r){if(r&&r.ok)try{toast(r.band?'ลบแล้ว · ทุกคนในวงไม่เห็นแล้ว':'ลบแล้ว',2500,true)}catch(e){}});
   }
   function renamePrompt(id){
     const cur=(SFX.meta[id]&&SFX.meta[id].lab)||(defOf(id)&&defOf(id).lab)||'';
@@ -6634,9 +6731,10 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const rec={id:id,lab:lab,en:en,mime:file.type||'audio/mpeg',blob:file,custom:true,replaces:d?id:undefined};
     try{await idbPut(rec)}catch(e){return{ok:false,error:'บันทึกในเครื่องไม่สำเร็จ'}}
     SFX.bufs[id]=buf;
-    SFX.meta[id]={lab:lab,en:en,custom:true,replaced:!!d,mime:rec.mime};
+    SFX.meta[id]={lab:lab,en:en,custom:true,replaced:!!d,mime:rec.mime,v:Date.now()};
     renderGrid();
-    return{ok:true,id:id,lab:lab,duration:buf.duration};
+    let band=false;try{const p=await bandPush(id);band=!!(p&&p.ok&&p.n)}catch(e){}
+    return{ok:true,id:id,lab:lab,duration:buf.duration,band:band};
   }
   async function rename(id,lab){
     lab=String(lab||'').trim().slice(0,40);
@@ -6658,6 +6756,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       SFX.meta[id].custom=true;
     }
     renderGrid();
+    try{await bandPush(id,{metaOnly:!(rec.blob||rec.data)})}catch(e){}
     return{ok:true,id:id,lab:lab};
   }
   async function remove(id){
@@ -6666,7 +6765,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     delete SFX.bufs[id];
     delete SFX.meta[id];
     renderGrid();
-    return{ok:true,id:id};
+    let band=false;try{await bandDel(id);band=!!editBands().length}catch(e){}
+    return{ok:true,id:id,band:band};
   }
   async function reset(id){
     const d=defOf(id);
@@ -6675,7 +6775,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     delete SFX.meta[id];
     try{SFX.bufs[id]=await loadPack(id)}catch(e){delete SFX.bufs[id]}
     renderGrid();
-    return{ok:true,id:id};
+    let band=false;try{await bandDel(id);band=!!editBands().length}catch(e){}
+    return{ok:true,id:id,band:band};
   }
   function bindBtns(){
     ['op-sfx','dd-sfx'].forEach(function(id){
@@ -6696,7 +6797,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     sh.hidden=false;SFX.open=true;syncBtns();
     setVol(SFX.vol);
     renderGrid();
-    preload();
+    preload().then(function(){try{bandPull()}catch(e){}});
     try{initAudio();if(ctx&&ctx.resume)ctx.resume()}catch(e){}
   }
   function close(){
@@ -6705,14 +6806,14 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     SFX.open=false;syncBtns();
   }
   function toggle(){if(SFX.open)close();else open()}
-  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&SFX.open){if($el('op-sfxmenu')&&!$el('op-sfxmenu').hidden)hideMenu();else close()}});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&SFX.open){if($el('op-sfxacts')&&!$el('op-sfxacts').hidden)hideMenu();else close()}});
   document.addEventListener('pointerdown',function(e){
     const t=e.target;
-    if($el('op-sfxmenu')&&!$el('op-sfxmenu').hidden){
-      if(!(t&&t.closest&&(t.closest('#op-sfxmenu')||t.closest('[data-sfxmore]'))))hideMenu();
+    if($el('op-sfxacts')&&!$el('op-sfxacts').hidden){
+      if(!(t&&t.closest&&(t.closest('#op-sfxacts')||t.closest('[data-sfxmore]'))))hideMenu();
     }
     if(!SFX.open)return;
-    if(t&&t.closest&&(t.closest('#op-sfxsheet')||t.closest('#op-sfx')||t.closest('#dd-sfx')||t.closest('#op-sfxmenu')||t.closest('#op-sfxfile')))return;
+    if(t&&t.closest&&(t.closest('#op-sfxsheet')||t.closest('#op-sfx')||t.closest('#dd-sfx')||t.closest('#op-sfxfile')))return;
     close();
   },true);
   // v1.0.34: SFX files load on first SFX-panel open / first pad tap (not on every app start) to save hosting bandwidth.
@@ -6722,7 +6823,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   window.__sfx={
     play:play,open:open,close:close,toggle:toggle,preload:preload,setVol:setVol,
     importFile:importFile,rename:rename,remove:remove,reset:reset,
-    list:listMeta,render:renderGrid,
+    list:listMeta,render:renderGrid,bandPull:bandPull,bandPush:bandPush,bandNote:bandNote,
+    toBandId:toBandId,fromBandId:fromBandId,
     get vol(){return SFX.vol},
     get isOpen(){return SFX.open},
     get ready(){return listMeta().filter(function(it){return !!SFX.bufs[it.id]}).length},
