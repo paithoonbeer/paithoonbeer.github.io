@@ -1477,7 +1477,12 @@ body.op18.live #livelist .op-step button{
 
 /* SFX sheet: custom pads, overflow menu, add tile */
 #op-sfxsheet .sfx-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-#op-sfxsheet .sfx-pad{position:relative;overflow:visible}
+#op-sfxsheet .sfx-pad{position:relative;overflow:visible;touch-action:none;user-select:none;-webkit-user-select:none}
+#op-sfxsheet .sfx-pad.dragging{
+  opacity:.92;transform:scale(1.06);z-index:3;
+  box-shadow:0 8px 22px rgba(0,0,0,.45);border-color:#fb923c;cursor:grabbing;
+}
+#op-sfxsheet .sfx-grid{touch-action:none}
 #op-sfxsheet .sfx-more{
   position:absolute;top:2px;right:2px;width:28px;height:28px;min-width:28px;min-height:28px;
   border:0;background:transparent;color:#a1a1aa;border-radius:8px;padding:0;cursor:pointer;

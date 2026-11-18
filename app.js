@@ -1,5 +1,5 @@
 import {metroEl} from './metro.js';
-const APPV='1.0.72';
+const APPV='1.0.73';
 // v1.0.15: catalog-rule reloads never fire while the account (cloud) panel is open/#account (that reload re-opened the panel → library/account flashing),
 // at most once per kind per session (no reload loop), and drop #account so the panel is not re-opened by the reload.
 function catRl(k){try{if(sessionStorage.getItem('bp-catrl-'+k))return;if(document.body.classList.contains('acp-on')||location.hash==='#account'){window.__catRlP=k;return}sessionStorage.setItem('bp-catrl-'+k,'1');blog('info','catalog reload '+k);location.reload()}catch(e){}}
@@ -2695,7 +2695,7 @@ window.__ui66={tidy:tidy66,more:more66Open};
 
 // ===== v1.70: notification bell (band activity + system notices) · one-tap “+ เพิ่มเพลงให้วง” · per-song upload/cached status =====
 const NT={a:{},un:{},sys:null,sun:null,have:{},hun:{},hw:{}};
-const NTCHG={'1.0.72':'SFX: เพิ่มเสียงได้สูงสุด 30 ช่อง (8 เริ่มต้น + 22 กำหนดเอง)','1.0.71':'SFX: ไฟล์ยาวเกิน 10 วินาทีตัดเหลือ 10 วิแรกให้อัตโนมัติตอนนำเข้า','1.0.70':'SFX: กดปุ่มเสียงเดิมอีกครั้งเพื่อหยุดทันที (ไม่ต้องรอเสียงยาวจบ)','1.0.69':'SFX: เมนู ⋯ ไม่ทับลิสต์แล้ว · เสียงที่เพิ่ม/แก้แชร์ให้ทั้งวงอัตโนมัติ (เหมือนเพลง)','1.0.68':'นับเข้า: ค่าเริ่มต้นไม่นับ — เปิด “นับ 1 ห้อง” ทีละเพลง (เพลงที่มีนับในไฟล์แล้วไม่ต้องเปิด) · ใช้ BPM จากข้อมูลเพลงให้ตรงจังหวะขึ้น','1.0.67':'นับเข้าตรงจังหวะเพลง + ไม่ซ้อนดนตรี — นับตาม BPM ของเพลงนั้น แล้วค่อยเริ่มเพลงในจังหวะถัดไป','1.0.66':'นับเข้าตอนขึ้นเพลง: พูด one–two–three–four ตามจังหวะ (ค่าเริ่มต้น 1 ห้อง) — เพลงที่ไฟล์มีนับอยู่แล้วตั้ง “ไม่นับ” ได้ที่เครื่องมือ › นับเข้า','1.0.65':'สตูดิโอบนพีซี: เลื่อนดูเครื่องมือครบแล้ว (ไม่ทับแถบเวลา) · ลดจอกระพริบตอนกดเล่น','1.0.64':'พีซี/จอ ≥900px: ตรึงเครื่องมือ/กราฟตอนเลื่อนหาเพลงแล้ว — ไม่ต้องเปิดโหมด DAW และไม่ต้องจอ ≥1200','1.0.63':'โหมดพีซีสตูดิโอ: ตรึงเครื่องมือ/กราฟแน่นขึ้น — ล็อกทั้งหน้า (ไม่เลื่อนตามคลัง) และยกเว้นกฎเลื่อนทั้งหน้าของสตูดิโอบนมือถือ','1.0.62':'โหมดพีซีสตูดิโอ: ตรึงฝั่งเครื่องมือ/กราฟไว้ตอนเลื่อนหาเพลงในคลัง (เลื่อนเฉพาะคอลัมน์ซ้าย)','1.0.61':'แก้หน้าจอกระพริบบนพีซี โดยเฉพาะบัญชีและวง — ไม่รีสร้างการ์ดบัญชี/วงซ้ำ · คง QR · ไม่ถอด EQ บนลิสต์สดทุก 0.4 วิ','1.0.60':'แก้คลังโชว์เพลงซ้ำหลังกู้คืน/รีเฟรชแคตตาล็อก (นอมซ้าย·ขวาคนละฝั่งยังมี 2 แถวตามปกติ)','1.0.59':'แก้กู้คืนเพลงแล้วกดเล่นแล้วเด้ง error (reading X) — ผูกเพลงกลับเข้าคลังก่อนเล่น','1.0.58':'ปุ่มกู้คืนเพลงที่ซ่อนอยู่ชัดแล้ว — เมนูบัญชีด้านบน + หัวการตั้งค่า (ไม่ต้องไล่หาในระบบขั้นสูง)','1.0.57':'ปุ่มกู้คืนเพลงที่ซ่อนจากคลัง (เช่น ขอบคุณที่รักกัน นอมซ้าย/ขวา) — การตั้งค่า › ระบบ หรือเมนูลิสต์','1.0.56':'แอป Android เด้งอัปเดตชัดขึ้นเมื่อมี APK ใหม่ · เว็บเช็คอัปเดตถี่ขึ้นและมีปุ่มอัปเดตใหญ่','1.0.55':'เอาแท็บเขียว “▶ เล่นต่อ …” ออก — รกจอตอนขึ้นงาน','1.0.54':'แก้ลบเพลงจากลิสต์แล้วทีมยังเห็น — กัน snapshot ของวงทับการลบท้องถิ่นก่อนส่งขึ้นคลาวด์ และลบจากหน้า Dual ส่งขึ้นวงทันที','1.0.53':'เมนูบัญชีเหลือแค่ การแจ้งเตือน · นำเข้าเพลง · การตั้งค่า — ส่งความเห็น/แชท/บัญชี ย้ายเข้าหมวดตั้งค่าแล้ว · ลิสต์วันนี้/คืนนี้โชว์เวลารวม · แก้กระพริบลิสต์ตอนอัปเดตความยาว · ปิดตั้งค่าบนไลฟ์ไม่ค้างแท็บนำเข้า · มิกซ์ร้าน→แยกช่องเปิดการตั้งค่า','1.0.52':'ย้อนกลับไปเลย์เอาต์แบบ 1.0.49 (ก่อนจัดสตูดิโอใหม่) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ','1.0.51':'หยุดกระพริบสตูดิโอ · แก้ค้างนำเข้า · ลบออนไลน์','1.0.50':'สตูดิโอจัดใหม่ A+B','1.0.49':'ลบจากคลัง: กด 🗑 แล้วยืนยันครั้งเดียว — ทั้งวงไม่เห็นเพลงนั้นแล้ว (เพลงตัวอย่างออนไลน์ซ่อนให้ทั้งทีม ไม่โชว์ข้อความยุ่งยาก)','1.0.48':'ลิสต์คืนนี้: ปุ่ม ☰ ลากย้ายไปไว้ซ้าย (ห่าง ✕) และต้องเลื่อนประมาณ 16px ก่อนถึงจะขยับเพลง — แตะเบา ๆ ไม่เลื่อนแล้ว','1.0.47':'ปุ่ม 🗑 ลบจากคลังโชว์ทุกแถวในคลังแล้ว รวมเพลงออนไลน์ที่ยังไม่โหลดเก็บ (กดแล้วระบบบอกได้ถ้าเป็นเพลงตัวอย่างส่วนกลาง)','1.0.46':'สตูดิโอ/คลัง: ปุ่ม 🗑 ลบจากคลังโผล่ข้าง ＋ ทุกรายการ (ไม่ต้องเข้าเมนู ⋯) — ลบเพลงของวงแล้วทุกคนในทีมไม่เห็น','1.0.45':'ลบเพลงจากคลังได้แล้ว (เมนู ⋯ / ค้นคลัง / ชีตคลัง) — ถ้าเป็นเพลงของวง จะลบออกจากวงด้วย ทุกคนในทีมไม่เห็น · แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ','1.0.44':'แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ — แถบ SETLIST ด้านบนไม่ถูกสร้างใหม่ทั้งก้อนทุกครั้งที่เล่น/หยุด หรือตอนวิเคราะห์คีย์-BPM','1.0.43':'กดคีย์ − / + ที่เด็ค (หน้าไลฟ์) และการ์ดคีย์ในสตูดิโอ = บันทึกกับเพลงทันที ซิงก์เข้าลิสต์ของวงให้ทุกคนเห็นแบบเรียลไทม์ (ขึ้น "บันทึกคีย์แล้ว ทุกคนในวงเห็น") · ความเร็ว ± ยังเป็นชั่วคราวเหมือนเดิม (กด 💾 เพื่อบันทึก) · สมาชิกสิทธิ์ดูอย่างเดียวบันทึกได้เฉพาะในเครื่อง','1.0.42':'สตูดิโอ: แถบ "ยังไม่บันทึก" (💾/↺) ย้ายมาอยู่ใต้การ์ดคีย์/ความเร็ว ไม่ลอยทับปุ่ม M/S ของมิกซ์แล้ว · หัวสตูดิโอแสดงชื่อเพลงที่โหลดอยู่จริง (ไม่ขึ้น "ยังไม่ได้เลือกเพลง" อีก) · หน้าแอดมินย้ายมาอยู่ที่ paithoonbeer.github.io/admin/ (ปุ่ม 🛠 หน้าแอดมิน ในบัญชี สำหรับเจ้าของ/พนักงาน)','1.0.41':'เก็บกวาดเมนูซ้ำ: เอาปุ่ม/เมนูที่ซ้ำกับหน้าไลฟ์ออก (สตูดิโอในเมนูบัญชี, เมนู ⋯ การ์ดเก่า, ▶ ในเมนูเด็ค, แชร์/ลิสต์ที่บันทึกในเมนูลิสต์, 🎤 Live และ 🔗 BPM ในสตูดิโอ, คีย์ในแผง Pad) · แท็บ Live ในสตูดิโอเปลี่ยนชื่อเป็น “คืนนี้” · ปรับคีย์/เทมโปในสตูดิโอเป็นแบบชั่วคราวเหมือนเด็ค ต้องกด 💾 บันทึก (↺ คืนค่า) · คีย์จากแผง Pad เดิมย้ายเข้าข้อมูลเพลงให้ถ้ายังไม่มีคีย์','1.0.40':'เอาหน้า 2 เด็คแบบจานใหญ่ออก (ซ้ำกับหน้าไลฟ์) · ปุ่มสตูดิโอมาอยู่ตรงนั้นแทน แตะอีกครั้งกลับหน้าไลฟ์ · มาร์คเพลง: เด็คเริ่มที่มาร์คเริ่มตั้งแต่กดเล่นครั้งแรก ไม่เล่นส่วนที่ตัดออก และแถบเวลาในสตูดิโอ/หน้าจอล็อกนับเฉพาะช่วงที่มาร์ค · คีย์แสดงตรงตามที่บันทึก (D# ไม่กลายเป็น Eb) · เลือกคีย์ไมเนอร์ได้ (โน้ต + เมเจอร์/ไมเนอร์) พิมพ์ตัวเล็กก็อ่านถูก','1.0.39':'เพลงในคลังโหลดจากเซิร์ฟเวอร์ใหม่ (สำรองอัตโนมัติถ้าเซิร์ฟเวอร์ไหนล่ม) · เด็คบอกชัดเมื่อโหลดเพลงไม่ได้ · เพลงที่เคยเล่นเก็บในเครื่อง ไม่ต้องโหลดซ้ำ','1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
+const NTCHG={'1.0.73':'SFX: ลากปุ่มเสียงเรียงตำแหน่งได้อิสระ (จำลำดับในเครื่อง)','1.0.72':'SFX: เพิ่มเสียงได้สูงสุด 30 ช่อง (8 เริ่มต้น + 22 กำหนดเอง)','1.0.71':'SFX: ไฟล์ยาวเกิน 10 วินาทีตัดเหลือ 10 วิแรกให้อัตโนมัติตอนนำเข้า','1.0.70':'SFX: กดปุ่มเสียงเดิมอีกครั้งเพื่อหยุดทันที (ไม่ต้องรอเสียงยาวจบ)','1.0.69':'SFX: เมนู ⋯ ไม่ทับลิสต์แล้ว · เสียงที่เพิ่ม/แก้แชร์ให้ทั้งวงอัตโนมัติ (เหมือนเพลง)','1.0.68':'นับเข้า: ค่าเริ่มต้นไม่นับ — เปิด “นับ 1 ห้อง” ทีละเพลง (เพลงที่มีนับในไฟล์แล้วไม่ต้องเปิด) · ใช้ BPM จากข้อมูลเพลงให้ตรงจังหวะขึ้น','1.0.67':'นับเข้าตรงจังหวะเพลง + ไม่ซ้อนดนตรี — นับตาม BPM ของเพลงนั้น แล้วค่อยเริ่มเพลงในจังหวะถัดไป','1.0.66':'นับเข้าตอนขึ้นเพลง: พูด one–two–three–four ตามจังหวะ (ค่าเริ่มต้น 1 ห้อง) — เพลงที่ไฟล์มีนับอยู่แล้วตั้ง “ไม่นับ” ได้ที่เครื่องมือ › นับเข้า','1.0.65':'สตูดิโอบนพีซี: เลื่อนดูเครื่องมือครบแล้ว (ไม่ทับแถบเวลา) · ลดจอกระพริบตอนกดเล่น','1.0.64':'พีซี/จอ ≥900px: ตรึงเครื่องมือ/กราฟตอนเลื่อนหาเพลงแล้ว — ไม่ต้องเปิดโหมด DAW และไม่ต้องจอ ≥1200','1.0.63':'โหมดพีซีสตูดิโอ: ตรึงเครื่องมือ/กราฟแน่นขึ้น — ล็อกทั้งหน้า (ไม่เลื่อนตามคลัง) และยกเว้นกฎเลื่อนทั้งหน้าของสตูดิโอบนมือถือ','1.0.62':'โหมดพีซีสตูดิโอ: ตรึงฝั่งเครื่องมือ/กราฟไว้ตอนเลื่อนหาเพลงในคลัง (เลื่อนเฉพาะคอลัมน์ซ้าย)','1.0.61':'แก้หน้าจอกระพริบบนพีซี โดยเฉพาะบัญชีและวง — ไม่รีสร้างการ์ดบัญชี/วงซ้ำ · คง QR · ไม่ถอด EQ บนลิสต์สดทุก 0.4 วิ','1.0.60':'แก้คลังโชว์เพลงซ้ำหลังกู้คืน/รีเฟรชแคตตาล็อก (นอมซ้าย·ขวาคนละฝั่งยังมี 2 แถวตามปกติ)','1.0.59':'แก้กู้คืนเพลงแล้วกดเล่นแล้วเด้ง error (reading X) — ผูกเพลงกลับเข้าคลังก่อนเล่น','1.0.58':'ปุ่มกู้คืนเพลงที่ซ่อนอยู่ชัดแล้ว — เมนูบัญชีด้านบน + หัวการตั้งค่า (ไม่ต้องไล่หาในระบบขั้นสูง)','1.0.57':'ปุ่มกู้คืนเพลงที่ซ่อนจากคลัง (เช่น ขอบคุณที่รักกัน นอมซ้าย/ขวา) — การตั้งค่า › ระบบ หรือเมนูลิสต์','1.0.56':'แอป Android เด้งอัปเดตชัดขึ้นเมื่อมี APK ใหม่ · เว็บเช็คอัปเดตถี่ขึ้นและมีปุ่มอัปเดตใหญ่','1.0.55':'เอาแท็บเขียว “▶ เล่นต่อ …” ออก — รกจอตอนขึ้นงาน','1.0.54':'แก้ลบเพลงจากลิสต์แล้วทีมยังเห็น — กัน snapshot ของวงทับการลบท้องถิ่นก่อนส่งขึ้นคลาวด์ และลบจากหน้า Dual ส่งขึ้นวงทันที','1.0.53':'เมนูบัญชีเหลือแค่ การแจ้งเตือน · นำเข้าเพลง · การตั้งค่า — ส่งความเห็น/แชท/บัญชี ย้ายเข้าหมวดตั้งค่าแล้ว · ลิสต์วันนี้/คืนนี้โชว์เวลารวม · แก้กระพริบลิสต์ตอนอัปเดตความยาว · ปิดตั้งค่าบนไลฟ์ไม่ค้างแท็บนำเข้า · มิกซ์ร้าน→แยกช่องเปิดการตั้งค่า','1.0.52':'ย้อนกลับไปเลย์เอาต์แบบ 1.0.49 (ก่อนจัดสตูดิโอใหม่) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ','1.0.51':'หยุดกระพริบสตูดิโอ · แก้ค้างนำเข้า · ลบออนไลน์','1.0.50':'สตูดิโอจัดใหม่ A+B','1.0.49':'ลบจากคลัง: กด 🗑 แล้วยืนยันครั้งเดียว — ทั้งวงไม่เห็นเพลงนั้นแล้ว (เพลงตัวอย่างออนไลน์ซ่อนให้ทั้งทีม ไม่โชว์ข้อความยุ่งยาก)','1.0.48':'ลิสต์คืนนี้: ปุ่ม ☰ ลากย้ายไปไว้ซ้าย (ห่าง ✕) และต้องเลื่อนประมาณ 16px ก่อนถึงจะขยับเพลง — แตะเบา ๆ ไม่เลื่อนแล้ว','1.0.47':'ปุ่ม 🗑 ลบจากคลังโชว์ทุกแถวในคลังแล้ว รวมเพลงออนไลน์ที่ยังไม่โหลดเก็บ (กดแล้วระบบบอกได้ถ้าเป็นเพลงตัวอย่างส่วนกลาง)','1.0.46':'สตูดิโอ/คลัง: ปุ่ม 🗑 ลบจากคลังโผล่ข้าง ＋ ทุกรายการ (ไม่ต้องเข้าเมนู ⋯) — ลบเพลงของวงแล้วทุกคนในทีมไม่เห็น','1.0.45':'ลบเพลงจากคลังได้แล้ว (เมนู ⋯ / ค้นคลัง / ชีตคลัง) — ถ้าเป็นเพลงของวง จะลบออกจากวงด้วย ทุกคนในทีมไม่เห็น · แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ','1.0.44':'แก้หน้าจอกระพริบตอนจัดลิสต์ในสตูดิโอ — แถบ SETLIST ด้านบนไม่ถูกสร้างใหม่ทั้งก้อนทุกครั้งที่เล่น/หยุด หรือตอนวิเคราะห์คีย์-BPM','1.0.43':'กดคีย์ − / + ที่เด็ค (หน้าไลฟ์) และการ์ดคีย์ในสตูดิโอ = บันทึกกับเพลงทันที ซิงก์เข้าลิสต์ของวงให้ทุกคนเห็นแบบเรียลไทม์ (ขึ้น "บันทึกคีย์แล้ว ทุกคนในวงเห็น") · ความเร็ว ± ยังเป็นชั่วคราวเหมือนเดิม (กด 💾 เพื่อบันทึก) · สมาชิกสิทธิ์ดูอย่างเดียวบันทึกได้เฉพาะในเครื่อง','1.0.42':'สตูดิโอ: แถบ "ยังไม่บันทึก" (💾/↺) ย้ายมาอยู่ใต้การ์ดคีย์/ความเร็ว ไม่ลอยทับปุ่ม M/S ของมิกซ์แล้ว · หัวสตูดิโอแสดงชื่อเพลงที่โหลดอยู่จริง (ไม่ขึ้น "ยังไม่ได้เลือกเพลง" อีก) · หน้าแอดมินย้ายมาอยู่ที่ paithoonbeer.github.io/admin/ (ปุ่ม 🛠 หน้าแอดมิน ในบัญชี สำหรับเจ้าของ/พนักงาน)','1.0.41':'เก็บกวาดเมนูซ้ำ: เอาปุ่ม/เมนูที่ซ้ำกับหน้าไลฟ์ออก (สตูดิโอในเมนูบัญชี, เมนู ⋯ การ์ดเก่า, ▶ ในเมนูเด็ค, แชร์/ลิสต์ที่บันทึกในเมนูลิสต์, 🎤 Live และ 🔗 BPM ในสตูดิโอ, คีย์ในแผง Pad) · แท็บ Live ในสตูดิโอเปลี่ยนชื่อเป็น “คืนนี้” · ปรับคีย์/เทมโปในสตูดิโอเป็นแบบชั่วคราวเหมือนเด็ค ต้องกด 💾 บันทึก (↺ คืนค่า) · คีย์จากแผง Pad เดิมย้ายเข้าข้อมูลเพลงให้ถ้ายังไม่มีคีย์','1.0.40':'เอาหน้า 2 เด็คแบบจานใหญ่ออก (ซ้ำกับหน้าไลฟ์) · ปุ่มสตูดิโอมาอยู่ตรงนั้นแทน แตะอีกครั้งกลับหน้าไลฟ์ · มาร์คเพลง: เด็คเริ่มที่มาร์คเริ่มตั้งแต่กดเล่นครั้งแรก ไม่เล่นส่วนที่ตัดออก และแถบเวลาในสตูดิโอ/หน้าจอล็อกนับเฉพาะช่วงที่มาร์ค · คีย์แสดงตรงตามที่บันทึก (D# ไม่กลายเป็น Eb) · เลือกคีย์ไมเนอร์ได้ (โน้ต + เมเจอร์/ไมเนอร์) พิมพ์ตัวเล็กก็อ่านถูก','1.0.39':'เพลงในคลังโหลดจากเซิร์ฟเวอร์ใหม่ (สำรองอัตโนมัติถ้าเซิร์ฟเวอร์ไหนล่ม) · เด็คบอกชัดเมื่อโหลดเพลงไม่ได้ · เพลงที่เคยเล่นเก็บในเครื่อง ไม่ต้องโหลดซ้ำ','1.0.38':'แทรกเพลงแล้วเล่นเพลงที่แทรกจริง · มาร์คจบ/เริ่ม: เวลา ความยาว และแถบเดินตรงกับมาร์ค · เปลี่ยนหน้าระหว่างเล่นไม่สะดุด · ชื่อเพลงบอกฝั่งนอม (L→R / L / R) · SYNC กดเองเท่านั้น · ย้ายปุ่มคลังไปไว้ในช่องค้นหา','1.0.37':'เสียงดังเท่าเดิม + กันเสียงแตก (ลิมิตเตอร์แยกซ้าย/ขวา + เพดานเสียง) · ครอสเฟดเดอร์เปลี่ยนนุ่มขึ้น · ปุ่มบาลานซ์ใช้ได้ในหน้า 2 เด็ค','1.0.36':'หน้าแรกใหม่ = หน้าแสดงสด 2 เด็ค (แผ่นหมุนโชว์คลื่นเสียง) + ลิสต์วันนี้ + ค้นเพลงแทรก + นอมสด (ปุ่ม TAP ใหญ่) + มิกซ์ร้าน (แยก L/R · MO · MIDI) ในหน้าเดียว · ปุ่มคลังกดครั้งเดียวใส่เด็ค A/B ได้ทันที','1.0.35':'แก้เข้าสู่ระบบด้วย Google บน iPhone/Safari (paithoonbeer.github.io) — ใช้หน้าต่างป๊อปอัปแทนการเด้งหน้า','1.0.34':'ย้ายเว็บไป paithoonbeer.github.io ชั่วคราว (setsod.web.app เต็มโควต้า) · อัปเดตเว็บโหลดเฉพาะไฟล์ที่เปลี่ยน · เสียง SFX/QR โหลดเมื่อใช้','1.0.33':'โหมด 2 เด็คแนวตั้ง: เด็คกะทัดรัด ลิสต์เพลงเห็นชัด (>=5 แถว) · ปุ่ม ✕ ออก 2 เด็ค · เรียงลิสต์สดไม่ทับคีย์/เทมโปที่วงเซฟไว้','1.0.32':'ในโหมด 2 เด็ค การปรับคีย์/เทมโปและปุ่ม SYNC เป็นชั่วคราวที่เด็ค ไม่เขียนทับค่าที่เซฟไว้ในลิสต์','1.0.31':'การ์ดที่พับแล้วโชว์ชื่อเพลง (ตัดด้วย …) คีย์ เทมโป และปุ่มเล่นครบในกรอบ · ปุ่มเล่นยังกดง่าย · ลิสต์ Dual โชว์ใต้ครอสเฟดเดอร์ทุกจอ (พับ/เดสก์ท็อป/แนวนอน)','1.0.30':'แก้ Dual บน iPhone: เสียงไม่แฟบ · เด็ค B โชว์ปุ่มครบ · แบนเนอร์ไม่ดันจอ · ชื่อเพลงตรงเด็ค · แตะลิสต์ไม่เด้งออก · แนวนอนถูกต้อง · ปุ่มเล่นกดง่ายขึ้น · SFX เสียงบันทึกจริง · อัปโหลด SFX ในเครื่อง','1.0.29':'การ์ดกำลังเล่นพอดีจอแคบ (ชิปเป็นไอคอน) · ระดับ SFX เริ่มที่ 80%','1.0.28':'ปุ่ม SFX เสียงประกอบ 8 แบบ (เล่นทับเพลงได้) · ครอสเฟดเดอร์ Dual เริ่มที่กลางและแตะสองครั้งเพื่อกลับกลาง · ไอคอน Dual เป็นจานเสียงสองใบ','1.0.27':'Dual เล่นสองเด็คพร้อมกัน · ปรับระดับเสียงและ EQ รายเด็ค · ครอสเฟดเดอร์แบบ equal-power · ซิงก์เทมโป · เตือนเมื่อสองเด็คเปลี่ยนคีย์/สปีด','1.0.26':'คลังเพลง/แท็บสตูดิโอเลื่อนได้ · ประกาศปรับปรุงระบบ · แก้ครอสเฟดเดอร์จอสูง/พับไม่หดหาย','1.0.25':'ปุ่ม CUE เป็นไอคอนย้อนกลับ ↺ · แถบเครื่องมือบนเด็ค (Pad, เมโทร, เฟด, เลื่อน ±5 วิ, เมนู)','1.0.24':'Dual แนวนอน: การ์ดลิสต์กับปุ่ม A/B ไม่ทับชื่อ · CUE ไม่ทับปุ่มเล่น · เทมโปเป็น BPM หรือ —','1.0.23':'โหมด 2 เด็ค (Dual) · Pad คิวเพลงแล้วกดอีกครั้งเพื่อเริ่ม · ครอสเฟดระหว่างเด็ค','1.0.22':'ปุ่มย้อนเพลง · การ์ดแนวนอนไม่ถูกตัด · ปุ่มกลับหน้าเดียวไม่ทับแท็บ · ชีตเพิ่มเพลงเลื่อนได้','1.0.21':'ปุ่มเล่นต่อเนื่องในการ์ด · แจ้งอัปเดตแอปบนหน้าหลัก','1.0.20':'แถบบนและการ์ดตรึงหน้าจอ เลื่อนได้แค่ลิสต์ · ส่งความเห็นจากเมนูบัญชี','1.0.19':'การ์ดกำลังเล่นพับได้ ลิสต์แน่นขึ้นเห็นหลายแถว ปุ่มไม่ทับกัน','1.0.18':'หน้าเดียว: กำลังเล่นอยู่บนสุด ลิสต์สดเป็นหน้าหลัก ค้นคลังจากแถบล่าง','1.0.17':'ฟอนต์ใหม่ Inter + Noto Sans Thai · คลังเพลงไม่ให้โหลดโดยไม่ล็อกอิน · เว็บเก่าย้ายมา setsod.web.app','1.0.16':'แก้ลิสต์สดไม่ซิงก์เองเมื่อไม่ได้แก้ · ปุ่ม ✓ อ่านทั้งหมดในกระดิ่ง','1.81':'แชทกับทีมงาน 💬 · ช่องทางติดต่อ · โอนขาด/เกินเห็นยอดชัด แนบสลิปโอนเพิ่มได้','1.77':'ปุ่ม “อัปเดตเวอร์ชัน” ในกระดิ่งและตั้งค่า · แตะการแจ้งเตือนเพื่อไปยังเพลง/ลิสต์/สมาชิกนั้น · โควตาพื้นที่ต่อวง','1.70':'คืนนี้เหลือ 4 ปุ่ม (ที่เหลืออยู่ใน “เพิ่มเติม”) · ปุ่ม + เพิ่มเพลงให้วง · สถานะส่งเพลง/มีแล้วกี่คน · กระดิ่งแจ้งเตือน'};
 SET65.push(['nt','#ntb','กระดิ่งแจ้งเตือน','เรื่องในวง (เพลงใหม่ ลิสต์ สมาชิก) และอัปเดตระบบ','ทั่วไป']);
 function ntOn(){return !hid65().has('nt')}
 function ntSeen(){return +localStorage.getItem('bp-nts')||0}
@@ -6322,10 +6322,23 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
   const MAX_CUSTOM=22, MAX_BYTES=3*1024*1024, MAX_SEC=10;
   const IDB_NAME='bp-sfx', IDB_STORE='pads';
   const DEF_IDS=DEFAULTS.map(function(x){return x.id});
-  const SFX={vol:(function(){try{const raw=localStorage.getItem('bp-sfxvol');if(raw==null||raw==='')return 0.8;const v=+raw;return Number.isFinite(v)?Math.max(0,Math.min(1,v)):0.8}catch(e){return 0.8}})(),bufs:{},bus:null,open:false,loading:null,active:[],meta:{},pending:null};
+  const SFX={vol:(function(){try{const raw=localStorage.getItem('bp-sfxvol');if(raw==null||raw==='')return 0.8;const v=+raw;return Number.isFinite(v)?Math.max(0,Math.min(1,v)):0.8}catch(e){return 0.8}})(),bufs:{},bus:null,open:false,loading:null,active:[],meta:{},pending:null,order:(function(){try{const a=JSON.parse(localStorage.getItem('bp-sfxord')||'[]');return Array.isArray(a)?a.filter(function(x){return typeof x==='string'}):[]}catch(e){return []}})()};
   function $el(id){return document.getElementById(id)}
   function defOf(id){for(let i=0;i<DEFAULTS.length;i++)if(DEFAULTS[i].id===id)return DEFAULTS[i];return null}
   function isCustomId(id){return /^custom-\d+$/.test(id)}
+  function saveOrder(){try{localStorage.setItem('bp-sfxord',JSON.stringify(SFX.order||[]))}catch(e){}}
+  function syncOrder(ids){
+    const have={};(ids||[]).forEach(function(id){have[id]=1});
+    const next=(SFX.order||[]).filter(function(id){return have[id]});
+    (ids||[]).forEach(function(id){if(next.indexOf(id)<0)next.push(id)});
+    SFX.order=next;return next;
+  }
+  function commitGridOrder(){
+    const g=$el('op-sfxsheet')&&$el('op-sfxsheet').querySelector('.sfx-grid');if(!g)return;
+    const ids=[...g.querySelectorAll('.sfx-pad[data-sfx]')].map(function(p){return p.getAttribute('data-sfx')}).filter(Boolean);
+    if(!ids.length)return;
+    SFX.order=ids;saveOrder();
+  }
   function openDb(){
     return new Promise(function(ok,no){
       const r=indexedDB.open(IDB_NAME,1);
@@ -6356,16 +6369,16 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     })});
   }
   function listMeta(){
-    const out=[];
+    const by={};
     DEFAULTS.forEach(function(d){
       const m=SFX.meta[d.id]||{};
-      out.push({id:d.id,lab:m.lab||d.lab,en:m.en||d.en,custom:!!m.custom,replaced:!!m.replaced,builtin:true});
+      by[d.id]={id:d.id,lab:m.lab||d.lab,en:m.en||d.en,custom:!!m.custom,replaced:!!m.replaced,builtin:true};
     });
-    Object.keys(SFX.meta).filter(isCustomId).sort().forEach(function(id){
+    Object.keys(SFX.meta).filter(isCustomId).forEach(function(id){
       const m=SFX.meta[id];
-      if(m)out.push({id:id,lab:m.lab||'กำหนดเอง',en:m.en||'custom',custom:true,replaced:false,builtin:false});
+      if(m)by[id]={id:id,lab:m.lab||'กำหนดเอง',en:m.en||'custom',custom:true,replaced:false,builtin:false};
     });
-    return out;
+    return syncOrder(Object.keys(by)).map(function(id){return by[id]}).filter(Boolean);
   }
   function nextCustomId(){
     for(let i=1;i<=MAX_CUSTOM;i++){
@@ -6658,9 +6671,11 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     const sh=$el('op-sfxsheet');if(!sh)return;
     const g=sh.querySelector('.sfx-grid');if(!g)return;
     const items=listMeta();
+    const playing=SFX.active.map(function(x){return x.id});
     let html=items.map(function(it){
       const flag=it.replaced||(!it.builtin&&it.custom)?'<span class="sfx-customflag">'+(it.replaced?'แก้':'ของฉัน')+'</span>':'';
-      return '<button type="button" class="sfx-pad" data-sfx="'+it.id+'" aria-label="'+esc(it.lab)+' ('+esc(it.en)+')">'+flag+
+      const on=playing.indexOf(it.id)>=0?' playing':'';
+      return '<button type="button" class="sfx-pad'+on+'" data-sfx="'+it.id+'" aria-label="'+esc(it.lab)+' ('+esc(it.en)+')">'+flag+
         '<span class="sfx-en">'+esc(it.en)+'</span><span class="sfx-lab">'+esc(it.lab)+'</span>'+
         '<span class="sfx-more" data-sfxmore="'+it.id+'" aria-label="ตัวเลือก '+esc(it.lab)+'" role="button">⋯</span></button>';
     }).join('');
@@ -6669,31 +6684,65 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     }
     g.innerHTML=html;
     const note=sh.querySelector('.sfx-bandnote');
-    if(note)note.textContent='กดปุ่มเดิมอีกครั้งเพื่อหยุด · '+(editBands().length?'เสียงที่เพิ่ม/แก้/ลบ จะแชร์ให้ทุกคนในวงอัตโนมัติ':'เข้าสู่ระบบและอยู่ในวง — เสียงที่เพิ่มจะแชร์ให้สมาชิกทุกคน');
+    if(note)note.textContent='ลากปุ่มเพื่อเรียง · กดซ้ำเพื่อหยุด · '+(editBands().length?'เสียงที่เพิ่ม/แก้/ลบ จะแชร์ให้ทุกคนในวงอัตโนมัติ':'เข้าสู่ระบบและอยู่ในวง — เสียงที่เพิ่มจะแชร์ให้สมาชิกทุกคน');
   }
   function bindPadGestures(d){
     if(d._sfxg)return;d._sfxg=1;
-    let holdT=0,holdId='',ignoreClick=false;
+    let holdT=0,ignoreClick=false,drag=null;
+    function endDrag(commit){
+      if(!drag)return;
+      const el=drag.el;el.classList.remove('dragging');
+      try{el.releasePointerCapture&&el.releasePointerCapture(drag.ptr)}catch(e){}
+      if(commit&&drag.moved){commitGridOrder();saveOrder()}
+      drag=null;
+    }
     d.addEventListener('pointerdown',function(e){
       const more=e.target.closest('[data-sfxmore]');
-      if(more){e.preventDefault();e.stopPropagation();showMenu(more.getAttribute('data-sfxmore'),more);return}
+      if(more){e.preventDefault();e.stopPropagation();hideMenu();showMenu(more.getAttribute('data-sfxmore'),more);return}
       const add=e.target.closest('[data-sfxadd]');
       if(add){e.preventDefault();e.stopPropagation();hideMenu();pickFile({add:true});return}
-      const p=e.target.closest('[data-sfx]');
-      if(!p)return;
+      const p=e.target.closest('.sfx-pad[data-sfx]');
+      if(!p||p.classList.contains('sfx-add'))return;
       const id=p.getAttribute('data-sfx');
-      holdId=id;ignoreClick=false;
+      ignoreClick=false;
       clearTimeout(holdT);
-      holdT=setTimeout(function(){holdT=0;ignoreClick=true;showMenu(id,p)},520);
+      drag={id:id,el:p,x:e.clientX,y:e.clientY,moved:false,ptr:e.pointerId};
+      try{p.setPointerCapture(e.pointerId)}catch(err){}
+      holdT=setTimeout(function(){
+        holdT=0;
+        if(!drag||drag.moved)return;
+        ignoreClick=true;endDrag(false);showMenu(id,p);
+      },520);
     });
-    function cancelHold(){clearTimeout(holdT);holdT=0}
-    d.addEventListener('pointerup',cancelHold);
-    d.addEventListener('pointercancel',cancelHold);
-    d.addEventListener('pointerleave',function(e){if(e.target===d)cancelHold()});
+    d.addEventListener('pointermove',function(e){
+      if(!drag||(drag.ptr!=null&&e.pointerId!==drag.ptr))return;
+      const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
+      if(!drag.moved&&Math.hypot(dx,dy)<10)return;
+      if(!drag.moved){drag.moved=true;ignoreClick=true;clearTimeout(holdT);holdT=0;hideMenu();drag.el.classList.add('dragging')}
+      e.preventDefault();
+      const g=d.querySelector('.sfx-grid');if(!g)return;
+      const pads=[...g.querySelectorAll('.sfx-pad[data-sfx]')];
+      let hit=null;
+      for(let i=0;i<pads.length;i++){
+        if(pads[i]===drag.el)continue;
+        const r=pads[i].getBoundingClientRect();
+        if(e.clientX>=r.left&&e.clientX<=r.right&&e.clientY>=r.top&&e.clientY<=r.bottom){hit=pads[i];break}
+      }
+      if(!hit)return;
+      const kids=[...g.children],from=kids.indexOf(drag.el),to=kids.indexOf(hit);
+      if(from<0||to<0||from===to)return;
+      if(from<to)g.insertBefore(drag.el,hit.nextSibling);else g.insertBefore(drag.el,hit);
+    });
+    function up(e){
+      if(drag&&(drag.ptr==null||e.pointerId===drag.ptr)){const moved=drag.moved;endDrag(true);if(moved)ignoreClick=true}
+      clearTimeout(holdT);holdT=0;
+    }
+    d.addEventListener('pointerup',up);
+    d.addEventListener('pointercancel',up);
     d.addEventListener('click',function(e){
       if(e.target.closest('[data-sfxmore],[data-sfxadd]')){e.preventDefault();e.stopPropagation();return}
-      const p=e.target.closest('[data-sfx]');
-      if(!p)return;
+      const p=e.target.closest('.sfx-pad[data-sfx]');
+      if(!p||p.classList.contains('sfx-add'))return;
       e.preventDefault();e.stopPropagation();
       if(ignoreClick){ignoreClick=false;return}
       const id=p.getAttribute('data-sfx');
@@ -6785,6 +6834,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     try{await idbPut(rec)}catch(e){return{ok:false,error:'บันทึกในเครื่องไม่สำเร็จ'}}
     SFX.bufs[id]=buf;
     SFX.meta[id]={lab:lab,en:en,custom:true,replaced:!!d,mime:rec.mime,v:Date.now()};
+    if((SFX.order||[]).indexOf(id)<0){SFX.order=SFX.order||[];SFX.order.push(id);saveOrder()}
     renderGrid();
     let band=false;try{const p=await bandPush(id);band=!!(p&&p.ok&&p.n)}catch(e){}
     return{ok:true,id:id,lab:lab,duration:buf.duration,origDuration:origDur,trimmed:trimmed,band:band};
@@ -6817,6 +6867,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     try{await idbDel(id)}catch(e){return{ok:false,error:'ลบไม่สำเร็จ'}}
     delete SFX.bufs[id];
     delete SFX.meta[id];
+    SFX.order=(SFX.order||[]).filter(function(x){return x!==id});saveOrder();
     renderGrid();
     let band=false;try{await bandDel(id);band=!!editBands().length}catch(e){}
     return{ok:true,id:id,band:band};
@@ -6827,6 +6878,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     try{await idbDel(id)}catch(e){}
     delete SFX.meta[id];
     try{SFX.bufs[id]=await loadPack(id)}catch(e){delete SFX.bufs[id]}
+    // keep pad in order — reset only replaces audio/label state
     renderGrid();
     let band=false;try{await bandDel(id);band=!!editBands().length}catch(e){}
     return{ok:true,id:id,band:band};
@@ -6885,6 +6937,8 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
     stop:stopPad,
     get active(){return SFX.active.length},
     get activeIds(){return SFX.active.map(function(x){return x.id})},
+    get order(){return (SFX.order||[]).slice()},
+    setOrder:function(ids){if(!Array.isArray(ids))return false;SFX.order=ids.filter(function(x){return typeof x==='string'});saveOrder();renderGrid();return true},
     get bufs(){const o={};for(const k in SFX.bufs)o[k]=!!SFX.bufs[k];return o},
     get maxCustom(){return MAX_CUSTOM},
     get maxBytes(){return MAX_BYTES},
