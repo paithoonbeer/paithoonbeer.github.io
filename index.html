@@ -16,7 +16,7 @@ document.body.appendChild(d);function cp(t){var ok=function(){document.getElemen
 function fb(t){var i=document.createElement('textarea');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy')}catch(e){}i.remove()}
 document.getElementById('lbcl').onclick=function(){cp(link)};var c=document.getElementById('lbcc');if(c)c.onclick=function(){cp(code)};if(auto){auto=false;setTimeout(function(){L.href=IT},400)}}
 if(document.body)show();else document.addEventListener('DOMContentLoaded',show);setInterval(show,1000)}catch(e){}})();</script><script>try{var q=(location.search.match(/[?&]theme=(\w+)/)||[])[1];if(q)localStorage.setItem("bp-theme",q);var t=localStorage.getItem("bp-theme")||"stage";if(t&&t!="studio")document.documentElement.classList.add("th-"+t)}catch(e){}</script>
-<meta name="bp-ver" content="1.0.65"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
+<meta name="bp-ver" content="1.0.66"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0b0b0f"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-512.png">
 <title>SetSod</title><meta name="apple-mobile-web-app-title" content="SetSod"><meta name="application-name" content="SetSod">
@@ -920,6 +920,8 @@ body.pcm #cue{top:auto!important;bottom:16px!important;max-height:45vh;overflow:
 kbd{display:inline-block;min-width:26px;padding:3px 8px;border-radius:7px;background:#2a2e38;border:1px solid #4a4f5c;border-bottom-width:3px;font:600 14px "JetBrains Mono",ui-monospace,monospace;text-align:center}
 .hph{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .pcflash{position:fixed;left:50%;top:18px;transform:translateX(-50%);background:rgba(20,22,28,.92);color:#fff;padding:10px 18px;border-radius:12px;font-weight:700;z-index:300;opacity:0;transition:opacity .2s;pointer-events:none}.pcflash.on{opacity:1}
+#civis{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%) scale(.85);z-index:280;min-width:88px;height:88px;border-radius:50%;display:grid;place-items:center;font:800 44px/1 "JetBrains Mono",ui-monospace,system-ui;color:#140b00;background:radial-gradient(circle at 35% 28%,#ffe08a,#ffb020 55%,#e08a00);box-shadow:0 10px 40px rgba(0,0,0,.55),0 0 0 4px rgba(255,176,32,.25);opacity:0;pointer-events:none;transition:opacity .12s,transform .12s}
+#civis.on{opacity:1;transform:translate(-50%,-50%) scale(1)}
 .dropz{position:fixed;inset:0;z-index:400;background:rgba(255,176,32,.14);border:4px dashed #ffb020;display:none;align-items:center;justify-content:center;font-size:28px;font-weight:800;color:#fff;pointer-events:none}.dropz.on{display:flex}.dropz div{background:rgba(0,0,0,.75);padding:20px 30px;border-radius:18px}
 </style>
 <style>/* v40 lite */
