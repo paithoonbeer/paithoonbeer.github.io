@@ -1,6 +1,6 @@
 {
-  "build": 71,
-  "ver": "1.0.74",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b71-1.0.74/SetSod.apk",
-  "notes": "1.0.74: มือถือ iOS/Android: แก้สตูดิโอถูกเลย์เอาต์พีซีทับ (แนวตั้ง+แนวนอน) · ปุ่มพับใช้ได้ · ปล่อย APK อัตโนมัติทุกครั้งที่เว็บขึ้นเวอร์ชัน"
+  "build": 72,
+  "ver": "1.0.75",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b72-1.0.75/SetSod.apk",
+  "notes": "1.0.75: SFX: กด ⋯ แล้วแผงไม่กระโดด/เลื่อนจอ — เมนูทับในชีตนิ่ง · Dual ด้านหลังไม่ขยับ"
 }
