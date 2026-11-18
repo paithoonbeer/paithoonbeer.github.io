@@ -1233,6 +1233,10 @@ body.op18.live #livelist #op-sfx.op-chip.on{
 #op-sfxsheet .sfx-pad .sfx-lab{font:700 12px/1.2 Inter,"Noto Sans Thai",system-ui}
 #op-sfxsheet .sfx-pad.flash{background:#fb923c;border-color:#fb923c;color:#111;animation:sfxflash .35s ease}
 #op-sfxsheet .sfx-pad.flash .sfx-en{color:#111}
+/* v1.0.70: pad stays lit while that one-shot is playing — tap again to stop */
+#op-sfxsheet .sfx-pad.playing{background:#fb923c;border-color:#fb923c;color:#111}
+#op-sfxsheet .sfx-pad.playing .sfx-en,#op-sfxsheet .sfx-pad.playing .sfx-lab{color:#111}
+#op-sfxsheet .sfx-pad.playing .sfx-customflag{color:#7c2d12}
 @keyframes sfxflash{from{transform:scale(.97)}to{transform:scale(1)}}
 @media (orientation:landscape) and (max-height:500px){
   #op-sfxsheet{
