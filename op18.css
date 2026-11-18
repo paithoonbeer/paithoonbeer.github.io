@@ -1123,13 +1123,27 @@ body.op18:not(.live) #plx{
   overflow-x:hidden !important;
   overflow-y:auto !important;
   overscroll-behavior:contain !important;
-  display:flex !important;
-  flex-direction:column !important;
+  /* block (not flex): studio+seek+tools keep natural height so the pane scrolls */
+  display:block !important;
 }
 body.op18:not(.live) #studio{
-  flex:1 1 auto !important;
+  /* v1.0.65: do NOT flex-shrink — that crushed tools under the seek bar */
+  display:grid !important;
+  height:auto !important;
+  max-height:none !important;
   min-height:0 !important;
+  overflow:visible !important;
   align-content:start !important;
+}
+body.op18:not(.live) #studio>.tb60{
+  grid-area:tools !important;
+  position:relative !important;
+  z-index:2 !important;
+}
+body.op18:not(.live) #plx>.seek{
+  position:relative !important;
+  z-index:1 !important;
+  margin-top:8px !important;
 }
 }
 
