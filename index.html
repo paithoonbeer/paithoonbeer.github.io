@@ -16,7 +16,7 @@ document.body.appendChild(d);function cp(t){var ok=function(){document.getElemen
 function fb(t){var i=document.createElement('textarea');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy')}catch(e){}i.remove()}
 document.getElementById('lbcl').onclick=function(){cp(link)};var c=document.getElementById('lbcc');if(c)c.onclick=function(){cp(code)};if(auto){auto=false;setTimeout(function(){L.href=IT},400)}}
 if(document.body)show();else document.addEventListener('DOMContentLoaded',show);setInterval(show,1000)}catch(e){}})();</script><script>try{var q=(location.search.match(/[?&]theme=(\w+)/)||[])[1];if(q)localStorage.setItem("bp-theme",q);var t=localStorage.getItem("bp-theme")||"stage";if(t&&t!="studio")document.documentElement.classList.add("th-"+t)}catch(e){}</script>
-<meta name="bp-ver" content="1.0.63"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
+<meta name="bp-ver" content="1.0.64"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0b0b0f"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-512.png">
 <title>SetSod</title><meta name="apple-mobile-web-app-title" content="SetSod"><meta name="application-name" content="SetSod">
@@ -875,42 +875,41 @@ setInterval(()=>{const s=document.getElementById('sk');document.getElementById('
 <script src="icons.js"></script>
 <script type="module" src="app.js"></script>
 <script src="imp77.js?v=158"></script></body></html>
-<style>/* v39 PC mode · v1.0.62/63: pin studio tools/graph while the left song list scrolls */
+<style>/* v39 PC mode · v1.0.64: pin studio tools/graph on ≥900px two-pane (not only .pcm) */
 .ovl.on{display:flex}
-/* Fallback CSS (pcmCss() in app.js is authoritative — appended last, position:fixed). */
-html.op18.pcm:not(.op18-live),
-html.op18:not(.op18-live) body.pcm,
-html body.pcm.op18:not(.live),
-html body.pcm{
+/* Fallback — pcmCss() in app.js is authoritative (last-word). */
+@media (min-width:900px){
+html.op18:not(.op18-live),
+html.op18:not(.op18-live) body,
+html body.op18:not(.live){
   grid-template-columns:minmax(340px,30vw) minmax(0,1fr)!important;
   height:100vh!important;height:100dvh!important;
   max-height:100vh!important;max-height:100dvh!important;
   overflow:hidden!important;overscroll-behavior:none!important;
   align-items:stretch!important;box-sizing:border-box!important}
-html.op18.pcm:not(.op18-live) body.pcm #left,
-html body.pcm.op18:not(.live) #left,
-html body.pcm #left{
+html.op18:not(.op18-live) body #left,
+html body.op18:not(.live) #left{
   height:100%!important;max-height:100%!important;min-height:0!important;
   overflow-x:hidden!important;overflow-y:auto!important;position:relative!important;
   -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-html.op18.pcm:not(.op18-live) body.pcm #main,
-html body.pcm.op18:not(.live) #main,
-html body.pcm #main{
+html.op18:not(.op18-live) body #main,
+html body.op18:not(.live) #main{
   height:auto!important;max-height:none!important;overflow:visible!important}
-html.op18:not(.op18-live) body.pcm #right,
-html body.pcm #right{
+html.op18:not(.op18-live) body #right,
+html body.op18:not(.live) #right{
   height:100%!important;max-height:100%!important;min-height:0!important;
   overflow:hidden!important;position:relative!important;top:auto!important;
   display:flex!important;flex-direction:column!important;box-sizing:border-box!important}
-html body.pcm #right>#pl,html body.pcm #pl,html body.pcm #pl.open{
+html body.op18:not(.live) #right>#pl,html body.op18:not(.live) #pl,html body.op18:not(.live) #pl.open{
   flex:1 1 auto!important;min-height:0!important;height:100%!important;max-height:100%!important;
   overflow:hidden!important;display:flex!important;flex-direction:column!important}
-html body.pcm #plx{
+html body.op18:not(.live) #plx{
   flex:1 1 auto!important;min-height:0!important;max-height:100%!important;
   overflow-x:hidden!important;overflow-y:auto!important;overscroll-behavior:contain!important;
   display:flex!important;flex-direction:column!important}
-html body.pcm #studio{flex:1 1 auto!important;min-height:0!important;
+html body.op18:not(.live) #studio{flex:1 1 auto!important;min-height:0!important;
   grid-template-columns:minmax(0,1fr) 340px!important;grid-template-areas:"bar bar" "strip strip" "wave wave" "mk mix" "ctr mix" "fd mix" ". mix"!important}
+}
 body.pcm #studio #wave{height:300px!important}
 body.pcm #cue{top:auto!important;bottom:16px!important;max-height:45vh;overflow:auto}
 .pctb{display:none;gap:6px;flex-wrap:wrap;margin-left:auto}body.pcm .pctb{display:inline-flex}.pctb .hw{min-height:44px;padding:0 12px}

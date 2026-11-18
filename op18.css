@@ -1032,11 +1032,13 @@ body.op-ov #op-ovb #main{
 
 /* ===== 1.0.26: Studio tabs (คลัง / Live / Metronome / Import) must page-scroll =====
    1.0.20 locked html.op18 + html.op18 body even after leaving the one-page view.
-   v1.0.63: exclude PC mode (.pcm) — two-pane DAW must NOT page-scroll or the right
-   column (wave + tools/mixer) floats away while browsing songs on the left. */
-html.op18:not(.op18-live):not(.pcm),
-html.op18:not(.op18-live):not(.pcm) body,
-body.op18:not(.live):not(.pcm){
+   v1.0.64: page-scroll is PHONE/NARROW only. Two-pane layout starts at 900px — at that
+   width the right column (wave + tools/mixer) must stay pinned while browsing songs.
+   (1.0.62–63 keyed off .pcm / 1200px DAW mode; laptops 900–1199 still scrolled as one sheet.) */
+@media (max-width:899px){
+html.op18:not(.op18-live),
+html.op18:not(.op18-live) body,
+body.op18:not(.live){
   overflow:auto !important;
   overflow-x:hidden !important;
   height:auto !important;
@@ -1045,17 +1047,90 @@ body.op18:not(.live):not(.pcm){
   touch-action:pan-y;
   -webkit-overflow-scrolling:touch;
 }
-body.op18:not(.live):not(.pcm){
+body.op18:not(.live){
   position:static !important;
   left:auto;right:auto;top:auto;bottom:auto;
 }
-body.op18:not(.live):not(.pcm) #left,
-body.op18:not(.live):not(.pcm) #main{
+body.op18:not(.live) #left,
+body.op18:not(.live) #main{
   overflow:visible !important;
   height:auto !important;
   max-height:none !important;
   touch-action:pan-y;
   -webkit-overflow-scrolling:touch;
+}
+}
+/* Wide studio (≥900px, matches two-pane): lock viewport — left scrolls, right stays */
+@media (min-width:900px){
+html.op18:not(.op18-live),
+html.op18:not(.op18-live) body,
+body.op18:not(.live){
+  position:fixed !important;
+  inset:0 !important;
+  width:100% !important;
+  height:100% !important;
+  max-height:100% !important;
+  overflow:hidden !important;
+  overscroll-behavior:none !important;
+  box-sizing:border-box !important;
+}
+html.op18:not(.op18-live) body,
+body.op18:not(.live){
+  display:grid !important;
+  grid-template-columns:minmax(340px,30vw) minmax(0,1fr) !important;
+  align-items:stretch !important;
+}
+body.op18:not(.live) #left{
+  height:100% !important;
+  max-height:100% !important;
+  min-height:0 !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  position:relative !important;
+  overscroll-behavior:contain !important;
+  -webkit-overflow-scrolling:touch;
+}
+body.op18:not(.live) #main{
+  height:auto !important;
+  max-height:none !important;
+  overflow:visible !important;
+}
+body.op18:not(.live) #right{
+  height:100% !important;
+  max-height:100% !important;
+  min-height:0 !important;
+  overflow:hidden !important;
+  position:relative !important;
+  display:flex !important;
+  flex-direction:column !important;
+  box-sizing:border-box !important;
+}
+body.op18:not(.live) #right>#pl,
+body.op18:not(.live) #pl,
+body.op18:not(.live) #pl.open{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  height:100% !important;
+  max-height:100% !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+body.op18:not(.live) #plx{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  max-height:100% !important;
+  overflow-x:hidden !important;
+  overflow-y:auto !important;
+  overscroll-behavior:contain !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+body.op18:not(.live) #studio{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  align-content:start !important;
+}
 }
 
 /* ===== 1.0.26 scheduled maintenance banner (below sticky top bar, never blocks use) ===== */
