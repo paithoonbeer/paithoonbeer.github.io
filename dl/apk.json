@@ -1,6 +1,6 @@
 {
-  "build": 72,
-  "ver": "1.0.75",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b72-1.0.75/SetSod.apk",
-  "notes": "1.0.75: SFX: กด ⋯ แล้วแผงไม่กระโดด/เลื่อนจอ — เมนูทับในชีตนิ่ง · Dual ด้านหลังไม่ขยับ"
+  "build": 73,
+  "ver": "1.0.76",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b73-1.0.76/SetSod.apk",
+  "notes": "1.0.76: นับเข้า: จับหัวไฟล์อัตโนมัติ — นอมนำก่อนดนตรี = ไม่นับซ้ำ · ไม่มีนับในไฟล์ = นับ 1 ห้อง · แก้มือได้ · Dual กดเล่นจากหัวเพลงนับด้วย"
 }
