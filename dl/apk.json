@@ -1,6 +1,6 @@
 {
-  "build": 82,
-  "ver": "1.0.87",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b82-1.0.87/SetSod.apk",
-  "notes": "1.0.87: ลิสต์คืนนี้ใช้ลำดับที่จัดล่าสุด — ไม่โหลดลิสต์เก่าจากเครื่อง/วงทับของใหม่"
+  "build": 83,
+  "ver": "1.0.88",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b83-1.0.88/SetSod.apk",
+  "notes": "1.0.88: ย้อนกลับไปแบบ 1.0.85 (ก่อนแก้แนวนอน/ลิสต์ล่าสุด) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ"
 }
