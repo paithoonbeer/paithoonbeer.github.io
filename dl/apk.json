@@ -1,6 +1,6 @@
 {
-  "build": 80,
-  "ver": "1.0.85",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b80-1.0.85/SetSod.apk",
-  "notes": "1.0.85: สตูดิโอ: ลดกระพริบเมนูเครื่องมือตอนเลือก/ทำเพลง — ไม่รีเมานต์ทั้งหน้าตอนดึงรูปปก และไม่ยุบกริดคีย์ตอนเปิดตัดหัว/นับเข้า"
+  "build": 81,
+  "ver": "1.0.86",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b81-1.0.86/SetSod.apk",
+  "notes": "1.0.86: มือถือแนวนอน · สตูดิโอ: แก้เลย์เอาต์ใช้ไม่ได้ (จอดำครึ่งจอ / เครื่องมือหลุดจอ) ทั้ง iOS และ Android — คืนกริด 3 คอลัมน์และแถบเครื่องมือ"
 }
