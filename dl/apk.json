@@ -1,6 +1,6 @@
 {
-  "build": 81,
-  "ver": "1.0.86",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b81-1.0.86/SetSod.apk",
-  "notes": "1.0.86: มือถือแนวนอน · สตูดิโอ: แก้เลย์เอาต์ใช้ไม่ได้ (จอดำครึ่งจอ / เครื่องมือหลุดจอ) ทั้ง iOS และ Android — คืนกริด 3 คอลัมน์และแถบเครื่องมือ"
+  "build": 82,
+  "ver": "1.0.87",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b82-1.0.87/SetSod.apk",
+  "notes": "1.0.87: ลิสต์คืนนี้ใช้ลำดับที่จัดล่าสุด — ไม่โหลดลิสต์เก่าจากเครื่อง/วงทับของใหม่"
 }
