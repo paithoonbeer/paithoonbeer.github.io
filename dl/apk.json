@@ -1,6 +1,6 @@
 {
-  "build": 78,
-  "ver": "1.0.82",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b78-1.0.82/SetSod.apk",
-  "notes": "1.0.82: แก้ตัดหัว/ท้ายเด้งเฉพาะบางเพลง — กัน push นับเข้า/ciAuto ล้างค่าที่กำลังลาก และไม่เขียน prefs เก่าทับ"
+  "build": 79,
+  "ver": "1.0.83",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b79-1.0.83/SetSod.apk",
+  "notes": "1.0.83: คลัง: กลับจากจัดลำดับลิสวงแล้วยังอยู่จุดเดิมที่เลื่อนไว้ (ไม่เด้งไปบนสุด/จุดมั่ว)"
 }
