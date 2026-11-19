@@ -1,6 +1,6 @@
 {
-  "build": 75,
-  "ver": "1.0.79",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b75-1.0.79/SetSod.apk",
-  "notes": "1.0.79: ตัดหัว/ท้าย: พิมพ์เวลาเริ่ม–จบได้ (เช่น 0:12.5)"
+  "build": 76,
+  "ver": "1.0.80",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b76-1.0.80/SetSod.apk",
+  "notes": "1.0.80: แก้ตัดหัว/ท้ายเด้งกลับค่าเริ่มต้น — ไม่รีเซ็ตช่องเวลาตอนลากเวฟ และกันลิสต์สดทับค่าที่กำลังแก้"
 }
