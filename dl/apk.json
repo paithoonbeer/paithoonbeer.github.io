@@ -1,6 +1,6 @@
 {
-  "build": 77,
-  "ver": "1.0.81",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b77-1.0.81/SetSod.apk",
-  "notes": "1.0.81: แก้ตัดหัว/ท้ายเด้งตอนปล่อยนิ้วหลังตั้งนับเข้า — กันลิสต์สดทับจุดเริ่ม/จบที่กำลังลาก"
+  "build": 78,
+  "ver": "1.0.82",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b78-1.0.82/SetSod.apk",
+  "notes": "1.0.82: แก้ตัดหัว/ท้ายเด้งเฉพาะบางเพลง — กัน push นับเข้า/ciAuto ล้างค่าที่กำลังลาก และไม่เขียน prefs เก่าทับ"
 }
