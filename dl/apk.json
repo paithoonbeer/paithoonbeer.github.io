@@ -1,6 +1,6 @@
 {
-  "build": 83,
-  "ver": "1.0.88",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b83-1.0.88/SetSod.apk",
-  "notes": "1.0.88: ย้อนกลับไปแบบ 1.0.85 (ก่อนแก้แนวนอน/ลิสต์ล่าสุด) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ"
+  "build": 84,
+  "ver": "1.0.89",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b84-1.0.89/SetSod.apk",
+  "notes": "1.0.89: ย้อนกลับไปแบบ 1.0.86 (แก้สตูดิโอมือถือแนวนอน) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ"
 }
