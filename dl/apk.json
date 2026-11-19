@@ -1,6 +1,6 @@
 {
-  "build": 79,
-  "ver": "1.0.83",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b79-1.0.83/SetSod.apk",
-  "notes": "1.0.83: คลัง: กลับจากจัดลำดับลิสวงแล้วยังอยู่จุดเดิมที่เลื่อนไว้ (ไม่เด้งไปบนสุด/จุดมั่ว)"
+  "build": 80,
+  "ver": "1.0.85",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b80-1.0.85/SetSod.apk",
+  "notes": "1.0.85: สตูดิโอ: ลดกระพริบเมนูเครื่องมือตอนเลือก/ทำเพลง — ไม่รีเมานต์ทั้งหน้าตอนดึงรูปปก และไม่ยุบกริดคีย์ตอนเปิดตัดหัว/นับเข้า"
 }
