@@ -1208,6 +1208,10 @@ body.op18.live #livelist #op-sfx.op-chip.on{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:calc(12px + env(safe-area-inset-bottom,0px));
   width:min(420px,calc(100vw - 16px));
+  /* v1.0.90: sheet itself scrolls — landscape phones used to clip pads with no scroll */
+  max-height:min(72vh,calc(100dvh - 24px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px)));
+  overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+  touch-action:pan-y;
   z-index:180;
   background:#16161c;color:#e5e7eb;
   border:1px solid #3f3f46;border-radius:16px;
@@ -1246,6 +1250,7 @@ body.op18.live #livelist #op-sfx.op-chip.on{
     bottom:auto;top:calc(52px + env(safe-area-inset-top,0px));
     width:min(560px,calc(100vw - 24px));
     padding:8px 10px 10px;
+    max-height:calc(100dvh - 56px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));
   }
   #op-sfxsheet .sfx-pad{min-height:48px;padding:6px 4px}
   #op-sfxsheet .sfx-grid{gap:6px}
@@ -1478,14 +1483,9 @@ body.op18.live #livelist .op-step button{
   }
 }
 
-/* SFX sheet: custom pads, overflow menu, add tile */
-#op-sfxsheet .sfx-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-#op-sfxsheet .sfx-pad{position:relative;overflow:visible;touch-action:none;user-select:none;-webkit-user-select:none}
-#op-sfxsheet .sfx-pad.dragging{
-  opacity:.92;transform:scale(1.06);z-index:3;
-  box-shadow:0 8px 22px rgba(0,0,0,.45);border-color:#fb923c;cursor:grabbing;
-}
-#op-sfxsheet .sfx-grid{touch-action:none}
+/* SFX sheet: custom pads, overflow menu, add tile — v1.0.90: tap (manipulation) + pan-y scroll, no drag-reorder */
+#op-sfxsheet .sfx-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;touch-action:pan-y}
+#op-sfxsheet .sfx-pad{position:relative;overflow:visible;touch-action:manipulation;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent}
 #op-sfxsheet .sfx-more{
   position:absolute;top:2px;right:2px;width:28px;height:28px;min-width:28px;min-height:28px;
   border:0;background:transparent;color:#a1a1aa;border-radius:8px;padding:0;cursor:pointer;
