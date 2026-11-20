@@ -1,6 +1,6 @@
 {
-  "build": 84,
-  "ver": "1.0.89",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b84-1.0.89/SetSod.apk",
-  "notes": "1.0.89: ย้อนกลับไปแบบ 1.0.86 (แก้สตูดิโอมือถือแนวนอน) — เพลง/ลิสต์/การตั้งค่าในเครื่องยังอยู่ครบ"
+  "build": 85,
+  "ver": "1.0.90",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b85-1.0.90/SetSod.apk",
+  "notes": "1.0.90: SFX: กดปุ่มติดทันที · เลื่อนดูในแนวนอนได้ · เลิกลากเรียงปุ่ม"
 }
