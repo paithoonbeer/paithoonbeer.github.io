@@ -1,6 +1,6 @@
 {
-  "build": 87,
-  "ver": "1.0.93",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b87-1.0.93/SetSod.apk",
-  "notes": "1.0.93: SetSod Data (พีซี): หน้าแยกทำดาต้า · แยก stems ด้วย AI · นำเข้า stems · ส่งออก WAV/MP3/ZIP · ส่งเข้า SetSod"
+  "build": 88,
+  "ver": "1.0.94",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b88-1.0.94/SetSod.apk",
+  "notes": "1.0.94: SetSod Data: ลากไฟล์แล้วเริ่มแยกทันที · แก้กรณีลากวางแล้วไม่ตอบสนอง"
 }
