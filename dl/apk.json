@@ -1,6 +1,6 @@
 {
-  "build": 89,
-  "ver": "1.0.95",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b89-1.0.95/SetSod.apk",
-  "notes": "1.0.95: SetSod Data: สตูดิโอจัดเต็ม — ไทม์ไลน์เวฟฟอร์ม · มิกเซอร์เฟเดอร์/มิเตอร์ · Mute/Solo · ซูม/เลื่อนหาจังหวะ"
+  "build": 90,
+  "ver": "1.0.96",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b90-1.0.96/SetSod.apk",
+  "notes": "1.0.96: SetSod Data Studio: แต่งเพลงได้ — ตัด/ย้ายคลิป · อัดเสียง · MIDI เปียโนโรล · EQ/Reverb · เมโทรนอม/ลูป · บันทึกโปรเจกต์ · มิกซ์ดาวน์"
 }
