@@ -3,148 +3,192 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.1">
+<meta name="bp-data" content="1.2">
 <title>SetSod Data</title>
 <link rel="icon" href="icon-192.png">
 <style>
 @font-face{font-family:NotoThai;src:url(fonts/noto-sans-thai-variable.woff2) format("woff2");font-weight:100 900;font-display:swap}
 @font-face{font-family:JetMono;src:url(fonts/jetbrains-mono-latin-500.woff2) format("woff2");font-weight:500;font-display:swap}
 :root{
-  --bg:#0e1114;--bg2:#161b20;--bg3:#1c2329;--line:#2a333c;
-  --tx:#e7ecef;--mut:#8b969f;--acc:#3dba8a;--acc2:#2a8f68;
-  --warn:#d4a24c;--danger:#d66;
-  --r:12px;
+  --bg:#0c0e11;--bg2:#14181d;--bg3:#1a2027;--line:#2a323c;
+  --tx:#e8edf1;--mut:#87919c;--acc:#3dba8a;--acc2:#2a8f68;
+  --lane:#10141a;--ruler:#0a0c0f;--play:#ff6b3d;
+  --r:10px;
 }
 *{box-sizing:border-box}
-html,body{margin:0;min-height:100%;background:
-  radial-gradient(1200px 600px at 10% -10%,#1a2a28 0%,transparent 55%),
-  radial-gradient(900px 500px at 100% 0%,#1a2230 0%,transparent 50%),
-  var(--bg);color:var(--tx);font:15px/1.5 NotoThai,system-ui,sans-serif}
+html,body{margin:0;min-height:100%;background:var(--bg);color:var(--tx);font:14px/1.45 NotoThai,system-ui,sans-serif}
+body.daw-on{overflow:hidden;height:100vh}
 a{color:var(--acc)}
-.wrap{max-width:920px;margin:0 auto;padding:28px 22px 64px}
-.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:28px}
-.brand{display:flex;flex-direction:column;gap:2px}
-.brand b{font-size:28px;letter-spacing:-.02em;line-height:1.1}
-.brand span{color:var(--mut);font-size:13px}
-.nav{display:flex;gap:8px;flex-wrap:wrap}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:42px;padding:8px 14px;border:1px solid var(--line);border-radius:10px;background:var(--bg2);color:var(--tx);font:inherit;cursor:pointer;text-decoration:none}
+.shell{display:flex;flex-direction:column;min-height:100vh;max-height:100vh}
+.topbar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#171c22,#12161b)}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{font-size:20px;letter-spacing:-.02em}
+.brand span{color:var(--mut);font-size:12px}
+.nav{display:flex;gap:8px;align-items:center}
+.pc-only{font-family:JetMono,ui-monospace,monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--acc)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--tx);font:inherit;cursor:pointer;text-decoration:none}
 .btn:hover{border-color:#3d4a55}
 .btn:disabled{opacity:.4;cursor:default}
 .btn.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-color:#1f6b4d;color:#04140e;font-weight:650}
 .btn.ghost{background:transparent}
-.hero{margin:0 0 22px}
-.hero h1{margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:-.01em}
-.hero p{margin:0;color:var(--mut);max-width:62ch}
-.gate{display:none;padding:18px 16px;border:1px solid #5a4030;border-radius:var(--r);background:#1a1510;color:#e8d2b0;margin-bottom:18px}
+.btn.icon{min-width:38px;padding:6px 10px;font-size:15px}
+.gate{display:none;margin:10px 16px 0;padding:12px 14px;border:1px solid #5a4030;border-radius:var(--r);background:#1a1510;color:#e8d2b0}
 .gate.on{display:block}
-.tabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
-.tab{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mut);font:inherit;cursor:pointer}
+.booth{flex:0 0 auto;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--bg2)}
+body.daw-on .booth{display:none}
+.hero{margin:0 0 10px}
+.hero h1{margin:0 0 4px;font-size:18px}
+.hero p{margin:0;color:var(--mut);font-size:13px;max-width:70ch}
+.tabs{display:flex;gap:6px;margin:0 0 10px}
+.tab{padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--mut);font:inherit;cursor:pointer}
 .tab.on{background:var(--bg3);color:var(--tx);border-color:#3d4a55}
-.panel{display:none;border:1px solid var(--line);border-radius:var(--r);background:rgba(22,27,32,.88);padding:18px}
+.panel{display:none}
 .panel.on{display:block}
-.drop{border:1.5px dashed #3a4650;border-radius:var(--r);padding:28px 18px;text-align:center;background:rgba(0,0,0,.18);transition:border-color .15s,background .15s}
-.drop.over{border-color:var(--acc);background:rgba(61,186,138,.06)}
-.drop strong{display:block;font-size:16px;margin-bottom:4px}
-.drop .n{color:var(--mut);font-size:13px}
-.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:14px}
-.chk{display:flex;gap:8px;align-items:center;color:var(--mut);font-size:13px;user-select:none}
-.bar{height:5px;background:#222830;border-radius:99px;overflow:hidden;margin:16px 0 8px}
-.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc2),var(--acc));transition:width .25s}
-.status{color:var(--mut);font-size:13px;white-space:pre-line;min-height:1.4em;font-family:JetMono,ui-monospace,monospace}
-.stems{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-top:16px}
-.stem{border:1px solid var(--line);border-radius:10px;background:var(--bg2);padding:12px}
-.stem .nm{font-weight:650;margin-bottom:2px}
-.stem .fn{color:var(--mut);font-size:12px;font-family:JetMono,ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.stem .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
-.stem .acts .btn{min-height:34px;padding:4px 10px;font-size:13px}
-.stem.mute{opacity:.45}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
-.note{margin-top:18px;color:var(--mut);font-size:12.5px}
-.pc-only{font-family:JetMono,ui-monospace,monospace;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--acc);opacity:.9}
+.drop{border:1.5px dashed #3a4650;border-radius:var(--r);padding:18px;text-align:center;background:rgba(0,0,0,.22);transition:border-color .15s,background .15s}
+.drop.over{border-color:var(--acc);background:rgba(61,186,138,.07)}
+.drop strong{display:block;font-size:15px;margin-bottom:2px}
+.drop .n{color:var(--mut);font-size:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;justify-content:center}
+.chk{display:inline-flex;gap:8px;align-items:center;color:var(--mut);font-size:12px;margin-top:8px}
+.bar{height:4px;background:#222830;border-radius:99px;overflow:hidden;margin:10px 0 6px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc2),var(--acc))}
+.status{color:var(--mut);font-size:12px;white-space:pre-line;font-family:JetMono,ui-monospace,monospace}
+
+/* ===== DAW ===== */
+.daw{flex:1 1 auto;min-height:0;display:none;flex-direction:column;background:#0a0c0f}
+body.daw-on .daw{display:flex}
+.transport{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#1a1f26,#12161b)}
+.transport .clock{font-family:JetMono,ui-monospace,monospace;font-size:18px;font-variant-numeric:tabular-nums;min-width:7.5ch;letter-spacing:.02em}
+.transport .meta{color:var(--mut);font-size:12px;margin-left:auto}
+.zoom{display:flex;align-items:center;gap:6px;color:var(--mut);font-size:12px}
+.zoom input{width:90px}
+
+.arrange{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:148px 1fr;grid-template-rows:28px 1fr;overflow:hidden}
+.corner{background:var(--ruler);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ruler-wrap{overflow:hidden;background:var(--ruler);border-bottom:1px solid var(--line);position:relative}
+.ruler{height:28px;display:block}
+.heads{overflow-y:auto;overflow-x:hidden;border-right:1px solid var(--line);background:#101419}
+.head{height:88px;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--line)}
+.head .nm{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+.head .dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.head .ops{display:flex;gap:4px}
+.head .ops .btn{min-height:26px;padding:2px 8px;font-size:11px}
+.head .ops .btn.on{background:#2a3a48;border-color:#4a6070;color:#fff}
+.lanes-wrap{overflow:auto;position:relative;background:var(--lane);cursor:crosshair}
+.lanes{position:relative;min-height:100%}
+.lane{height:88px;border-bottom:1px solid #1a222b;position:relative}
+.lane canvas{display:block;width:100%;height:100%}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--play);pointer-events:none;z-index:5;box-shadow:0 0 8px rgba(255,107,61,.55)}
+.playhead::before{content:'';position:absolute;top:-1px;left:-5px;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid var(--play)}
+
+.mixer{flex:0 0 auto;height:200px;border-top:1px solid var(--line);background:linear-gradient(180deg,#151a20,#0f1217);display:flex;gap:0;overflow-x:auto;padding:8px 10px 10px}
+.strip{flex:0 0 92px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 6px 8px;border:1px solid var(--line);border-radius:8px;background:#12171d;margin-right:6px}
+.strip .lab{font-size:11px;font-weight:700;text-align:center;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.strip .meter{width:10px;height:88px;background:#0a0c0f;border-radius:3px;position:relative;overflow:hidden;border:1px solid #222}
+.strip .meter i{position:absolute;left:1px;right:1px;bottom:0;height:0;background:linear-gradient(0deg,#3dba8a,#d4a24c 70%,#e55)}
+.strip .fader{writing-mode:vertical-lr;direction:rtl;width:28px;height:88px;accent-color:var(--acc)}
+.strip .ms{display:flex;gap:3px}
+.strip .ms .btn{min-height:22px;padding:0 6px;font-size:10px}
+.strip.master{border-color:#3d4a55;background:#161c24}
+.exportbar{flex:0 0 auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:8px 14px;border-top:1px solid var(--line);background:#12161b}
+.exportbar .status{flex:1 1 180px}
+.note{display:none}
+body:not(.daw-on) .note{display:block;padding:12px 16px 24px;color:var(--mut);font-size:12px}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="top">
+<div class="shell">
+  <header class="topbar">
     <div class="brand">
       <b>SetSod Data</b>
-      <span>ทำดาต้าเพลงบนคอมพิวเตอร์ · แยก stems · ส่งออก · เชื่อม SetSod</span>
+      <span>สตูดิโอทำดาต้า · เวฟฟอร์ม · มิกเซอร์ · ส่งออก</span>
     </div>
     <div class="nav">
       <span class="pc-only" id="modeTag">PC</span>
-      <a class="btn ghost" href="./" id="toApp">เปิด SetSod</a>
+      <button type="button" class="btn ghost" id="btnNew" hidden>โปรเจกต์ใหม่</button>
+      <a class="btn ghost" href="./">เปิด SetSod</a>
     </div>
-  </div>
+  </header>
 
-  <div class="gate" id="gate">หน้านี้ใช้ได้บนคอมพิวเตอร์เท่านั้น (จอใหญ่ + เมาส์/แทร็กแพด) — บนมือถือให้ใช้แอป SetSod สำหรับเล่นสด/ลิสต์แทน</div>
+  <div class="gate" id="gate">หน้านี้ใช้ได้บนคอมพิวเตอร์เท่านั้น — บนมือถือใช้แอป SetSod สำหรับเล่นสด/ลิสต์</div>
 
-  <div class="hero">
-    <h1>สตูดิโอทำดาต้า แยกจากหน้าเล่นสด</h1>
-    <p>แยกแทร็กด้วย AI ในเครื่องนี้ (ไม่อัปโหลด) หรือนำเข้า stems ที่มีอยู่แล้ว จากนั้นดาวน์โหลด WAV/MP3/ZIP หรือส่งเข้า SetSod ให้เล่นและแชร์ในวงได้ทันที</p>
-  </div>
-
-  <div class="tabs" role="tablist">
-    <button type="button" class="tab on" data-tab="ai" id="tAi">แยกด้วย AI</button>
-    <button type="button" class="tab" data-tab="imp" id="tImp">นำเข้า stems</button>
-  </div>
-
-  <section class="panel on" id="pAi">
-    <div class="drop" id="dropAi">
-      <strong>ลากไฟล์เพลงมาวางที่นี่ — เริ่มแยกทันที</strong>
-      <div class="n">mp3 / wav / m4a · โมเดล htdemucs ~173 MB ครั้งแรก แล้วเก็บไว้ในเครื่อง · ได้ 4 แทร็ก: กลอง เบส ร้อง ดนตรีอื่นๆ</div>
-      <div class="row" style="justify-content:center">
-        <label class="btn" id="pickAi">เลือกไฟล์<input id="fAi" type="file" accept="audio/*" hidden></label>
-        <button class="btn pri" id="goAi" disabled>เริ่มแยก</button>
+  <section class="booth" id="booth">
+    <div class="hero">
+      <h1>สตูดิโอตัดแยก / จัดการแทร็ก</h1>
+      <p>แยก stems ด้วย AI หรือนำเข้าแทร็กที่มีแล้ว แล้วตัดต่อดูบนไทม์ไลน์เวฟฟอร์ม + มิกเซอร์ ก่อนส่งออกหรือส่งเข้า SetSod</p>
+    </div>
+    <div class="tabs">
+      <button type="button" class="tab on" data-tab="ai">แยกด้วย AI</button>
+      <button type="button" class="tab" data-tab="imp">นำเข้า stems</button>
+    </div>
+    <div class="panel on" id="pAi">
+      <div class="drop" id="dropAi">
+        <strong>ลากไฟล์เพลงมาวาง — เริ่มแยกทันที</strong>
+        <div class="n">mp3 / wav / m4a · htdemucs ในเครื่อง · ได้ กลอง / เบส / ร้อง / อื่นๆ</div>
+        <div class="row">
+          <label class="btn" id="pickAi">เลือกไฟล์<input id="fAi" type="file" accept="audio/*" hidden></label>
+          <button class="btn pri" id="goAi" disabled>เริ่มแยก</button>
+        </div>
       </div>
+      <label class="chk"><input type="checkbox" id="mp3Ai"> ทำ MP3 ตอนส่งออกด้วย</label>
+      <div class="bar"><i id="barAi"></i></div>
+      <div class="status" id="sAi">ยังไม่ได้เลือกไฟล์</div>
     </div>
-    <label class="chk" style="margin-top:12px"><input type="checkbox" id="mp3Ai"> ทำ MP3 (192 kbps) ด้วยตอนส่งออก</label>
-    <div class="bar"><i id="barAi"></i></div>
-    <div class="status" id="sAi">ยังไม่ได้เลือกไฟล์</div>
+    <div class="panel" id="pImp">
+      <div class="drop" id="dropImp">
+        <strong>ลากอย่างน้อย 2 แทร็ก หรือ .zip</strong>
+        <div class="n">vocals / drums / bass … หรือโฟลเดอร์จาก DAW</div>
+        <div class="row">
+          <label class="btn">เลือกไฟล์<input id="fImp" type="file" multiple accept="audio/*,.zip" hidden></label>
+          <label class="btn">ทั้งโฟลเดอร์<input id="fDir" type="file" webkitdirectory multiple hidden></label>
+          <button class="btn pri" id="goImp" disabled>ประกอบ stems</button>
+        </div>
+      </div>
+      <label class="chk">ชื่อโปรเจกต์ <input id="titleImp" placeholder="ชื่อเพลง" style="margin-left:6px;min-width:160px;background:var(--bg);border:1px solid var(--line);border-radius:6px;color:var(--tx);padding:5px 8px;font:inherit"></label>
+      <div class="status" id="sImp" style="margin-top:8px">ยังไม่ได้เลือกไฟล์</div>
+    </div>
   </section>
 
-  <section class="panel" id="pImp">
-    <div class="drop" id="dropImp">
-      <strong>เลือกอย่างน้อย 2 ไฟล์แทร็ก (หรือ .zip)</strong>
-      <div class="n">เช่น vocals.wav, drums.wav, bass.wav — หรือโฟลเดอร์ stems จาก DAW</div>
-      <div class="row" style="justify-content:center">
-        <label class="btn" id="pickImp">เลือกไฟล์<input id="fImp" type="file" multiple accept="audio/*,.zip" hidden></label>
-        <label class="btn" id="pickDir">ทั้งโฟลเดอร์<input id="fDir" type="file" webkitdirectory multiple hidden></label>
-        <button class="btn pri" id="goImp" disabled>ประกอบ stems</button>
+  <section class="daw" id="daw" aria-label="สตูดิโอ">
+    <div class="transport">
+      <button type="button" class="btn icon" id="btnPlay" title="เล่น">▶</button>
+      <button type="button" class="btn icon" id="btnStop" title="หยุด" disabled>■</button>
+      <div class="clock" id="clock">0:00.0</div>
+      <label class="zoom">ซูม <input type="range" id="zoom" min="40" max="220" value="90"></label>
+      <div class="meta" id="projMeta">—</div>
+    </div>
+    <div class="arrange">
+      <div class="corner"></div>
+      <div class="ruler-wrap" id="rulerWrap"><canvas class="ruler" id="ruler" height="28"></canvas></div>
+      <div class="heads" id="heads"></div>
+      <div class="lanes-wrap" id="lanesWrap">
+        <div class="lanes" id="lanes"></div>
+        <div class="playhead" id="playhead" style="left:0"></div>
       </div>
     </div>
-    <label class="chk" style="margin-top:12px">ชื่อโปรเจกต์ <input id="titleImp" placeholder="ชื่อเพลง" style="margin-left:6px;min-width:180px;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--tx);padding:6px 8px;font:inherit"></label>
-    <div class="status" id="sImp" style="margin-top:10px">ยังไม่ได้เลือกไฟล์</div>
-  </section>
-
-  <section id="result" hidden>
-    <div class="actions" style="border:0;padding-top:0">
-      <button type="button" class="btn" id="playAll">▶ เล่นมิกซ์</button>
-      <button type="button" class="btn" id="stopAll" disabled>■ หยุด</button>
-    </div>
-    <div class="stems" id="stems"></div>
-    <div class="actions">
+    <div class="mixer" id="mixer"></div>
+    <div class="exportbar">
       <button type="button" class="btn pri" id="sendSs">ส่งเข้า SetSod</button>
-      <button type="button" class="btn" id="dlWav">↓ ดาวน์โหลด WAV ทั้งหมด</button>
-      <button type="button" class="btn" id="dlMp3">↓ ดาวน์โหลด MP3 ทั้งหมด</button>
+      <button type="button" class="btn" id="dlWav">↓ WAV ทั้งหมด</button>
+      <button type="button" class="btn" id="dlMp3">↓ MP3 ทั้งหมด</button>
       <button type="button" class="btn" id="dlZip">↓ ZIP</button>
+      <div class="status" id="sOut"></div>
     </div>
-    <div class="status" id="sOut"></div>
   </section>
 
-  <p class="note">SetSod Data แยกจากแอปเล่นสดโดยตั้งใจ — ทำดาต้าบนพีซี แล้วส่งเข้า SetSod เพื่อขึ้นงาน/แชร์วง · ประมวลผลในเบราว์เซอร์นี้เท่านั้น</p>
+  <p class="note">SetSod Data แยกจากแอปเล่นสด — ทำดาต้าบนพีซี แล้วส่งเข้า SetSod · ประมวลผลในเบราว์เซอร์นี้เท่านั้น</p>
 </div>
 <script type="module">
 const $=id=>document.getElementById(id);
 const NM={drums:'กลอง',bass:'เบส',other:'ดนตรีอื่นๆ',vocals:'ร้อง'};
+const COL={drums:'#e8a54b',bass:'#5b8def',other:'#6fbf73',vocals:'#d67bb8',track:'#9aa7b5'};
 const AUD=/\.(mp3|wav|m4a|aac|flac|aif|aiff|ogg|caf)$/i;
 const desk=matchMedia('(pointer:fine)').matches&&!/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)&&innerWidth>=900;
-// v1.1: never block UI on GPU probe (requestAdapter can hang) — wire drop handlers first
 let gpuF16=false,mode='CPU';
 function refreshMode(){mode=gpuF16?'WebGPU':('CPU'+(crossOriginIsolated?' · multi-thread':' · single-thread'));$('modeTag').textContent=desk?(gpuF16?'PC · WebGPU':'PC · CPU'):'มือถือ'}
 refreshMode();if(!desk)$('gate').classList.add('on');
 (async()=>{try{const p=navigator.gpu&&navigator.gpu.requestAdapter?navigator.gpu.requestAdapter():null;if(!p)return;const a=await Promise.race([p,new Promise(r=>setTimeout(()=>r(null),2500))]);gpuF16=!!(a&&a.features&&a.features.has('shader-f16'));refreshMode()}catch(e){}})();
 
-// Stop the browser from navigating away when a file is dropped anywhere on the page
 ['dragenter','dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{try{if([...e.dataTransfer.types||[]].includes('Files'))e.preventDefault()}catch(_){}}));
 function bindDrop(el,onFiles){let n=0;
   el.addEventListener('dragenter',e=>{e.preventDefault();e.stopPropagation();n++;el.classList.add('over')});
@@ -153,14 +197,14 @@ function bindDrop(el,onFiles){let n=0;
   el.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();n=0;el.classList.remove('over');const fs=e.dataTransfer&&e.dataTransfer.files;if(fs&&fs.length)onFiles(fs)});
 }
 
-const state={title:'',src:[],bufs:[],filesWav:[],filesMp3:[],ac:null,nodes:[]};
-
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
-  document.querySelectorAll('.panel').forEach(p=>p.classList.toggle('on',p.id==='p'+(t.dataset.tab==='ai'?'Ai':'Imp')));
+  $('pAi').classList.toggle('on',t.dataset.tab==='ai');
+  $('pImp').classList.toggle('on',t.dataset.tab==='imp');
 });
 
 function setBar(el,v){el.style.width=(Math.max(0,Math.min(1,v))*100).toFixed(1)+'%'}
+function fmt(t){t=Math.max(0,t);const m=Math.floor(t/60),s=t%60;return m+':'+s.toFixed(1).padStart(4,'0')}
 function wavBlob(L,R,sr=44100){
   const n=L.length,b=new DataView(new ArrayBuffer(44+n*4));
   const w=(o,s)=>[...s].forEach((c,i)=>b.setUint8(o+i,c.charCodeAt(0)));
@@ -180,77 +224,256 @@ const mp3Enc=(L,R,sr=44100)=>new Promise((ok,no)=>{
   w.onerror=e=>{w.terminate();no(e)};
   w.postMessage({ch:[L,R],sr,kbps:192});
 });
-
-/* minimal ZIP (store) */
-function crc32(u8){
-  let c=~0;for(let i=0;i<u8.length;i++){c^=u8[i];for(let k=0;k<8;k++)c=(c>>>1)^(0xedb88320&-(c&1))}
-  return ~c>>>0;
-}
+function crc32(u8){let c=~0;for(let i=0;i<u8.length;i++){c^=u8[i];for(let k=0;k<8;k++)c=(c>>>1)^(0xedb88320&-(c&1))}return ~c>>>0}
 async function zipBlobs(entries){
   const files=[];let offset=0;const locals=[],centrals=[];
   for(const {name,blob} of entries){
-    const data=new Uint8Array(await blob.arrayBuffer());
-    const nameU=new TextEncoder().encode(name);
-    const crc=crc32(data),sz=data.length;
-    const lh=new DataView(new ArrayBuffer(30+nameU.length));
-    lh.setUint32(0,0x04034b50,true);lh.setUint16(8,0,true);
-    lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);
-    lh.setUint16(26,nameU.length,true);
-    const local=new Uint8Array(30+nameU.length+sz);
-    local.set(new Uint8Array(lh.buffer),0);local.set(nameU,30);local.set(data,30+nameU.length);
+    const data=new Uint8Array(await blob.arrayBuffer());const nameU=new TextEncoder().encode(name);
+    const crc=crc32(data),sz=data.length;const lh=new DataView(new ArrayBuffer(30+nameU.length));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(8,0,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);lh.setUint16(26,nameU.length,true);
+    const local=new Uint8Array(30+nameU.length+sz);local.set(new Uint8Array(lh.buffer),0);local.set(nameU,30);local.set(data,30+nameU.length);
     locals.push(local);files.push({offset,crc,sz,nameU});offset+=local.length;
   }
   let cenSize=0;
   for(const f of files){
     const ch=new DataView(new ArrayBuffer(46+f.nameU.length));
-    ch.setUint32(0,0x02014b50,true);ch.setUint16(10,0,true);
-    ch.setUint32(16,f.crc,true);ch.setUint32(20,f.sz,true);ch.setUint32(24,f.sz,true);
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(10,0,true);ch.setUint32(16,f.crc,true);ch.setUint32(20,f.sz,true);ch.setUint32(24,f.sz,true);
     ch.setUint16(28,f.nameU.length,true);ch.setUint32(42,f.offset,true);
-    const c=new Uint8Array(46+f.nameU.length);c.set(new Uint8Array(ch.buffer),0);c.set(f.nameU,46);
-    centrals.push(c);cenSize+=c.length;
+    const c=new Uint8Array(46+f.nameU.length);c.set(new Uint8Array(ch.buffer),0);c.set(f.nameU,46);centrals.push(c);cenSize+=c.length;
   }
   const end=new DataView(new ArrayBuffer(22));
   end.setUint32(0,0x06054b50,true);end.setUint16(8,files.length,true);end.setUint16(10,files.length,true);
   end.setUint32(12,cenSize,true);end.setUint32(16,offset,true);
   return new Blob([...locals,...centrals,[end]],{type:'application/zip'});
 }
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)}
 
-function dl(blob,name){
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
-  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+/* ===== project / daw state ===== */
+const state={
+  title:'',src:[],bufs:[],peaks:[],filesWav:[],filesMp3:[],channels:[],
+  ac:null,nodes:[],gains:[],analysers:[],
+  mute:[],solo:[],vol:[],
+  playing:false,t0:0,offset:0,pxPerSec:90,dur:0,raf:0
+};
+
+function ensureAc(){if(!state.ac)state.ac=new (window.AudioContext||window.webkitAudioContext)();return state.ac}
+function pxW(){return Math.max(800,Math.ceil(state.dur*state.pxPerSec)+80)}
+
+function buildPeaks(buf,bins=1800){
+  const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+  const n=L.length,step=Math.max(1,Math.floor(n/bins)),out=new Float32Array(Math.ceil(n/step));
+  for(let i=0,o=0;i<n;i+=step,o++){let m=0;const e=Math.min(n,i+step);for(let j=i;j<e;j+=4)m=Math.max(m,Math.abs(L[j]),Math.abs(R[j]));out[o]=m}
+  return out;
+}
+
+function drawWave(cv,peaks,color){
+  const dpr=devicePixelRatio||1,w=cv.clientWidth,h=cv.clientHeight;
+  if(w<2||h<2)return;
+  cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  g.fillStyle='#0d1116';g.fillRect(0,0,w,h);
+  // grid
+  g.strokeStyle='#1a222b';g.lineWidth=1;
+  for(let x=0;x<w;x+=Math.max(40,state.pxPerSec)){g.beginPath();g.moveTo(x+.5,0);g.lineTo(x+.5,h);g.stroke()}
+  g.beginPath();g.moveTo(0,h/2+.5);g.lineTo(w,h/2+.5);g.stroke();
+  const mid=h/2,amp=(h/2-4);
+  g.fillStyle=color;g.globalAlpha=.85;
+  const n=peaks.length;if(!n)return;
+  for(let x=0;x<w;x++){
+    const i=Math.min(n-1,Math.floor(x/w*n));
+    const y=peaks[i]*amp;
+    g.fillRect(x,mid-y,1,Math.max(1,y*2));
+  }
+  g.globalAlpha=1;
+}
+
+function drawRuler(){
+  const wrap=$('rulerWrap'),cv=$('ruler'),w=pxW(),dpr=devicePixelRatio||1;
+  cv.style.width=w+'px';cv.width=Math.round(w*dpr);cv.height=Math.round(28*dpr);
+  const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+  g.fillStyle='#0a0c0f';g.fillRect(0,0,w,28);
+  g.fillStyle='#6a7480';g.font='11px JetMono,ui-monospace,monospace';
+  const step=state.pxPerSec>=120?1:state.pxPerSec>=70?2:5;
+  for(let t=0;t<=state.dur+1;t+=step){
+    const x=t*state.pxPerSec;
+    g.fillStyle='#3a4450';g.fillRect(x,18,1,10);
+    g.fillStyle='#8a949e';g.fillText(fmt(t).replace(/\.\d$/,''),x+4,14);
+  }
+}
+
+function syncScroll(){
+  const lw=$('lanesWrap'),rw=$('rulerWrap'),hd=$('heads');
+  rw.scrollLeft=lw.scrollLeft;hd.scrollTop=lw.scrollTop;
+}
+$('lanesWrap').addEventListener('scroll',syncScroll);
+
+function updatePlayhead(){
+  const t=state.playing?(ensureAc().currentTime-state.t0+state.offset):state.offset;
+  const x=Math.max(0,t)*state.pxPerSec;
+  $('playhead').style.left=x+'px';
+  $('clock').textContent=fmt(Math.min(state.dur||0,Math.max(0,t)));
+  if(state.playing&&t>=state.dur){stopPlay();return}
+  // meters
+  state.analysers.forEach((an,i)=>{
+    if(!an)return;const a=new Uint8Array(an.fftSize);an.getByteTimeDomainData(a);
+    let p=0;for(let k=0;k<a.length;k++){const v=(a[k]-128)/128;p=Math.max(p,Math.abs(v))}
+    const el=document.querySelector(`.strip[data-i="${i}"] .meter i`);
+    if(el)el.style.height=(Math.min(1,p*1.8)*100).toFixed(1)+'%';
+  });
+}
+
+function loop(){if(!state.playing)return;updatePlayhead();state.raf=requestAnimationFrame(loop)}
+
+function applyGains(){
+  const anySolo=state.solo.some(Boolean);
+  state.gains.forEach((g,i)=>{
+    if(!g)return;
+    const on=!state.mute[i]&&(!anySolo||state.solo[i]);
+    g.gain.setTargetAtTime(on?(state.vol[i]/100):0,ensureAc().currentTime,0.02);
+  });
 }
 
 function stopPlay(){
+  cancelAnimationFrame(state.raf);
+  if(state.playing){state.offset=Math.min(state.dur,Math.max(0,ensureAc().currentTime-state.t0+state.offset))}
   for(const n of state.nodes){try{n.stop()}catch(e){}try{n.disconnect()}catch(e){}}
-  state.nodes=[];$('stopAll').disabled=true;
-}
-function playMix(soloIdx=null){
-  stopPlay();
-  const ac=state.ac||(state.ac=new (window.AudioContext||window.webkitAudioContext)());
-  if(ac.state==='suspended')ac.resume();
-  const t=ac.currentTime+0.02;
-  state.bufs.forEach((buf,i)=>{
-    if(!buf)return;
-    const card=$('stems').children[i];
-    if(soloIdx!=null&&i!==soloIdx)return;
-    if(soloIdx==null&&card&&card.classList.contains('mute'))return;
-    const src=ac.createBufferSource();src.buffer=buf;src.connect(ac.destination);src.start(t);state.nodes.push(src);
-  });
-  $('stopAll').disabled=false;
+  state.nodes=[];state.gains=[];state.analysers=[];state.playing=false;
+  $('btnPlay').textContent='▶';$('btnStop').disabled=true;updatePlayhead();
 }
 
+function startPlay(from){
+  if(!state.bufs.length)return;
+  stopPlay();
+  const ac=ensureAc();if(ac.state==='suspended')ac.resume();
+  state.offset=from!=null?from:state.offset;
+  state.t0=ac.currentTime;state.playing=true;
+  $('btnPlay').textContent='❚❚';$('btnStop').disabled=false;
+  const dest=ac.destination;
+  state.bufs.forEach((buf,i)=>{
+    if(!buf)return;
+    const src=ac.createBufferSource();src.buffer=buf;
+    const g=ac.createGain();const an=ac.createAnalyser();an.fftSize=256;
+    src.connect(g);g.connect(an);an.connect(dest);
+    state.nodes.push(src);state.gains[i]=g;state.analysers[i]=an;
+    const off=Math.min(buf.duration,Math.max(0,state.offset));
+    src.start(ac.currentTime,off);
+  });
+  applyGains();loop();
+}
+
+function seekTo(t){
+  t=Math.max(0,Math.min(state.dur,t));
+  const was=state.playing;stopPlay();state.offset=t;updatePlayhead();
+  if(was)startPlay(t);
+}
+
+function renderDaw(){
+  document.body.classList.add('daw-on');
+  $('btnNew').hidden=false;
+  $('projMeta').textContent=`${state.title} · ${state.src.length} แทร็ก · ${fmt(state.dur)} · ${mode}`;
+  const w=pxW();
+  $('lanes').style.width=w+'px';
+  drawRuler();
+
+  const heads=$('heads'),lanes=$('lanes'),mix=$('mixer');
+  heads.innerHTML='';lanes.innerHTML='';mix.innerHTML='';
+
+  state.src.forEach((s,i)=>{
+    const color=COL[s]||COL.track;
+    const h=document.createElement('div');h.className='head';
+    h.innerHTML=`<div class="nm"><span class="dot" style="background:${color}"></span>${NM[s]||s}</div>
+      <div class="ops">
+        <button type="button" class="btn" data-m="${i}">M</button>
+        <button type="button" class="btn" data-s="${i}">S</button>
+        <button type="button" class="btn" data-soloplay="${i}">▶</button>
+      </div>`;
+    heads.appendChild(h);
+
+    const lane=document.createElement('div');lane.className='lane';
+    const cv=document.createElement('canvas');lane.appendChild(cv);lanes.appendChild(lane);
+    requestAnimationFrame(()=>drawWave(cv,state.peaks[i],color));
+
+    const st=document.createElement('div');st.className='strip';st.dataset.i=i;
+    st.innerHTML=`<div class="lab" title="${NM[s]||s}">${NM[s]||s}</div>
+      <div style="display:flex;gap:8px;align-items:flex-end">
+        <div class="meter"><i></i></div>
+        <input class="fader" type="range" min="0" max="100" value="${state.vol[i]}" data-vol="${i}" title="ระดับเสียง">
+      </div>
+      <div class="ms">
+        <button type="button" class="btn" data-m="${i}">M</button>
+        <button type="button" class="btn" data-s="${i}">S</button>
+      </div>
+      <button type="button" class="btn" data-dw="${i}" style="font-size:10px;min-height:22px;padding:0 6px">↓ WAV</button>`;
+    mix.appendChild(st);
+  });
+
+  // master strip
+  const ms=document.createElement('div');ms.className='strip master';
+  ms.innerHTML=`<div class="lab">Master</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;height:88px;align-items:center;color:var(--mut);font-size:11px;text-align:center">มิกซ์รวม<br>ส่งออกด้านล่าง</div>`;
+  mix.appendChild(ms);
+
+  syncMuteUi();
+  updatePlayhead();
+  $('sOut').textContent=`✅ พร้อมตัดต่อ · ${state.src.length} แทร็ก · ${state.title}`;
+}
+
+function syncMuteUi(){
+  document.querySelectorAll('[data-m]').forEach(b=>{
+    const i=+b.dataset.m;b.classList.toggle('on',!!state.mute[i]);b.style.color=state.mute[i]?'#f88':'';
+  });
+  document.querySelectorAll('[data-s]').forEach(b=>{
+    const i=+b.dataset.s;b.classList.toggle('on',!!state.solo[i]);b.style.color=state.solo[i]?'#8cf':'';
+  });
+  applyGains();
+}
+
+$('heads').onclick=e=>{
+  const m=e.target.closest('[data-m]');if(m){const i=+m.dataset.m;state.mute[i]=!state.mute[i];syncMuteUi();return}
+  const s=e.target.closest('[data-s]');if(s){const i=+s.dataset.s;state.solo[i]=!state.solo[i];syncMuteUi();return}
+  const p=e.target.closest('[data-soloplay]');if(p){state.solo=state.solo.map((_,j)=>j===+p.dataset.soloplay);syncMuteUi();startPlay(0)}
+};
+$('mixer').oninput=e=>{const v=e.target.closest('[data-vol]');if(!v)return;state.vol[+v.dataset.vol]=+v.value;applyGains()};
+$('mixer').onclick=e=>{
+  const m=e.target.closest('[data-m]');if(m){const i=+m.dataset.m;state.mute[i]=!state.mute[i];syncMuteUi();return}
+  const s=e.target.closest('[data-s]');if(s){const i=+s.dataset.s;state.solo[i]=!state.solo[i];syncMuteUi();return}
+  const dw=e.target.closest('[data-dw]');if(dw){const i=+dw.dataset.dw;dl(state.filesWav[i],state.filesWav[i].name)}
+};
+
+$('btnPlay').onclick=()=>{if(state.playing){const t=ensureAc().currentTime-state.t0+state.offset;stopPlay();state.offset=t;updatePlayhead();$('btnPlay').textContent='▶'}else startPlay()};
+$('btnStop').onclick=()=>{stopPlay();state.offset=0;updatePlayhead()};
+$('zoom').oninput=()=>{state.pxPerSec=+$('zoom').value;if(state.bufs.length){const t=state.playing?(ensureAc().currentTime-state.t0+state.offset):state.offset;renderDaw();state.offset=t;updatePlayhead()}};
+
+$('lanesWrap').addEventListener('click',e=>{
+  if(!state.dur)return;
+  const rect=$('lanes').getBoundingClientRect();
+  const x=e.clientX-rect.left+$('lanesWrap').scrollLeft;
+  seekTo(x/state.pxPerSec);
+});
+
+$('btnNew').onclick=()=>{
+  stopPlay();document.body.classList.remove('daw-on');$('btnNew').hidden=true;
+  state.title='';state.src=[];state.bufs=[];state.peaks=[];state.filesWav=[];state.filesMp3=[];
+  $('sAi').textContent='ยังไม่ได้เลือกไฟล์';$('sImp').textContent='ยังไม่ได้เลือกไฟล์';setBar($('barAi'),0);
+};
+
 async function showResult({title,src,channels,sampleRate}){
-  // channels: [{L,R}] aligned with src
-  state.title=title;state.src=src;stopPlay();
-  const ac=state.ac||(state.ac=new (window.AudioContext||window.webkitAudioContext)());
+  stopPlay();
+  const ac=ensureAc();
+  state.title=title;state.src=src;state.channels=channels;
   state.bufs=channels.map(({L,R})=>{
     const n=L.length,b=ac.createBuffer(2,n,sampleRate||44100);
     b.copyToChannel(L,0);b.copyToChannel(R.length===n?R:L,1);return b;
   });
+  state.peaks=state.bufs.map(b=>buildPeaks(b));
+  state.dur=Math.max(...state.bufs.map(b=>b.duration));
+  state.mute=src.map(()=>false);state.solo=src.map(()=>false);state.vol=src.map(()=>100);
+  state.offset=0;state.pxPerSec=+$('zoom').value||90;
   state.filesWav=src.map((s,i)=>new File([wavBlob(channels[i].L,channels[i].R,sampleRate||44100)],`${title} (${s}).wav`,{type:'audio/wav'}));
   state.filesMp3=[];
-  const wantMp3=$('mp3Ai').checked;
-  if(wantMp3){
+  renderDaw();
+  if($('mp3Ai').checked){
     $('sOut').textContent='⏳ กำลังทำ MP3…';
     try{
       for(let i=0;i<src.length;i++){
@@ -258,37 +481,17 @@ async function showResult({title,src,channels,sampleRate}){
         state.filesMp3.push(new File([blob],`${title} (${src[i]}).mp3`,{type:'audio/mpeg'}));
         $('sOut').textContent=`⏳ ทำ MP3 ${i+1}/${src.length}`;
       }
-    }catch(e){$('sOut').textContent='⚠️ MP3 ไม่สำเร็จ: '+(e.message||e)+' — ยังโหลด WAV ได้'}
+      $('sOut').textContent=`✅ พร้อมตัดต่อ · ${src.length} แทร็ก · ${title}`;
+    }catch(e){$('sOut').textContent='⚠️ MP3 ไม่สำเร็จ — WAV พร้อมใช้ · '+(e.message||e)}
   }
-  const box=$('stems');box.innerHTML='';
-  src.forEach((s,i)=>{
-    const d=document.createElement('div');d.className='stem';
-    d.innerHTML=`<div class="nm">${NM[s]||s}</div><div class="fn">${state.filesWav[i].name}</div>
-      <div class="acts">
-        <button type="button" class="btn" data-play="${i}">▶</button>
-        <button type="button" class="btn" data-mute="${i}">Mute</button>
-        <button type="button" class="btn" data-dw="${i}">↓ WAV</button>
-        ${state.filesMp3[i]?`<button type="button" class="btn" data-dm="${i}">↓ MP3</button>`:''}
-      </div>`;
-    box.appendChild(d);
-  });
-  box.onclick=e=>{
-    const p=e.target.closest('[data-play]');if(p){playMix(+p.dataset.play);return}
-    const m=e.target.closest('[data-mute]');if(m){const c=box.children[+m.dataset.mute];c.classList.toggle('mute');m.textContent=c.classList.contains('mute')?'Unmute':'Mute';return}
-    const dw=e.target.closest('[data-dw]');if(dw){dl(state.filesWav[+dw.dataset.dw],state.filesWav[+dw.dataset.dw].name);return}
-    const dm=e.target.closest('[data-dm]');if(dm){dl(state.filesMp3[+dm.dataset.dm],state.filesMp3[+dm.dataset.dm].name)}
-  };
-  $('result').hidden=false;
-  $('sOut').textContent=`✅ พร้อม · ${src.length} แทร็ก · ${title}`;
-  $('result').scrollIntoView({behavior:'smooth',block:'start'});
+  window.addEventListener('resize',()=>{if(document.body.classList.contains('daw-on'))renderDaw()},{passive:true});
 }
 
-/* --- AI split --- */
+/* --- AI --- */
 let aiFile=null,aiBusy=false;
 function pickAiFile(f,auto=true){
   if(!f){$('sAi').textContent='❌ ไม่พบไฟล์';return}
-  const ok=AUD.test(f.name)||/^audio\//.test(f.type||'');
-  if(!ok){$('sAi').textContent='❌ ไฟล์นี้ไม่ใช่เสียง: '+f.name+' — ใช้ mp3 / wav / m4a';return}
+  if(!(AUD.test(f.name)||/^audio\//.test(f.type||''))){$('sAi').textContent='❌ ไฟล์นี้ไม่ใช่เสียง: '+f.name;return}
   aiFile=f;$('goAi').disabled=false;
   $('sAi').textContent=`✅ รับไฟล์แล้ว: ${f.name} (${Math.max(1,Math.round(f.size/1e6))} MB)\nโหมด: ${mode}`+(auto?'\nกำลังเริ่มแยก…':'');
   if(auto)startAi();
@@ -313,8 +516,8 @@ async function startAi(){
     const w=new Worker('stems-ai-worker.js');
     const d=await new Promise((ok,no)=>{
       w.onmessage=({data:m})=>{
-        if(m.t==='dl'){setBar($('barAi'),m.p);$('sAi').textContent=`⏳ ดาวน์โหลดโมเดลครั้งแรก ${(m.p*100|0)}%`}
-        else if(m.t==='ready'){setBar($('barAi'),0);$('sAi').textContent=`⏳ กำลังแยก… (${m.ep==='webgpu'?'WebGPU':'CPU '+m.threads+' เธรด'})`}
+        if(m.t==='dl'){setBar($('barAi'),m.p);$('sAi').textContent=`⏳ ดาวน์โหลดโมเดล ${(m.p*100|0)}%`}
+        else if(m.t==='ready'){setBar($('barAi'),0);$('sAi').textContent=`⏳ กำลังแยก… (${m.ep==='webgpu'?'WebGPU':'CPU'})`}
         else if(m.t==='prog'){setBar($('barAi'),m.p);const left=m.ms/m.p*(1-m.p)/1000;$('sAi').textContent=`⏳ กำลังแยก ${(m.p*100|0)}% · เหลือ ~${Math.ceil(left)} วิ`}
         else if(m.t==='err'){w.terminate();no(new Error(m.m))}
         else if(m.t==='done'){w.terminate();ok(m)}
@@ -322,22 +525,20 @@ async function startAi(){
       w.onerror=e=>{w.terminate();no(e.error||e)};
       w.postMessage({opt:{wasmOnly:!gpuF16,eps:gpuF16?['webgpu']:['wasm']},L,R});
     });
-    const sec=((performance.now()-t0)/1000).toFixed(0);
-    $('sAi').textContent=`✅ แยกเสร็จใน ${sec} วิ (เพลง ${buf.duration.toFixed(0)} วิ)`;
+    $('sAi').textContent=`✅ แยกเสร็จใน ${((performance.now()-t0)/1000).toFixed(0)} วิ (เพลง ${buf.duration.toFixed(0)} วิ) — เปิดสตูดิโอ`;
     setBar($('barAi'),1);
-    const channels=d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]}));
-    await showResult({title,src:d.src,channels,sampleRate:44100});
+    await showResult({title,src:d.src,channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),sampleRate:44100});
   }catch(e){$('sAi').textContent='❌ แยกไม่สำเร็จ: '+(e&&e.message||e)}
   finally{aiBusy=false;$('goAi').disabled=!aiFile;$('pickAi').style.pointerEvents=''}
 }
 $('goAi').onclick=()=>startAi();
 
-/* --- import stems --- */
+/* --- import --- */
 let impFiles=[],impBusy=false;
 function setImp(files,auto=true){
   impFiles=[...files].filter(f=>AUD.test(f.name)||/\.zip$/i.test(f.name)||/^audio\//.test(f.type||''));
   $('goImp').disabled=impFiles.length<1;
-  if(!impFiles.length){$('sImp').textContent='❌ ไม่พบไฟล์เสียงในที่ลากมา — ใช้ mp3/wav/m4a หรือ .zip';return}
+  if(!impFiles.length){$('sImp').textContent='❌ ไม่พบไฟล์เสียง';return}
   $('sImp').textContent=`✅ รับ ${impFiles.length} ไฟล์`+(auto&&impFiles.length>=2?'\nกำลังประกอบ…':'');
   if(!$('titleImp').value&&impFiles[0]){
     const n=impFiles[0].name;const d=n.includes('/')?n.split('/').slice(-2)[0]:n.replace(/\.[^.]+$/,'');
@@ -387,10 +588,8 @@ async function startImp(){
     const channels=[],src=[];
     for(let i=0;i<items.length;i++){
       $('sImp').textContent=`⏳ ถอดรหัส ${i+1}/${items.length}`;
-      const ab=await items[i].blob.arrayBuffer();
-      const buf=await ac.decodeAudioData(ab.slice(0));
-      const L=buf.getChannelData(0);
-      const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+      const buf=await ac.decodeAudioData((await items[i].blob.arrayBuffer()).slice(0));
+      const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
       channels.push({L:Float32Array.from(L),R:Float32Array.from(R),sr:buf.sampleRate});
       src.push(guessKey(items[i].name));
     }
@@ -401,38 +600,31 @@ async function startImp(){
       for(let i=0;i<n;i++){const j=Math.min(c.L.length-1,Math.floor(i*c.sr/sr0));L[i]=c.L[j];R[i]=c.R[j]}
       return {L,R};
     });
-    $('sImp').textContent=`✅ ประกอบ ${items.length} แทร็ก`;
+    $('sImp').textContent=`✅ ประกอบ ${items.length} แทร็ก — เปิดสตูดิโอ`;
     await showResult({title,src,channels:norm,sampleRate:sr0});
   }catch(e){$('sImp').textContent='❌ '+(e.message||e)}
   finally{impBusy=false;$('goImp').disabled=impFiles.length<1}
 }
 $('goImp').onclick=()=>startImp();
 
-$('playAll').onclick=()=>playMix(null);
-$('stopAll').onclick=stopPlay;
-
 $('sendSs').onclick=()=>{
   if(!state.filesWav.length)return;
   const bc=new BroadcastChannel('bp-stems');let ok=false;
-  bc.onmessage=e=>{if(e.data?.t==='ack'){ok=true;$('sOut').textContent='✅ ส่งเข้า SetSod แล้ว — เปิดแท็บ SetSod ดูในคลัง'}}
+  bc.onmessage=e=>{if(e.data?.t==='ack'){ok=true;$('sOut').textContent='✅ ส่งเข้า SetSod แล้ว — เปิดแท็บ SetSod ดูในคลัง'}};
   bc.postMessage({t:'stems',title:state.title,files:state.filesWav});
-  setTimeout(()=>{if(!ok)$('sOut').textContent='ไม่พบหน้า SetSod ที่เปิดอยู่ — ดาวน์โหลดไฟล์ด้านล่าง แล้วที่ SetSod กด “นำเข้า Stems”\nหรือเปิด SetSod ในแท็บนี้แล้วกดส่งอีกครั้ง'},1500);
+  setTimeout(()=>{if(!ok)$('sOut').textContent='ไม่พบหน้า SetSod ที่เปิดอยู่ — ดาวน์โหลดไฟล์ หรือเปิด SetSod แล้วกดส่งอีกครั้ง'},1500);
 };
-$('dlWav').onclick=async()=>{for(const f of state.filesWav)dl(f,f.name)};
-$('dlMp3').onclick=async()=>{
-  if(!state.filesMp3.length){$('sOut').textContent='ยังไม่มี MP3 — ติ๊กทำ MP3 แล้วแยก/ประกอบใหม่';return}
-  for(const f of state.filesMp3)dl(f,f.name);
-};
+$('dlWav').onclick=()=>{for(const f of state.filesWav)dl(f,f.name)};
+$('dlMp3').onclick=()=>{if(!state.filesMp3.length){$('sOut').textContent='ยังไม่มี MP3 — ติ๊กทำ MP3 แล้วแยกใหม่';return}for(const f of state.filesMp3)dl(f,f.name)};
 $('dlZip').onclick=async()=>{
   $('sOut').textContent='⏳ กำลังทำ ZIP…';
   const entries=state.filesWav.map(f=>({name:f.name,blob:f}));
-  if(state.filesMp3.length)for(const f of state.filesMp3)entries.push({name:f.name,blob:f});
-  const z=await zipBlobs(entries);
-  dl(z,`${state.title||'setsod-data'}-stems.zip`);
+  for(const f of state.filesMp3)entries.push({name:f.name,blob:f});
+  dl(await zipBlobs(entries),`${state.title||'setsod-data'}-stems.zip`);
   $('sOut').textContent='✅ ดาวน์โหลด ZIP แล้ว';
 };
 
-window.__ssd={state,showResult,desk,get mode(){return mode},pickAiFile,setImp,startAi,startImp};
+window.__ssd={state,showResult,desk,get mode(){return mode},pickAiFile,setImp,startAi,startImp,startPlay,stopPlay,seekTo,renderDaw};
 </script>
 </body>
 </html>
