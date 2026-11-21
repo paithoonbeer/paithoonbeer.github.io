@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0">
+<meta name="bp-data" content="1.1">
 <title>SetSod Data</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -90,7 +90,7 @@ a{color:var(--acc)}
 
   <section class="panel on" id="pAi">
     <div class="drop" id="dropAi">
-      <strong>ลากไฟล์เพลงมาวาง หรือเลือกไฟล์</strong>
+      <strong>ลากไฟล์เพลงมาวางที่นี่ — เริ่มแยกทันที</strong>
       <div class="n">mp3 / wav / m4a · โมเดล htdemucs ~173 MB ครั้งแรก แล้วเก็บไว้ในเครื่อง · ได้ 4 แทร็ก: กลอง เบส ร้อง ดนตรีอื่นๆ</div>
       <div class="row" style="justify-content:center">
         <label class="btn" id="pickAi">เลือกไฟล์<input id="fAi" type="file" accept="audio/*" hidden></label>
@@ -138,11 +138,20 @@ const $=id=>document.getElementById(id);
 const NM={drums:'กลอง',bass:'เบส',other:'ดนตรีอื่นๆ',vocals:'ร้อง'};
 const AUD=/\.(mp3|wav|m4a|aac|flac|aif|aiff|ogg|caf)$/i;
 const desk=matchMedia('(pointer:fine)').matches&&!/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)&&innerWidth>=900;
-let gpuF16=false;
-try{const a=await navigator.gpu?.requestAdapter();gpuF16=!!(a&&a.features.has('shader-f16'))}catch(e){}
-const mode=gpuF16?'WebGPU':('CPU'+(crossOriginIsolated?' · multi-thread':' · single-thread'));
-$('modeTag').textContent=desk?(gpuF16?'PC · WebGPU':'PC · CPU'):'มือถือ';
-if(!desk)$('gate').classList.add('on');
+// v1.1: never block UI on GPU probe (requestAdapter can hang) — wire drop handlers first
+let gpuF16=false,mode='CPU';
+function refreshMode(){mode=gpuF16?'WebGPU':('CPU'+(crossOriginIsolated?' · multi-thread':' · single-thread'));$('modeTag').textContent=desk?(gpuF16?'PC · WebGPU':'PC · CPU'):'มือถือ'}
+refreshMode();if(!desk)$('gate').classList.add('on');
+(async()=>{try{const p=navigator.gpu&&navigator.gpu.requestAdapter?navigator.gpu.requestAdapter():null;if(!p)return;const a=await Promise.race([p,new Promise(r=>setTimeout(()=>r(null),2500))]);gpuF16=!!(a&&a.features&&a.features.has('shader-f16'));refreshMode()}catch(e){}})();
+
+// Stop the browser from navigating away when a file is dropped anywhere on the page
+['dragenter','dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{try{if([...e.dataTransfer.types||[]].includes('Files'))e.preventDefault()}catch(_){}}));
+function bindDrop(el,onFiles){let n=0;
+  el.addEventListener('dragenter',e=>{e.preventDefault();e.stopPropagation();n++;el.classList.add('over')});
+  el.addEventListener('dragover',e=>{e.preventDefault();e.stopPropagation();try{e.dataTransfer.dropEffect='copy'}catch(_){}});
+  el.addEventListener('dragleave',e=>{e.preventDefault();e.stopPropagation();if(--n<=0){n=0;el.classList.remove('over')}});
+  el.addEventListener('drop',e=>{e.preventDefault();e.stopPropagation();n=0;el.classList.remove('over');const fs=e.dataTransfer&&e.dataTransfer.files;if(fs&&fs.length)onFiles(fs)});
+}
 
 const state={title:'',src:[],bufs:[],filesWav:[],filesMp3:[],ac:null,nodes:[]};
 
@@ -275,62 +284,72 @@ async function showResult({title,src,channels,sampleRate}){
 }
 
 /* --- AI split --- */
-let aiFile=null;
-$('fAi').onchange=e=>{aiFile=e.target.files[0];$('goAi').disabled=!aiFile;if(aiFile)$('sAi').textContent=`ไฟล์: ${aiFile.name}\nโหมด: ${mode}`};
-['dragenter','dragover'].forEach(ev=>$('dropAi').addEventListener(ev,e=>{e.preventDefault();$('dropAi').classList.add('over')}));
-['dragleave','drop'].forEach(ev=>$('dropAi').addEventListener(ev,e=>{e.preventDefault();$('dropAi').classList.remove('over')}));
-$('dropAi').addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(!f)return;aiFile=f;$('goAi').disabled=false;$('sAi').textContent=`ไฟล์: ${f.name}\nโหมด: ${mode}`});
+let aiFile=null,aiBusy=false;
+function pickAiFile(f,auto=true){
+  if(!f){$('sAi').textContent='❌ ไม่พบไฟล์';return}
+  const ok=AUD.test(f.name)||/^audio\//.test(f.type||'');
+  if(!ok){$('sAi').textContent='❌ ไฟล์นี้ไม่ใช่เสียง: '+f.name+' — ใช้ mp3 / wav / m4a';return}
+  aiFile=f;$('goAi').disabled=false;
+  $('sAi').textContent=`✅ รับไฟล์แล้ว: ${f.name} (${Math.max(1,Math.round(f.size/1e6))} MB)\nโหมด: ${mode}`+(auto?'\nกำลังเริ่มแยก…':'');
+  if(auto)startAi();
+}
+$('fAi').onchange=e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)pickAiFile(f,true)};
+bindDrop($('dropAi'),fs=>pickAiFile(fs[0],true));
+bindDrop($('pAi'),fs=>{if(!$('pAi').classList.contains('on'))return;pickAiFile(fs[0],true)});
+$('dropAi').addEventListener('click',e=>{if(e.target.closest('button,label,input,.btn'))return;$('fAi').click()});
 $('mp3Ai').checked=localStorage.getItem('bp-sa-mp3')!=='0';
 $('mp3Ai').onchange=()=>localStorage.setItem('bp-sa-mp3',$('mp3Ai').checked?'1':'0');
 
-$('goAi').onclick=async()=>{
-  if(!aiFile)return;
+async function startAi(){
+  if(!aiFile||aiBusy)return;
   if(!desk){$('sAi').textContent='❌ ใช้บนคอมพิวเตอร์เท่านั้น';return}
-  $('goAi').disabled=true;$('pickAi').style.pointerEvents='none';
-  const t0=performance.now();$('sAi').textContent='⏳ ถอดรหัสเสียง…';setBar($('barAi'),0);
+  aiBusy=true;$('goAi').disabled=true;$('pickAi').style.pointerEvents='none';
+  const t0=performance.now();$('sAi').textContent='⏳ ถอดรหัสเสียง… '+aiFile.name;setBar($('barAi'),0.02);
   try{
     const ac=new OfflineAudioContext(2,1,44100);
     const buf=await ac.decodeAudioData(await aiFile.arrayBuffer());
     const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L.slice();
     const title=aiFile.name.replace(/\.[^.]+$/,'');
     const w=new Worker('stems-ai-worker.js');
-    await new Promise((ok,no)=>{
-      w.onmessage=({data:d})=>{
-        if(d.t==='dl'){setBar($('barAi'),d.p);$('sAi').textContent=`⏳ ดาวน์โหลดโมเดลครั้งแรก ${(d.p*100|0)}%`}
-        else if(d.t==='ready'){setBar($('barAi'),0);$('sAi').textContent=`⏳ กำลังแยก… (${d.ep==='webgpu'?'WebGPU':'CPU '+d.threads+' เธรด'})`}
-        else if(d.t==='prog'){setBar($('barAi'),d.p);const left=d.ms/d.p*(1-d.p)/1000;$('sAi').textContent=`⏳ กำลังแยก ${(d.p*100|0)}% · เหลือ ~${Math.ceil(left)} วิ`}
-        else if(d.t==='err'){no(new Error(d.m));w.terminate()}
-        else if(d.t==='done'){w.terminate();ok(d)}
+    const d=await new Promise((ok,no)=>{
+      w.onmessage=({data:m})=>{
+        if(m.t==='dl'){setBar($('barAi'),m.p);$('sAi').textContent=`⏳ ดาวน์โหลดโมเดลครั้งแรก ${(m.p*100|0)}%`}
+        else if(m.t==='ready'){setBar($('barAi'),0);$('sAi').textContent=`⏳ กำลังแยก… (${m.ep==='webgpu'?'WebGPU':'CPU '+m.threads+' เธรด'})`}
+        else if(m.t==='prog'){setBar($('barAi'),m.p);const left=m.ms/m.p*(1-m.p)/1000;$('sAi').textContent=`⏳ กำลังแยก ${(m.p*100|0)}% · เหลือ ~${Math.ceil(left)} วิ`}
+        else if(m.t==='err'){w.terminate();no(new Error(m.m))}
+        else if(m.t==='done'){w.terminate();ok(m)}
       };
-      w.onerror=e=>no(e);
+      w.onerror=e=>{w.terminate();no(e.error||e)};
       w.postMessage({opt:{wasmOnly:!gpuF16,eps:gpuF16?['webgpu']:['wasm']},L,R});
-    }).then(async d=>{
-      const sec=((performance.now()-t0)/1000).toFixed(0);
-      $('sAi').textContent=`✅ แยกเสร็จใน ${sec} วิ (เพลง ${buf.duration.toFixed(0)} วิ)`;
-      setBar($('barAi'),1);
-      const channels=d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]}));
-      await showResult({title,src:d.src,channels,sampleRate:44100});
     });
-  }catch(e){$('sAi').textContent='❌ แยกไม่สำเร็จ: '+(e.message||e)}
-  finally{$('goAi').disabled=!aiFile;$('pickAi').style.pointerEvents=''}
-};
+    const sec=((performance.now()-t0)/1000).toFixed(0);
+    $('sAi').textContent=`✅ แยกเสร็จใน ${sec} วิ (เพลง ${buf.duration.toFixed(0)} วิ)`;
+    setBar($('barAi'),1);
+    const channels=d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]}));
+    await showResult({title,src:d.src,channels,sampleRate:44100});
+  }catch(e){$('sAi').textContent='❌ แยกไม่สำเร็จ: '+(e&&e.message||e)}
+  finally{aiBusy=false;$('goAi').disabled=!aiFile;$('pickAi').style.pointerEvents=''}
+}
+$('goAi').onclick=()=>startAi();
 
 /* --- import stems --- */
-let impFiles=[];
-function setImp(files){
-  impFiles=[...files].filter(f=>AUD.test(f.name)||/\.zip$/i.test(f.name));
+let impFiles=[],impBusy=false;
+function setImp(files,auto=true){
+  impFiles=[...files].filter(f=>AUD.test(f.name)||/\.zip$/i.test(f.name)||/^audio\//.test(f.type||''));
   $('goImp').disabled=impFiles.length<1;
-  $('sImp').textContent=impFiles.length?`เลือก ${impFiles.length} ไฟล์`:'ยังไม่ได้เลือกไฟล์';
+  if(!impFiles.length){$('sImp').textContent='❌ ไม่พบไฟล์เสียงในที่ลากมา — ใช้ mp3/wav/m4a หรือ .zip';return}
+  $('sImp').textContent=`✅ รับ ${impFiles.length} ไฟล์`+(auto&&impFiles.length>=2?'\nกำลังประกอบ…':'');
   if(!$('titleImp').value&&impFiles[0]){
     const n=impFiles[0].name;const d=n.includes('/')?n.split('/').slice(-2)[0]:n.replace(/\.[^.]+$/,'');
     $('titleImp').value=d.replace(/[\s_\-–.([]+$/,'')||'Stems';
   }
+  if(auto&&impFiles.length>=2)startImp();
 }
-$('fImp').onchange=e=>setImp(e.target.files);
-$('fDir').onchange=e=>setImp(e.target.files);
-['dragenter','dragover'].forEach(ev=>$('dropImp').addEventListener(ev,e=>{e.preventDefault();$('dropImp').classList.add('over')}));
-['dragleave','drop'].forEach(ev=>$('dropImp').addEventListener(ev,e=>{e.preventDefault();$('dropImp').classList.remove('over')}));
-$('dropImp').addEventListener('drop',e=>setImp(e.dataTransfer.files));
+$('fImp').onchange=e=>{setImp(e.target.files,true);e.target.value=''};
+$('fDir').onchange=e=>{setImp(e.target.files,true);e.target.value=''};
+bindDrop($('dropImp'),fs=>setImp(fs,true));
+bindDrop($('pImp'),fs=>{if(!$('pImp').classList.contains('on'))return;setImp(fs,true)});
+$('dropImp').addEventListener('click',e=>{if(e.target.closest('button,label,input,.btn'))return;$('fImp').click()});
 
 async function unzip(file){
   const buf=new Uint8Array(await file.arrayBuffer()),dv=new DataView(buf.buffer);
@@ -352,9 +371,10 @@ async function unzip(file){
 const GUESS=[[/drum|kick|snare|hat|กลอง/i,'drums'],[/bass|เบส/i,'bass'],[/vox|vocal|voc|ร้อง/i,'vocals'],[/\bother\b|อื่น|instrumental/i,'other']];
 function guessKey(fn){const b=fn.replace(/^.*\//,'').replace(/\.[^.]+$/,'');for(const [r,k] of GUESS)if(r.test(b))return k;return b.slice(0,18)||'track'}
 
-$('goImp').onclick=async()=>{
+async function startImp(){
+  if(impBusy||impFiles.length<1)return;
   if(!desk){$('sImp').textContent='❌ ใช้บนคอมพิวเตอร์เท่านั้น';return}
-  $('goImp').disabled=true;$('sImp').textContent='⏳ กำลังอ่านไฟล์…';
+  impBusy=true;$('goImp').disabled=true;$('sImp').textContent='⏳ กำลังอ่านไฟล์…';
   try{
     const items=[];
     for(const f of impFiles){
@@ -371,15 +391,12 @@ $('goImp').onclick=async()=>{
       const buf=await ac.decodeAudioData(ab.slice(0));
       const L=buf.getChannelData(0);
       const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
-      // resample-ish: keep native rate in buffer via Offline? use AudioBuffer as-is by copying into Float32 of same rate
       channels.push({L:Float32Array.from(L),R:Float32Array.from(R),sr:buf.sampleRate});
       src.push(guessKey(items[i].name));
     }
-    // normalize to first sample rate length by using first rate for wav export; for mismatched rates export at each native via wavBlob
     const sr0=channels[0].sr;
     const norm=channels.map(c=>{
       if(c.sr===sr0)return {L:c.L,R:c.R};
-      // simple nearest resample
       const n=Math.round(c.L.length*sr0/c.sr),L=new Float32Array(n),R=new Float32Array(n);
       for(let i=0;i<n;i++){const j=Math.min(c.L.length-1,Math.floor(i*c.sr/sr0));L[i]=c.L[j];R[i]=c.R[j]}
       return {L,R};
@@ -387,8 +404,9 @@ $('goImp').onclick=async()=>{
     $('sImp').textContent=`✅ ประกอบ ${items.length} แทร็ก`;
     await showResult({title,src,channels:norm,sampleRate:sr0});
   }catch(e){$('sImp').textContent='❌ '+(e.message||e)}
-  finally{$('goImp').disabled=impFiles.length<1}
-};
+  finally{impBusy=false;$('goImp').disabled=impFiles.length<1}
+}
+$('goImp').onclick=()=>startImp();
 
 $('playAll').onclick=()=>playMix(null);
 $('stopAll').onclick=stopPlay;
@@ -414,7 +432,7 @@ $('dlZip').onclick=async()=>{
   $('sOut').textContent='✅ ดาวน์โหลด ZIP แล้ว';
 };
 
-window.__ssd={state,showResult,desk,mode};
+window.__ssd={state,showResult,desk,get mode(){return mode},pickAiFile,setImp,startAi,startImp};
 </script>
 </body>
 </html>
