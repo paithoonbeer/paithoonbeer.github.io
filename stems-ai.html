@@ -1,43 +1,13 @@
-<!doctype html><html lang=th><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>แยก Stems (ทดลอง)</title>
-<style>body{margin:0;background:#0b0b0c;color:#e8e8e8;font:15px/1.5 system-ui,sans-serif;display:flex;justify-content:center}main{max-width:560px;width:100%;padding:28px 20px}
-h1{font-size:19px;font-weight:600;margin:0 0 4px}.n{color:#8a8a8a;font-size:13px}.b{display:inline-flex;gap:8px;align-items:center;border:1px solid #444;border-radius:10px;padding:10px 14px;background:none;color:inherit;font:inherit;cursor:pointer;margin:14px 8px 0 0}
-.b:disabled{opacity:.4;cursor:default}.bar{height:4px;background:#222;border-radius:2px;margin:16px 0 6px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:#e8e8e8;transition:width .3s}#s{white-space:pre-line}.bk20{position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:5;display:inline-flex;align-items:center;gap:4px;min-height:40px;margin:0 0 12px;background:linear-gradient(180deg,#3a3d45,#24262c);color:#e8e8ee;border:1px solid #000;border-radius:10px;padding:6px 14px 6px 10px;font:inherit;font-size:15px;cursor:pointer;box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 2px 3px rgba(0,0,0,.6)}.bk20 b{font-size:22px;line-height:1;font-weight:400}</style></head>
-<body><main><button type="button" id="bk20" class="bk20" aria-label="กลับ"><b>‹</b> กลับ</button><h1>แยก Stems ด้วย AI (ทดลอง · เฉพาะคอมพิวเตอร์)</h1>
-<div class=n>ประมวลผลในเครื่องนี้ทั้งหมด ไม่อัปโหลดเพลง · โมเดล htdemucs (MIT) ดาวน์โหลดครั้งแรก ~173 MB แล้วเก็บไว้ใช้ซ้ำ · ได้ 4 แทร็ก: กลอง เบส ร้อง ดนตรีอื่นๆ</div>
-<label class=b id=pick>เลือกไฟล์เพลง<input id=f type=file accept="audio/*" hidden></label><button class=b id=go disabled>เริ่มแยก</button>
-<label class=n id=mp3l style="display:block;margin-top:12px"><input type=checkbox id=mp3> บันทึกเป็น MP3 (192 kbps) ด้วย — ไฟล์เล็กกว่า WAV ~7 เท่า</label>
-<div class=bar><i id=p></i></div><div id=s class=n>ยังไม่ได้เลือกไฟล์</div><div id=out></div></main>
-<script type=module>
-const $=id=>document.getElementById(id),S=m=>$('s').textContent=m,P=v=>$('p').style.width=(v*100).toFixed(1)+'%';
-const NM={drums:'กลอง (drums)',bass:'เบส (bass)',other:'ดนตรีอื่นๆ (other)',vocals:'ร้อง (vocals)'};
-let file,gpuF16=false;
-try{const a=await navigator.gpu?.requestAdapter();gpuF16=!!a?.features.has('shader-f16')}catch(e){}
-const mode=gpuF16?'WebGPU':'CPU (WASM'+(crossOriginIsolated?' หลายเธรด':' เธรดเดียว — ช้ามาก')+')';
-$('f').onchange=e=>{file=e.target.files[0];if(file){$('go').disabled=false;S('ไฟล์: '+file.name+'\nโหมด: '+mode)}};
-function wav(L,R){const n=L.length,b=new DataView(new ArrayBuffer(44+n*4)),w=(o,s)=>[...s].forEach((c,i)=>b.setUint8(o+i,c.charCodeAt(0)));
- w(0,'RIFF');b.setUint32(4,36+n*4,true);w(8,'WAVEfmt ');b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,2,true);b.setUint32(24,44100,true);b.setUint32(28,176400,true);b.setUint16(32,4,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*4,true);
- for(let i=0,o=44;i<n;i++,o+=4){b.setInt16(o,Math.max(-1,Math.min(1,L[i]))*32767,true);b.setInt16(o+2,Math.max(-1,Math.min(1,R[i]))*32767,true)}return new Blob([b],{type:'audio/wav'})}
-$('go').onclick=async()=>{$('go').disabled=true;$('pick').style.pointerEvents='none';const t0=performance.now();S('⏳ ถอดรหัสเสียง…');
- const ac=new OfflineAudioContext(2,1,44100);const buf=await ac.decodeAudioData(await file.arrayBuffer());
- const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L.slice();
- const title=file.name.replace(/\.[^.]+$/,''),w=new Worker('stems-ai-worker.js');
- w.onmessage=({data:d})=>{if(d.t=='dl'){P(d.p);S(`⏳ ดาวน์โหลดโมเดลครั้งแรก ${(d.p*100|0)}%`)}
-  else if(d.t=='ready'){P(0);S('⏳ กำลังแยก… ('+(d.ep=='webgpu'?'WebGPU':'CPU '+d.threads+' เธรด')+')')}
-  else if(d.t=='prog'){P(d.p);const left=d.ms/d.p*(1-d.p)/1000;S(`⏳ กำลังแยก ${(d.p*100|0)}% · เหลือประมาณ ${Math.ceil(left)} วินาที`)}
-  else if(d.t=='err'){S('❌ แยกไม่สำเร็จ: '+d.m);w.terminate()}
-  else if(d.t=='done'){w.terminate();done(d,title,buf.duration,t0)}};
- w.postMessage({opt:{wasmOnly:!gpuF16,eps:gpuF16?['webgpu']:['wasm']},L,R})};
-// v1.76: optional MP3 copies (lamejs via enc65.js worker, local). Same naming as WAV: "<title> (<stem>).mp3"
-$('mp3').checked=localStorage.getItem('bp-sa-mp3')=='1';$('mp3').onchange=()=>localStorage.setItem('bp-sa-mp3',$('mp3').checked?'1':'0');
-const mp3=(L,R)=>new Promise((ok,no)=>{const w=new Worker('enc65.js');w.onmessage=({data:m})=>{if(m.mp3){w.terminate();ok(new Blob([m.mp3],{type:'audio/mpeg'}))}else if(m.err){w.terminate();no(new Error(m.err))}};w.onerror=e=>{w.terminate();no(e)};w.postMessage({ch:[L,R],sr:44100,kbps:192})});
-const link=f=>{const a=document.createElement('a');a.className='b';a.href=URL.createObjectURL(f);a.download=f.name;const m=f.name.match(/\((\w+)\)\.(wav|mp3)$/);a.textContent='↓ '+(NM[m[1]]||m[1])+(m[2]=='mp3'?' · MP3':'');$('out').append(a);return a};
-async function done(d,title,dur,t0){{const files=d.src.map((s,k)=>new File([wav(d.out[k][0],d.out[k][1])],`${title} (${s}).wav`,{type:'audio/wav'}));
-   const sec=((performance.now()-t0)/1000).toFixed(0);S(`✅ เสร็จใน ${sec} วินาที (เพลงยาว ${dur.toFixed(0)} วินาที)`);
-   const bc=new BroadcastChannel('bp-stems');let ok=false;bc.onmessage=e=>{if(e.data?.t=='ack'){ok=true;S($('s').textContent+'\n✅ ส่งเข้า SetSod แล้ว — ดูในรายการเพลง "'+title+'"')}};
-   bc.postMessage({t:'stems',title,files});setTimeout(()=>{if(!ok)S($('s').textContent+'\nไม่พบหน้า SetSod ที่เปิดอยู่ — ดาวน์โหลดไฟล์ด้านล่าง แล้วนำเข้าด้วยปุ่ม "นำเข้า Stems"')},1500);
-   $('out').innerHTML='';for(const f of files)link(f);
-   if($('mp3').checked){const base=$('s').textContent,mp=[];for(let k=0;k<d.src.length;k++){S(base+`\n⏳ ทำ MP3 ${k+1}/${d.src.length}…`);try{mp.push(new File([await mp3(d.out[k][0],d.out[k][1])],`${title} (${d.src[k]}).mp3`,{type:'audio/mpeg'}))}catch(e){S(base+'\n❌ ทำ MP3 ไม่สำเร็จ: '+e.message);return files}}
-    const br=document.createElement('div');br.className='n';br.style.marginTop='10px';br.textContent='MP3 (192 kbps)';$('out').append(br);for(const f of mp)link(f);S(base+'\n✅ MP3 พร้อมดาวน์โหลด');window.__saMp3=mp}
-   return files}}
-window.__sa={done};
-</script><script>/*8420 back*/(function(){function bk(){var r=document.referrer;try{if(history.length>1&&r&&new URL(r).origin==location.origin){history.back();return}}catch(e){}location.href="./"}window.__bk20=bk;document.getElementById("bk20").onclick=bk;addEventListener("keydown",function(e){if(e.key=="Escape")bk()});var x0=null,y0=0;addEventListener("touchstart",function(e){var t=e.touches[0];x0=t.clientX<24?t.clientX:null;y0=t.clientY},{passive:true});addEventListener("touchend",function(e){if(x0==null)return;var t=e.changedTouches[0];if(t.clientX-x0>80&&Math.abs(t.clientY-y0)<60)bk();x0=null},{passive:true})})()</script></body></html>
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SetSod Data</title>
+<meta http-equiv="refresh" content="0;url=data.html">
+<script>location.replace('data.html'+location.search+location.hash)</script>
+</head>
+<body>
+<p style="font:15px/1.5 system-ui,sans-serif;padding:24px;color:#ccc;background:#111;margin:0">ย้ายไป <a href="data.html" style="color:#3dba8a">SetSod Data</a> แล้ว</p>
+</body>
+</html>
