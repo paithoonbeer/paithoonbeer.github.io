@@ -1,6 +1,6 @@
 {
-  "build": 86,
-  "ver": "1.0.91",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b86-1.0.91/SetSod.apk",
-  "notes": "1.0.91: คืนนี้/สตูดิโอ/เด็ค: แก้คีย์·เทมโป·ตัดหัว·นับเข้า แล้วเซฟอัตโนมัติ (ไม่ต้องกด 💾)"
+  "build": 87,
+  "ver": "1.0.93",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b87-1.0.93/SetSod.apk",
+  "notes": "1.0.93: SetSod Data (พีซี): หน้าแยกทำดาต้า · แยก stems ด้วย AI · นำเข้า stems · ส่งออก WAV/MP3/ZIP · ส่งเข้า SetSod"
 }
