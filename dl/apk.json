@@ -1,6 +1,6 @@
 {
-  "build": 88,
-  "ver": "1.0.94",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b88-1.0.94/SetSod.apk",
-  "notes": "1.0.94: SetSod Data: ลากไฟล์แล้วเริ่มแยกทันที · แก้กรณีลากวางแล้วไม่ตอบสนอง"
+  "build": 89,
+  "ver": "1.0.95",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b89-1.0.95/SetSod.apk",
+  "notes": "1.0.95: SetSod Data: สตูดิโอจัดเต็ม — ไทม์ไลน์เวฟฟอร์ม · มิกเซอร์เฟเดอร์/มิเตอร์ · Mute/Solo · ซูม/เลื่อนหาจังหวะ"
 }
