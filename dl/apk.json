@@ -1,6 +1,6 @@
 {
-  "build": 95,
-  "ver": "1.0.101",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b95-1.0.101/SetSod.apk",
-  "notes": "1.0.101: บังคับอัปเดตแคชอัตโนมัติ — แก้กรณีรีเฟรชแล้วค้างเวอร์ชันพัง (คลังว่าง · กดไม่ติด)"
+  "build": 96,
+  "ver": "1.0.102",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b96-1.0.102/SetSod.apk",
+  "notes": "1.0.102: เซฟข้อมูลเพลง/นอม/คีย์บนพีซีแล้วส่งเข้าวงให้อัตโนมัติ — มือถือทุกคนในทีมเห็น"
 }
