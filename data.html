@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.4">
+<meta name="bp-data" content="1.0.5">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -26,7 +26,7 @@ button,input{font:inherit;color:inherit}
 .tb.on{background:#3a2a2a;color:#f88}
 .tb.play{color:var(--acc);font-size:10px}
 .tb.play.on{background:#1a3a2a;color:#6fdfb0;border-color:#2a5a40}
-.shell{display:grid;grid-template-rows:auto auto 1fr auto auto;height:100vh}
+.shell{display:grid;grid-template-rows:auto auto auto 1fr auto auto;height:100vh}
 .top{display:flex;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(180deg,#171c22,#10141a);border-bottom:1px solid var(--line)}
 .brand{font-size:17px;font-weight:700;letter-spacing:-.02em}
 .brand small{display:block;font-size:11px;color:var(--mut);font-weight:400}
@@ -42,6 +42,13 @@ button,input{font:inherit;color:inherit}
 .import .drop{flex:1;min-width:200px;border:1px dashed #3a4650;border-radius:8px;padding:8px 12px;text-align:center;cursor:pointer}
 .import .drop.over{border-color:var(--acc);background:rgba(61,186,138,.08)}
 .status{color:var(--mut);font-family:JetMono,ui-monospace,monospace;font-size:11px}
+.recipe{display:flex;gap:10px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);background:#10151b;flex-wrap:wrap}
+.recipe b{font-size:12px;color:var(--acc)}
+.recipe .rp{display:flex;gap:4px;flex-wrap:wrap}
+.recipe .rp .btn{min-height:26px;font-size:11px;padding:2px 8px}
+.recipe .rp .btn.on{border-color:var(--acc);color:var(--acc)}
+.recipe .rmutes{display:flex;gap:8px;flex-wrap:wrap;color:var(--mut);font-size:11px}
+.recipe select{background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:var(--tx)}
 .main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 1fr auto;min-height:0}
 .corner{background:#0a0c0f;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .ruler-wrap{overflow:hidden;background:#0a0c0f;border-bottom:1px solid var(--line)}
@@ -134,6 +141,32 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button class="btn" id="btnLoad">เปิดโปรเจกต์</button>
     <input id="fileProj" type="file" accept=".json,application/json" hidden>
     <span class="status" id="sAi"></span>
+  </div>
+
+  <div class="recipe" id="recipe" title="เฟส 1: เลือกเครื่องที่จะปิด · ใส่นอม · นับเข้า · ส่งเข้า SetSod">
+    <b>สูตรดาต้า</b>
+    <div class="rp" id="rPresets">
+      <button type="button" class="btn" data-pre="none">เปิดทุกแทร็ก</button>
+      <button type="button" class="btn" data-pre="drums">เอาแค่กลองออก</button>
+      <button type="button" class="btn" data-pre="bass">เอาแค่เบสออก</button>
+      <button type="button" class="btn" data-pre="guitar">เอาแค่กีตาร์ออก</button>
+      <button type="button" class="btn" data-pre="keys">เอาแค่คีย์ออก</button>
+    </div>
+    <div class="rmutes" id="rMutes">
+      <label class="chk"><input type="checkbox" data-mute="drums"> ปิดกลอง</label>
+      <label class="chk"><input type="checkbox" data-mute="guitar"> ปิดกีตาร์</label>
+      <label class="chk"><input type="checkbox" data-mute="bass"> ปิดเบส</label>
+      <label class="chk"><input type="checkbox" data-mute="keys"> ปิดคีย์</label>
+      <label class="chk"><input type="checkbox" data-mute="other"> ปิดอื่นๆ</label>
+    </div>
+    <label class="chk">นอม
+      <select id="rNom"><option value="R">ขวา</option><option value="L">ซ้าย</option></select>
+    </label>
+    <label class="chk">นับเข้า
+      <select id="rCi"><option value="0">ไม่นับ</option><option value="1" selected>1 ห้อง</option><option value="2">2 ห้อง</option></select>
+    </label>
+    <button type="button" class="btn pri" id="btnMakeData">ทำดาต้า → ส่ง SetSod</button>
+    <span class="status" id="sRecipe">หลังแยก AI เลือกสูตรแล้วกดส่ง</span>
   </div>
 
   <div class="main">
@@ -248,11 +281,71 @@ async function startAi(){
     studio.state.title=title;
     // Keep source sampleRate (worker returns same-length PCM as input L/R)
     studio.loadStemChannels({title,src:d.src,channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),sampleRate:buf.sampleRate||44100});
-    toast('ได้แทร็ก: กลอง · กีตาร์ · เบส · คีย์บอร์ด · ดนตรีอื่นๆ');
+    applyRecipeMutes();
+    toast('ได้แทร็กแล้ว — เลือกสูตรดาต้า แล้วกด “ทำดาต้า → ส่ง SetSod”');
+    $('sRecipe').textContent='พร้อมทำดาต้า · '+title;
   }catch(e){$('sAi').textContent='❌ '+(e.message||e)}
   finally{aiBusy=false;$('goAi').disabled=!aiFile}
 }
 $('goAi').onclick=startAi;
+
+/* ---- สูตรดาต้า (เฟส 1) ---- */
+const PRE={none:[],drums:['drums'],bass:['bass'],guitar:['guitar','other'],keys:['keys']};
+function muteKeysFromUI(){return [...$('rMutes').querySelectorAll('input[data-mute]:checked')].map(x=>x.dataset.mute)}
+function setMuteUI(keys){const set=new Set(keys||[]);$('rMutes').querySelectorAll('input[data-mute]').forEach(inp=>{inp.checked=set.has(inp.dataset.mute)})}
+function applyRecipeMutes(){const keys=muteKeysFromUI();studio.applyStemMutes(keys);$('sRecipe').textContent=keys.length?'ปิด: '+keys.join(', '):'เปิดทุกแทร็กเสียง'}
+function setPreset(name){
+  const keys=PRE[name]||[];setMuteUI(keys);
+  $('rPresets').querySelectorAll('[data-pre]').forEach(b=>b.classList.toggle('on',b.dataset.pre===name));
+  applyRecipeMutes();
+  if(name==='guitar')$('sRecipe').textContent='กีตาร์มักอยู่ใน “อื่นๆ” — ปิดกีตาร์+อื่นๆ';
+}
+$('rPresets').onclick=e=>{const b=e.target.closest('[data-pre]');if(b)setPreset(b.dataset.pre)};
+$('rMutes').onchange=()=>{
+  $('rPresets').querySelectorAll('[data-pre]').forEach(b=>b.classList.remove('on'));
+  applyRecipeMutes();
+};
+try{const raw=localStorage.getItem('ssd-recipe');if(raw){const o=JSON.parse(raw);if(o&&Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci)}}catch(e){}
+function saveRecipe(){try{localStorage.setItem('ssd-recipe',JSON.stringify({mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value}))}catch(e){}}
+['rNom','rCi'].forEach(id=>$(id).onchange=saveRecipe);
+$('rMutes').addEventListener('change',saveRecipe);
+
+async function sendStemsToSetsod(files,meta){
+  const bc=new BroadcastChannel('bp-stems');let ok=false;
+  bc.onmessage=e=>{if(e.data?.t==='ack'){ok=true;toast('ส่งเข้า SetSod แล้ว');$('sRecipe').textContent='ส่งแล้ว · เปิดคลังใน SetSod'}}
+  bc.postMessage({t:'stems',title:studio.state.title,files,meta:meta||{}});
+  setTimeout(()=>{if(!ok)toast('เปิดแท็บ SetSod ไว้ แล้วกดส่งอีกครั้ง')},1800);
+}
+
+$('btnMakeData').onclick=async()=>{
+  if(!desk){toast('ใช้พีซีเท่านั้น');return}
+  const audio=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length);
+  if(!audio.length){toast('ยังไม่มีแทร็กเสียง — ลากเพลงแยก AI ก่อน');return}
+  applyRecipeMutes();saveRecipe();
+  const keep=audio.filter(t=>!t.mute);
+  if(!keep.length){toast('ปิดทุกแทร็กแล้ว — เปิดอย่างน้อย 1 แทร็กเสียง');return}
+  $('btnMakeData').disabled=true;$('sRecipe').textContent='⏳ เรนเดอร์ดาต้า…';
+  try{
+    const title=studio.state.title||'track';
+    const bpm=+(document.getElementById('bpm')?.value)||studio.state.bpm||120;
+    const out=[];
+    // นอม/คลิก ก่อน — SetSod จะจัดเป็นแทร็กคลิก
+    const clickBlob=studio.makeClickWav(studio.getDur()||1,bpm);
+    out.push(new File([clickBlob],`${title} (คลิก นอม).wav`,{type:'audio/wav'}));
+    for(const tr of keep){
+      const blob=await studio.renderTrackWav(tr);
+      if(!blob)continue;
+      out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
+    }
+    if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
+    const meta={s:$('rNom').value==='L'?'L':'R',ci:+$('rCi').value,cia:+$('rCi').value?0:0,b:bpm,from:'data-1.0.5'};
+    // cia: when user wants count-in bars via ci, leave cia unset (manual ci wins). When ci=0, set cia=0 to skip auto.
+    if(+meta.ci===0)meta.cia=0;else{delete meta.cia}
+    await sendStemsToSetsod(out,meta);
+    $('sRecipe').textContent=`ส่ง ${out.length} ไฟล์ · นอม${meta.s==='L'?'ซ้าย':'ขวา'} · นับเข้า ${meta.ci} ห้อง`;
+  }catch(e){toast('❌ '+(e.message||e));$('sRecipe').textContent='❌ ส่งไม่สำเร็จ'}
+  finally{$('btnMakeData').disabled=false}
+};
 
 $('fAud').onchange=async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
@@ -270,27 +363,12 @@ $('sendSs').onclick=async()=>{
   toast('กำลังเรนเดอร์แทร็ก…');
   const out=[];
   for(const tr of studio.state.tracks){
-    if(tr.type!=='audio'||!tr.clips.length)continue;
-    const len=Math.ceil(studio.getDur()*44100);
-    const off=new OfflineAudioContext(2,Math.max(len,44100),44100);
-    for(const c of tr.clips){
-      const buf=studio.state.buffers.get(c.buf);if(!buf)continue;
-      const s=off.createBufferSource();s.buffer=buf;s.connect(off.destination);s.start(c.start,c.offset,c.dur);
-    }
-    const rendered=await off.startRendering();
-    const n=rendered.length,b=new DataView(new ArrayBuffer(44+n*4));
-    const w=(o,s)=>[...s].forEach((ch,i)=>b.setUint8(o+i,ch.charCodeAt(0)));
-    w(0,'RIFF');b.setUint32(4,36+n*4,true);w(8,'WAVEfmt ');b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,2,true);
-    b.setUint32(24,44100,true);b.setUint32(28,176400,true);b.setUint16(32,4,true);b.setUint16(34,16,true);w(36,'data');b.setUint32(40,n*4,true);
-    const L=rendered.getChannelData(0),R=rendered.numberOfChannels>1?rendered.getChannelData(1):L;
-    for(let i=0,o=44;i<n;i++,o+=4){b.setInt16(o,Math.max(-1,Math.min(1,L[i]))*32767,true);b.setInt16(o+2,Math.max(-1,Math.min(1,R[i]))*32767,true)}
-    out.push(new File([b],`${studio.state.title||'track'} (${tr.name}).wav`,{type:'audio/wav'}));
+    if(tr.type!=='audio'||!tr.clips.length||tr.mute)continue;
+    const blob=await studio.renderTrackWav(tr);
+    if(blob)out.push(new File([blob],`${studio.state.title||'track'} (${tr.name}).wav`,{type:'audio/wav'}));
   }
-  if(out.length<2){toast('ต้องมีแทร็กเสียงอย่างน้อย 2 แทร็ก');return}
-  const bc=new BroadcastChannel('bp-stems');let ok=false;
-  bc.onmessage=e=>{if(e.data?.t==='ack'){ok=true;toast('ส่งเข้า SetSod แล้ว')}};
-  bc.postMessage({t:'stems',title:studio.state.title,files:out});
-  setTimeout(()=>{if(!ok)toast('เปิดแท็บ SetSod ไว้ แล้วกดส่งอีกครั้ง — หรือใช้มิกซ์ดาวน์')},1500);
+  if(out.length<2){toast('ต้องมีแทร็กเสียงอย่างน้อย 2 แทร็ก (ที่ไม่ถูกปิด)');return}
+  await sendStemsToSetsod(out,{s:$('rNom').value==='L'?'L':'R',ci:+$('rCi').value,b:+(document.getElementById('bpm')?.value)||studio.state.bpm||120,from:'data-send'});
 };
 </script>
 </body>

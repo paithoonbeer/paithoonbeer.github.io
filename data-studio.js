@@ -749,12 +749,72 @@ export function createStudio(ui){
     return files;
   }
 
+  // v1.0.5: mute by stem key (drums/guitar/bass/keys/other) for ทำดาต้า presets
+  function applyStemMutes(muteKeys){
+    const set=new Set(muteKeys||[]);
+    for(const tr of state.tracks){
+      if(tr.type!=='audio')continue;
+      tr.mute=!!(tr.stem&&set.has(tr.stem));
+    }
+    applyLiveMix();renderAll();
+  }
+
+  async function renderTrackWav(tr,sr){
+    if(!tr||tr.type!=='audio'||!tr.clips.length)return null;
+    sr=sr||44100;
+    const length=Math.max(1,Math.ceil(dur()*sr));
+    const off=new OfflineAudioContext(2,length,sr);
+    const g=off.createGain();g.gain.value=(tr.vol||100)/100;g.connect(off.destination);
+    for(const c of tr.clips){
+      const buf=state.buffers.get(c.buf);if(!buf)continue;
+      const src=off.createBufferSource();src.buffer=buf;
+      const cg=off.createGain();cg.gain.value=c.gain||1;
+      src.connect(cg);cg.connect(g);
+      const maxOff=Math.max(0,buf.duration-1e-4);
+      const off0=clamp(c.offset||0,0,maxOff);
+      const dur0=Math.min(Math.max(0.001,c.dur||0),Math.max(0.001,buf.duration-off0));
+      try{src.start(c.start,off0,dur0)}catch(e){}
+    }
+    const rendered=await off.startRendering();
+    return bufToWavBlob(rendered);
+  }
+
+  function bufToWavBlob(buf){
+    const ch=buf.numberOfChannels,sr=buf.sampleRate,n=buf.length;
+    const b=new DataView(new ArrayBuffer(44+n*ch*2));
+    const w=(o,s)=>[...s].forEach((c,i)=>b.setUint8(o+i,c.charCodeAt(0)));
+    w(0,'RIFF');b.setUint32(4,36+n*ch*2,true);w(8,'WAVEfmt ');
+    b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,ch,true);
+    b.setUint32(24,sr,true);b.setUint32(28,sr*ch*2,true);b.setUint16(32,ch*2,true);b.setUint16(34,16,true);
+    w(36,'data');b.setUint32(40,n*ch*2,true);
+    let o=44;for(let i=0;i<n;i++)for(let c=0;c<ch;c++){b.setInt16(o,clamp(buf.getChannelData(c)[i],-1,1)*32767,true);o+=2}
+    return new Blob([b.buffer],{type:'audio/wav'});
+  }
+
+  function makeClickWav(durSec,bpm,sr){
+    sr=sr||44100;bpm=Math.max(40,Math.min(240,+bpm||120));
+    const n=Math.max(1,Math.ceil((durSec||1)*sr));
+    const L=new Float32Array(n),R=new Float32Array(n);
+    const spb=60/bpm,clickN=Math.floor(0.012*sr);
+    for(let beat=0;beat*spb<durSec+1e-6;beat++){
+      const at=Math.floor(beat*spb*sr);if(at>=n)break;
+      const accent=(beat%4)===0,freq=accent?2000:1200,amp=accent?0.55:0.32;
+      for(let i=0;i<clickN&&at+i<n;i++){
+        const env=1-i/clickN,v=Math.sin(2*Math.PI*freq*i/sr)*env*amp;
+        L[at+i]=v;R[at+i]=v;
+      }
+    }
+    const buf=ac().createBuffer(2,n,sr);buf.copyToChannel(L,0);buf.copyToChannel(R,1);
+    return bufToWavBlob(buf);
+  }
+
   function syncToolsInit(){syncTools()}
 
   // public API
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
+    applyStemMutes,renderTrackWav,makeClickWav,bufToWavBlob,
     async boot(){bind();
       // scroll sync: track headers follow the lane vertical scroll
       try{const wrap=$('lanesWrap'),heads=$('trackHeads');

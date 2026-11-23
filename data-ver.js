@@ -2,8 +2,9 @@
  * Bump DATAV here (and meta bp-data in data.html) when shipping Data-only changes.
  * Do NOT bump public/app.js APPV / sw cache / APK for Data-only work.
  */
-export const DATAV='1.0.4';
+export const DATAV='1.0.5';
 export const DATACHG={
+  '1.0.5':'สูตรดาต้า: ลากเพลง→แยก AI→เลือกเอาเครื่องออก + นอม + นับเข้า → ส่งเข้า SetSod อัตโนมัติ',
   '1.0.4':'เส้นเล่นสูงครบทุกแทร็ก · ▶ แทร็กสลับต่อเนื่องไม่รีสตาร์ท · กราฟสูงขึ้น · หุบ/กางมิกเซอร์ได้',
   '1.0.3':'เวฟฟอร์มละเอียดขึ้น · ปุ่ม ▶ ทุกแทร็ก · M/S ตัดเสียงตอนเล่นได้จริง · สเต็มหลัก: กลอง กีตาร์ เบส คีย์บอร์ด ดนตรีอื่นๆ',
   '1.0.2':'QA10: กัน Play พังจาก trim ติดลบ · Undo หลังแยก stems ไม่หายเสียง · โหลดโปรเจกต์ล่าสุดอัตโนมัติ · ซิงก์เลื่อนแทร็ก · โปรเจกต์ใหม่ล้าง undo',
