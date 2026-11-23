@@ -1,6 +1,6 @@
 {
-  "build": 103,
-  "ver": "1.0.109",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b103-1.0.109/SetSod.apk",
-  "notes": "1.0.109: แก้สลับนอมพีซี→มือถือแบบเรียลไทม์ — ชื่อตามแล้วแต่นอมถูกวงเขียนทับกลับ"
+  "build": 104,
+  "ver": "1.0.110",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b104-1.0.110/SetSod.apk",
+  "notes": "1.0.110: แก้ด่วน: สลับนอมพีซี→มือถือตามจริง (กันเคสชื่อตามแต่นอมค้างฝั่งเก่า)"
 }
