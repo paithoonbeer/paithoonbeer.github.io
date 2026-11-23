@@ -1,6 +1,6 @@
 {
-  "build": 108,
-  "ver": "1.0.114",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b108-1.0.114/SetSod.apk",
-  "notes": "1.0.114: แก้ สลับนอมให้สมาชิกในวงเห็นในคลัง (ไอโฟน/แอนดรอย/พีซี) — ไม่ใช่แค่บัญชีเดียวกัน"
+  "build": 109,
+  "ver": "1.0.115",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b109-1.0.115/SetSod.apk",
+  "notes": "1.0.115: แก้สมาชิกยังไม่เห็นสลับนอมในคลัง — จับคู่เพลงออนไลน์/ชื่อเดียวกันกับ band.sw แล้วโชว์ badge สลับ"
 }
