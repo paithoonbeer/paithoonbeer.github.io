@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.2">
+<meta name="bp-data" content="1.0.3">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -24,6 +24,8 @@ button,input{font:inherit;color:inherit}
 .btn.icon{min-width:34px}
 .tb{min-height:22px;min-width:26px;padding:0 6px;font-size:11px;border:1px solid var(--line);border-radius:5px;background:#182028;cursor:pointer}
 .tb.on{background:#3a2a2a;color:#f88}
+.tb.play{color:var(--acc);font-size:10px}
+.tb.play.on{background:#1a3a2a;color:#6fdfb0;border-color:#2a5a40}
 .shell{display:grid;grid-template-rows:auto auto 1fr auto auto;height:100vh}
 .top{display:flex;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(180deg,#171c22,#10141a);border-bottom:1px solid var(--line)}
 .brand{font-size:17px;font-weight:700;letter-spacing:-.02em}
@@ -45,21 +47,21 @@ button,input{font:inherit;color:inherit}
 .ruler-wrap{overflow:hidden;background:#0a0c0f;border-bottom:1px solid var(--line)}
 #ruler{display:block;height:28px}
 .heads{overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
-.thead{height:72px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px}
+.thead{height:84px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px}
 .thead.on{background:#18222c}
 .tn{display:flex;align-items:center;gap:6px}
 .tn i{width:8px;height:8px;border-radius:50%}
 .tn input{flex:1;min-width:0;background:transparent;border:0;border-bottom:1px solid transparent;padding:0}
 .tn input:focus{border-bottom-color:#3d4a55;outline:0}
 .tn b{font-size:9px;color:var(--mut);font-family:JetMono,monospace}
-.tops{display:flex;gap:3px}
+.tops{display:flex;gap:3px;flex-wrap:wrap}
 .lanes-wrap{overflow:auto;position:relative;background:#0d1116;cursor:crosshair;grid-row:2;grid-column:2}
 .lanes{position:relative;min-height:100%}
-.lane{height:72px;border-bottom:1px solid #1a222b;position:relative}
+.lane{height:84px;border-bottom:1px solid #1a222b;position:relative}
 .lane.on{background:rgba(61,186,138,.03)}
-.clip{position:absolute;top:8px;height:56px;border:1px solid;border-radius:4px;overflow:hidden;cursor:grab}
+.clip{position:absolute;top:8px;height:68px;border:1px solid;border-radius:4px;overflow:hidden;cursor:grab}
 .clip.sel{outline:1px solid #fff8}
-.cw{display:block;pointer-events:none}
+.cw{display:block;pointer-events:none;width:100%;height:100%}
 .clab{position:absolute;left:6px;top:2px;font-size:10px;text-shadow:0 1px 2px #000;pointer-events:none}
 .hndl{position:absolute;top:0;bottom:0;width:6px;background:transparent;cursor:ew-resize}
 .hndl.L{left:0}.hndl.R{right:0}
@@ -238,7 +240,7 @@ async function startAi(){
     studio.state.title=title;
     // Keep source sampleRate (worker returns same-length PCM as input L/R)
     studio.loadStemChannels({title,src:d.src,channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),sampleRate:buf.sampleRate||44100});
-    toast('ได้แทร็ก stems + MIDI พร้อมแต่ง');
+    toast('ได้แทร็ก: กลอง · กีตาร์ · เบส · คีย์บอร์ด · ดนตรีอื่นๆ');
   }catch(e){$('sAi').textContent='❌ '+(e.message||e)}
   finally{aiBusy=false;$('goAi').disabled=!aiFile}
 }

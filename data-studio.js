@@ -53,10 +53,17 @@ export function createStudio(ui){
     return await ac().decodeAudioData(ab.slice(0));
   }
   function putBuf(buf){const id=uid();state.buffers.set(id,buf);return id}
-  function peaksOf(buf,bins=1200){
+  // denser min/max peaks for smoother waveforms (pairs: min,max per bin)
+  function peaksOf(buf,bins){
     const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
-    const n=L.length,step=Math.max(1,Math.floor(n/bins)),out=new Float32Array(Math.ceil(n/step));
-    for(let i=0,o=0;i<n;i+=step,o++){let m=0;const e=Math.min(n,i+step);for(let j=i;j<e;j+=8)m=Math.max(m,Math.abs(L[j]),Math.abs(R[j]));out[o]=m}
+    const n=L.length;
+    const nb=Math.max(800,Math.min(bins||Math.ceil(buf.duration*400),12000));
+    const step=Math.max(1,Math.floor(n/nb)),out=new Float32Array(Math.ceil(n/step)*2);
+    for(let i=0,o=0;i<n;i+=step,o+=2){
+      let mn=1,mx=-1;const e=Math.min(n,i+step);
+      for(let j=i;j<e;j+=2){const v=(L[j]+(R[j]||L[j]))*0.5;if(v<mn)mn=v;if(v>mx)mx=v}
+      if(mn>mx){mn=0;mx=0}out[o]=mn;out[o+1]=mx;
+    }
     return out;
   }
 
@@ -74,21 +81,36 @@ export function createStudio(ui){
     });
   }
 
+  function bufFromLR(L,R,sampleRate){
+    const a=ac(),n=L.length,b=a.createBuffer(2,n,sampleRate||44100);
+    b.copyToChannel(L,0);b.copyToChannel((R&&R.length===n)?R:L,1);return b;
+  }
+  function mixLR(a,b){
+    const n=a.L.length,L=new Float32Array(n),R=new Float32Array(n);
+    for(let i=0;i<n;i++){L[i]=clamp((a.L[i]||0)+(b.L[i]||0),-1,1);R[i]=clamp((a.R[i]||0)+(b.R[i]||0),-1,1)}
+    return {L,R};
+  }
+  // Fixed band layout: กลอง · กีตาร์ · เบส · คีย์บอร์ด · ดนตรีอื่นๆ
+  // AI (htdemucs 4s) → drums/bass/other/vocals — guitar & keys stay empty for import
   function loadStemChannels({title,src,channels,sampleRate}){
-    mark();state.title=title||state.title;
-    // replace tracks with stem tracks — keep prior buffers so Undo can restore previous clips
-    state.tracks=[];
-    const a=ac();
-    src.forEach((s,i)=>{
-      const {L,R}=channels[i];
-      const n=L.length,b=a.createBuffer(2,n,sampleRate||44100);
-      b.copyToChannel(L,0);b.copyToChannel(R.length===n?R:L,1);
-      const id=putBuf(b);
-      const names={drums:'กลอง',bass:'เบส',other:'ดนตรีอื่นๆ',vocals:'ร้อง'};
-      const t=addAudioTrack(names[s]||s,COLS[i%COLS.length]);
-      t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:s});
+    mark();state.title=title||state.title;state.tracks=[];
+    const by={};src.forEach((s,i)=>{by[s]=channels[i]});
+    const sr=sampleRate||44100;
+    const other=by.other&&by.vocals?mixLR(by.other,by.vocals):(by.other||by.vocals||null);
+    const layout=[
+      {key:'drums',name:'กลอง',ch:by.drums,color:COLS[0]},
+      {key:'guitar',name:'กีตาร์',ch:null,color:COLS[5]},
+      {key:'bass',name:'เบส',ch:by.bass,color:COLS[1]},
+      {key:'keys',name:'คีย์บอร์ด',ch:null,color:COLS[7]},
+      {key:'other',name:'ดนตรีอื่นๆ',ch:other,color:COLS[2]}
+    ];
+    layout.forEach(row=>{
+      const t=addAudioTrack(row.name,row.color);t.stem=row.key;
+      if(row.ch&&row.ch.L){
+        const b=bufFromLR(row.ch.L,row.ch.R,sr);const id=putBuf(b);
+        t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:row.key});
+      }
     });
-    addMidiTrack('เมโลดี้');
     renderAll();
   }
 
@@ -117,8 +139,21 @@ export function createStudio(ui){
     if(state.playing)state.offset=clamp(ac().currentTime-state.t0+state.offset,0,dur());
     for(const n of state.nodes){try{n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
-    state.nodes=[];state.fx=[];state.playing=false;
+    state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;
     ui.onTransport?.(state);
+  }
+  // Live mute/solo/vol — schedule every track, silence via gain (so M mid-play actually cuts)
+  function applyLiveMix(){
+    if(!state.playing||!state.live)return;
+    const a=ac(),t=a.currentTime;
+    const anySolo=state.tracks.some(x=>x.solo);
+    const only=state.playOnly;
+    for(const tr of state.tracks){
+      const L=state.live.get(tr.id);if(!L)continue;
+      const silent=only!=null?(tr.id!==only):(tr.mute||(anySolo&&!tr.solo));
+      try{L.muteG.gain.setTargetAtTime(silent?0:1,t,0.02)}catch(e){}
+      try{L.volG.gain.setTargetAtTime((tr.vol||0)/100,t,0.02)}catch(e){}
+    }
   }
 
   function scheduleAudioClip(tr,clip,chain,when,playFrom){
@@ -156,14 +191,15 @@ export function createStudio(ui){
     }
   }
 
-  function startPlay(from){
+  function startPlay(from,opt){
     stopPlay();
     const a=ac();if(a.state==='suspended')a.resume();
     state.offset=from!=null?from:state.offset;
     state.t0=a.currentTime;state.playing=true;
+    state.playOnly=(opt&&opt.onlyTrackId)||null;
+    state.live=new Map();
     const master=a.createGain();master.gain.value=1;
     const merge=a.createGain();
-    // shared reverb bus
     const revGain=a.createGain();revGain.gain.value=1;
     const conv=a.createConvolver();
     if(!state._imp){const len=a.sampleRate*1.2,imp=a.createBuffer(2,len,a.sampleRate);for(let c=0;c<2;c++){const d=imp.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.8)}state._imp=imp}
@@ -173,17 +209,28 @@ export function createStudio(ui){
 
     const anySolo=state.tracks.some(t=>t.solo);
     const when=a.currentTime+0.03;
+    // Schedule ALL tracks; mute/solo only gates gain so M/S works while playing
     state.tracks.forEach(tr=>{
-      if(tr.mute||(anySolo&&!tr.solo))return;
       const chain=makeTrackChain(tr);
-      chain.dry.connect(merge);
+      const muteG=a.createGain();
+      const silent=state.playOnly?(tr.id!==state.playOnly):(tr.mute||(anySolo&&!tr.solo));
+      muteG.gain.value=silent?0:1;
+      chain.dry.connect(muteG);muteG.connect(merge);
       chain.conv.connect(revGain);
       state.fx.push(chain);
+      state.live.set(tr.id,{muteG,volG:chain.input});
       if(tr.type==='audio')tr.clips.forEach(c=>scheduleAudioClip(tr,c,chain,when,state.offset));
       else scheduleMidi(tr,chain,when,state.offset);
     });
     if(state.metro)scheduleMetro(when,state.offset);
     ui.onTransport?.(state);tick();
+  }
+  function playTrack(i){
+    const tr=state.tracks[i];if(!tr)return;
+    state.sel.track=i;
+    if(state.offset>=dur()-0.05)state.offset=0;
+    startPlay(state.offset,{onlyTrackId:tr.id});
+    renderTracks();renderMixer();
   }
 
   function scheduleMetro(when,playFrom){
@@ -272,15 +319,18 @@ export function createStudio(ui){
     const box=$('trackHeads');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'');el.dataset.i=i;
-      el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${tr.name}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b></div>
+      const soloPlay=state.playing&&state.playOnly===tr.id;
+      el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b></div>
         <div class="tops">
-          <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
-          <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}">S</button>
+          <button type="button" class="tb play ${soloPlay?'on':''}" data-tp="${i}" title="เล่นเฉพาะแทร็กนี้" aria-label="เล่น ${escAttr(tr.name)}">▶</button>
+          <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="ปิดเสียง">M</button>
+          <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
           <button type="button" class="tb" data-arm="${i}" title="เลือกแทร็ก">◎</button>
         </div>`;
       box.appendChild(el);
     });
   }
+  function escAttr(s){return String(s??'').replace(/[&"<>]/g,c=>({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]))}
 
   function renderArrange(){
     const lanes=$('lanes'),ruler=$('ruler');if(!lanes)return;
@@ -332,17 +382,38 @@ export function createStudio(ui){
   }
 
   function drawClipWave(cv,clip,color){
-    const dpr=devicePixelRatio||1,w=cv.parentElement.clientWidth,h=56;
+    const dpr=devicePixelRatio||1,w=cv.parentElement.clientWidth,h=64;
     if(w<2)return;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.width=w+'px';cv.style.height=h+'px';
     const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
-    g.clearRect(0,0,w,h);g.fillStyle=color;g.globalAlpha=.9;
+    g.clearRect(0,0,w,h);
     const pk=clip.peaks;if(!pk||!pk.length)return;
-    const mid=h/2,buf=state.buffers.get(clip.buf);const total=buf?buf.duration:clip.dur;
+    const mid=h/2,pad=2,amp=mid-pad;
+    const buf=state.buffers.get(clip.buf);const total=buf?buf.duration:clip.dur;
     const a0=clip.offset/total,a1=(clip.offset+clip.dur)/total;
+    const pairs=pk.length>=4&&pk.length%2===0; // min/max pairs
+    const bins=pairs?pk.length/2:pk.length;
+    // soft fill
+    g.beginPath();g.moveTo(0,mid);
     for(let x=0;x<w;x++){
-      const u=a0+(a1-a0)*(x/w);const i=Math.min(pk.length-1,Math.floor(u*pk.length));
-      const y=pk[i]* (mid-3);g.fillRect(x,mid-y,1,Math.max(1,y*2));
+      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
+      let mx;if(pairs)mx=Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mx=pk[bi]||0;
+      g.lineTo(x,mid-Math.max(0.5,mx*amp));
     }
+    for(let x=w-1;x>=0;x--){
+      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
+      let mn;if(pairs)mn=-Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mn=-(pk[bi]||0);
+      g.lineTo(x,mid-Math.min(-0.5,mn*amp));
+    }
+    g.closePath();
+    g.globalAlpha=.55;g.fillStyle=color;g.fill();
+    // crisp center stroke
+    g.beginPath();
+    for(let x=0;x<w;x++){
+      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
+      let mx;if(pairs)mx=Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mx=pk[bi]||0;
+      const y=mid-mx*amp;if(x)g.lineTo(x,y);else g.moveTo(x,y);
+    }
+    g.globalAlpha=.95;g.strokeStyle=color;g.lineWidth=1;g.stroke();
   }
 
   function renderPlayhead(t){
@@ -359,7 +430,9 @@ export function createStudio(ui){
         <label class="fx">Hi <input type="range" min="-12" max="12" value="${tr.eq.hi}" data-eq="hi" data-i="${i}"></label>
         <label class="fx">Rev <input type="range" min="0" max="100" value="${(tr.rev||0)*100}" data-rev="${i}"></label>
         <input class="fader" type="range" min="0" max="100" value="${tr.vol}" data-vol="${i}">
-        <div class="ms"><button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
+        <div class="ms">
+        <button type="button" class="tb play" data-tp="${i}" title="เล่นเฉพาะแทร็ก">▶</button>
+        <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
         <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}">S</button></div>`;
       box.appendChild(el);
     });
@@ -429,23 +502,24 @@ export function createStudio(ui){
     $('btnNew').onclick=()=>{if(!state.dirty||confirm('เริ่มโปรเจกต์ใหม่?'))newProject()};
 
     $('trackHeads').onclick=e=>{
-      const rn=e.target.closest('[data-rn]');
-      const m=e.target.closest('[data-m]');if(m){mark();const i=+m.dataset.m;state.tracks[i].mute=!state.tracks[i].mute;renderAll();return}
-      const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;renderAll();return}
+      const tp=e.target.closest('[data-tp]');if(tp){playTrack(+tp.dataset.tp);return}
+      const m=e.target.closest('[data-m]');if(m){mark();const i=+m.dataset.m;state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+      const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const arm=e.target.closest('[data-arm]');if(arm){state.sel.track=+arm.dataset.arm;renderAll();return}
-      const th=e.target.closest('.thead');if(th){state.sel.track=+th.dataset.i;renderAll()}
+      const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){state.sel.track=+th.dataset.i;renderAll()}
     };
     $('trackHeads').onchange=e=>{const rn=e.target.closest('[data-rn]');if(rn){state.tracks[+rn.dataset.rn].name=rn.value;renderMixer()}};
 
     $('mixer').oninput=e=>{
       const i=+e.target.dataset.i;
-      if(e.target.dataset.vol!=null){state.tracks[+e.target.dataset.vol].vol=+e.target.value}
+      if(e.target.dataset.vol!=null){state.tracks[+e.target.dataset.vol].vol=+e.target.value;applyLiveMix()}
       if(e.target.dataset.eq){state.tracks[i].eq[e.target.dataset.eq]=+e.target.value}
       if(e.target.dataset.rev!=null){state.tracks[+e.target.dataset.rev].rev=+e.target.value/100}
     };
     $('mixer').onclick=e=>{
-      const m=e.target.closest('[data-m]');if(m){mark();state.tracks[+m.dataset.m].mute=!state.tracks[+m.dataset.m].mute;renderAll()}
-      const s=e.target.closest('[data-s]');if(s){mark();state.tracks[+s.dataset.s].solo=!state.tracks[+s.dataset.s].solo;renderAll()}
+      const m=e.target.closest('[data-m]');if(m){mark();state.tracks[+m.dataset.m].mute=!state.tracks[+m.dataset.m].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+      const s=e.target.closest('[data-s]');if(s){mark();state.tracks[+s.dataset.s].solo=!state.tracks[+s.dataset.s].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+      const tp=e.target.closest('[data-tp]');if(tp)playTrack(+tp.dataset.tp);
     };
 
     // arrange interactions
@@ -552,7 +626,9 @@ export function createStudio(ui){
   function newProject(){
     stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.offset=0;state.dirty=false;
     state.undo.length=0;state.redo.length=0;
-    addAudioTrack('แทร็ก 1');addMidiTrack('เมโลดี้');renderAll();
+    [['กลอง',COLS[0],'drums'],['กีตาร์',COLS[5],'guitar'],['เบส',COLS[1],'bass'],['คีย์บอร์ด',COLS[7],'keys'],['ดนตรีอื่นๆ',COLS[2],'other']]
+      .forEach(([n,c,k])=>{const t=addAudioTrack(n,c);t.stem=k});
+    renderAll();
   }
 
   /* persistence — buffers as wav in idb */
@@ -647,7 +723,7 @@ export function createStudio(ui){
   // public API
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
-    addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
+    playTrack,applyLiveMix,addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
     async boot(){bind();
       // scroll sync: track headers follow the lane vertical scroll
       try{const wrap=$('lanesWrap'),heads=$('trackHeads');
