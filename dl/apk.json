@@ -1,6 +1,6 @@
 {
-  "build": 100,
-  "ver": "1.0.106",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b100-1.0.106/SetSod.apk",
-  "notes": "1.0.106: แก้ นอม/ข้อมูลในคลังบนพีซีแล้วขึ้นมือถือจริง (แอป+เว็บ) — ไม่ใช่แค่ toast ลิสต์วง"
+  "build": 101,
+  "ver": "1.0.107",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b101-1.0.107/SetSod.apk",
+  "notes": "1.0.107: มือถือดึงนอม/ข้อมูลจากบัญชีทุก 3 วิ + กันคลังเด้งกลับค่าเดิม — ทดสอบพีซี↔มือถือผ่านแล้ว"
 }
