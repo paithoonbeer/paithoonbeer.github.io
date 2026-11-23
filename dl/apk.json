@@ -1,6 +1,6 @@
 {
-  "build": 96,
-  "ver": "1.0.102",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b96-1.0.102/SetSod.apk",
-  "notes": "1.0.102: เซฟข้อมูลเพลง/นอม/คีย์บนพีซีแล้วส่งเข้าวงให้อัตโนมัติ — มือถือทุกคนในทีมเห็น"
+  "build": 97,
+  "ver": "1.0.103",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b97-1.0.103/SetSod.apk",
+  "notes": "1.0.103: กฎใหม่: มีวงแล้วทุกการแก้ส่งเข้าทีมทันที · ไม่มีวงแก้เฉพาะบัญชีตัวเอง"
 }
