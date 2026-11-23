@@ -1,6 +1,6 @@
 {
-  "build": 99,
-  "ver": "1.0.105",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b99-1.0.105/SetSod.apk",
-  "notes": "1.0.105: บัญชี Google เดียวกัน: แก้ นอม/ข้อมูลเพลงบนพีซีแล้วขึ้นแอปและเว็บมือถือทันที (ไม่ต้องรีเฟรช)"
+  "build": 100,
+  "ver": "1.0.106",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b100-1.0.106/SetSod.apk",
+  "notes": "1.0.106: แก้ นอม/ข้อมูลในคลังบนพีซีแล้วขึ้นมือถือจริง (แอป+เว็บ) — ไม่ใช่แค่ toast ลิสต์วง"
 }
