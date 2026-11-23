@@ -1,6 +1,6 @@
 {
-  "build": 105,
-  "ver": "1.0.111",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b105-1.0.111/SetSod.apk",
-  "notes": "1.0.111: แก้ 17นาที: สลับนอมพีซี→มือถือทันที (c19 realtime + กันวงเขียนนอมกลับ)"
+  "build": 106,
+  "ver": "1.0.112",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b106-1.0.112/SetSod.apk",
+  "notes": "1.0.112: แก้จริง สลับ L/R (สลับนอม) จากพีซีขึ้นมือถือทันที — ซิงก์ prefs.swap ผ่าน c19"
 }

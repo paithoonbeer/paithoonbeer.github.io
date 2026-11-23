@@ -42,13 +42,16 @@ export async function head(){if(!user)return null;const h=await F.getDoc(F.doc(d
 // v1.0.105: listen to own backup head — same Google account on phone (APK + mobile web) pulls META when PC saves
 export async function headSub(cb,err){await TO(init(),8000);const u=uidOf();
  return rsub(()=>F.doc(db,'bp_users',u),s=>{if(!s.exists())return cb(null);const d=s.data()||{};cb({...d,ts:d.ts&&d.ts.toDate?d.ts.toDate():null})},err)}
-// v1.0.108/111: lite META via bk/c19 — realtime นอม/title for same Google account (PC↔มือถือ)
-export async function metaPut19(metaObj){if(!user)throw new Error('not signed in');const j=JSON.stringify({v:2,meta:metaObj||{},t:Date.now()});if(j.length>900000)throw new Error('meta too large');
+// v1.0.108/112: lite META+prefs (สลับ L/R) via bk/c19 — realtime same Google account PC↔มือถือ
+export async function metaPut19(payload){if(!user)throw new Error('not signed in');
+ const meta=payload&&payload.meta!==undefined?payload.meta:(payload||{});
+ const prefs=payload&&payload.prefs&&typeof payload.prefs==='object'?payload.prefs:{};
+ const j=JSON.stringify({v:3,meta:meta||{},prefs,t:Date.now()});if(j.length>900000)throw new Error('meta too large');
  await TO(F.setDoc(F.doc(db,'bp_users',user.uid,'bk','c19'),{i:19,d:j,ts:F.serverTimestamp()}),10000);return {bytes:j.length}}
 export async function metaGet19(){if(!user)return null;const c=await TO(F.getDoc(F.doc(db,'bp_users',user.uid,'bk','c19')),8000);if(!c.exists())return null;
- try{const o=JSON.parse(c.data().d||'null');if(!o||typeof o.meta!=='object'||!o.meta)return null;return {meta:o.meta,t:+o.t||0}}catch(e){return null}}
+ try{const o=JSON.parse(c.data().d||'null');if(!o||typeof o.meta!=='object'||!o.meta)return null;return {meta:o.meta,prefs:o.prefs&&typeof o.prefs==='object'?o.prefs:{},t:+o.t||0}}catch(e){return null}}
 export async function metaSub19(cb,err){await TO(init(),8000);const u=uidOf();
- return rsub(()=>F.doc(db,'bp_users',u,'bk','c19'),s=>{if(!s.exists())return cb(null);try{const o=JSON.parse((s.data()||{}).d||'null');if(!o||typeof o.meta!=='object'||!o.meta)return cb(null);cb({meta:o.meta,t:+o.t||0})}catch(e){cb(null)}},err)}
+ return rsub(()=>F.doc(db,'bp_users',u,'bk','c19'),s=>{if(!s.exists())return cb(null);try{const o=JSON.parse((s.data()||{}).d||'null');if(!o||typeof o.meta!=='object'||!o.meta)return cb(null);cb({meta:o.meta,prefs:o.prefs&&typeof o.prefs==='object'?o.prefs:{},t:+o.t||0})}catch(e){cb(null)}},err)}
 export async function catGet(){if(!user)throw new Error('not signed in');await TO(init(),8000);const s=await TO(F.getDoc(F.doc(db,'bp_cat','v1')),10000);if(!s.exists())return null;const d=s.data()||{};if(typeof d.j==='string'){try{const a=JSON.parse(d.j);return Array.isArray(a)?a:null}catch(e){return null}}return Array.isArray(d.songs)?d.songs:null}
 // v1.0.100: per-chunk timeout + size gate + yield before JSON.parse (meta sync used to freeze UI)
 export async function restore(){const h=await TO(head(),10000);if(!h)return null;let s='';for(let i=0;i<h.n;i++){const c=await TO(F.getDoc(F.doc(db,'bp_users',user.uid,'bk','c'+i)),15000);if(!c.exists())throw new Error('backup incomplete');s+=c.data().d}
