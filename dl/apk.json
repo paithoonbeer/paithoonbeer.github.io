@@ -1,6 +1,6 @@
 {
-  "build": 94,
-  "ver": "1.0.100",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b94-1.0.100/SetSod.apk",
-  "notes": "1.0.100: แก้กดปุ่มไม่ติดตอนออกจากไลฟ์→สตูดิโอ + กันซิงก์คลาวด์ค้างจอหลังล็อกอิน"
+  "build": 95,
+  "ver": "1.0.101",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b95-1.0.101/SetSod.apk",
+  "notes": "1.0.101: บังคับอัปเดตแคชอัตโนมัติ — แก้กรณีรีเฟรชแล้วค้างเวอร์ชันพัง (คลังว่าง · กดไม่ติด)"
 }
