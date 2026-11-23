@@ -1,6 +1,6 @@
 {
-  "build": 90,
-  "ver": "1.0.96",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b90-1.0.96/SetSod.apk",
-  "notes": "1.0.96: SetSod Data Studio: แต่งเพลงได้ — ตัด/ย้ายคลิป · อัดเสียง · MIDI เปียโนโรล · EQ/Reverb · เมโทรนอม/ลูป · บันทึกโปรเจกต์ · มิกซ์ดาวน์"
+  "build": 91,
+  "ver": "1.0.97",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b91-1.0.97/SetSod.apk",
+  "notes": "1.0.97: แก้ชื่อ/ศิลปินแล้วอัปเดตในลิสต์ทันที (ไม่ค้างชื่อเก่า เช่น Silly Fools)"
 }
