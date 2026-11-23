@@ -1,6 +1,6 @@
 {
-  "build": 92,
-  "ver": "1.0.98",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b92-1.0.98/SetSod.apk",
-  "notes": "1.0.98: แก้ข้างนอมบนพีซีแล้วซิงก์ไปมือถืออัตโนมัติ (บัญชี Google เดียวกัน) — ไม่ต้องส่งเข้าวงทีละเพลง"
+  "build": 93,
+  "ver": "1.0.99",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b93-1.0.99/SetSod.apk",
+  "notes": "1.0.99: แก้แอปค้างหลังอัปเดต 1.0.98 (คลังว่าง · กดปุ่มไม่ติด) — พีซีและมือถือ"
 }
