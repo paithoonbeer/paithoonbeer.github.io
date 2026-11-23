@@ -1,6 +1,6 @@
 {
-  "build": 101,
-  "ver": "1.0.107",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b101-1.0.107/SetSod.apk",
-  "notes": "1.0.107: มือถือดึงนอม/ข้อมูลจากบัญชีทุก 3 วิ + กันคลังเด้งกลับค่าเดิม — ทดสอบพีซี↔มือถือผ่านแล้ว"
+  "build": 102,
+  "ver": "1.0.108",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b102-1.0.108/SetSod.apk",
+  "notes": "1.0.108: แก้ นอมเพลงเดียว (เช่น 17นาที) พีซี→มือถือ: ซิงก์ META เบา + ไม่ให้ล็อกอินมือถือทับค่าจากพีซี"
 }
