@@ -1,6 +1,6 @@
 {
-  "build": 107,
-  "ver": "1.0.113",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b107-1.0.113/SetSod.apk",
-  "notes": "1.0.113: ซิงก์ตั้งค่าเพลงทั้งหมดพีซี↔มือถือ realtime (คีย์± เทมโป ตัด นับเข้า มิกซ์ สลับ L/R ฯลฯ)"
+  "build": 108,
+  "ver": "1.0.114",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b108-1.0.114/SetSod.apk",
+  "notes": "1.0.114: แก้ สลับนอมให้สมาชิกในวงเห็นในคลัง (ไอโฟน/แอนดรอย/พีซี) — ไม่ใช่แค่บัญชีเดียวกัน"
 }
