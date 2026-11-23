@@ -1163,7 +1163,10 @@ function metaPaint97(id){const s=SONG.get(id);if(!s)return;const title=s.t||'',a
   else if(a)a.remove()};
  const setT=(row,tWant)=>{const t=row.querySelector('.i > .t')||row.querySelector('.ti > .t')||row.querySelector('.sct')||row.querySelector('.t');if(!t||!tWant)return;
   const cur=t.textContent||'',m=cur.match(/^(\d+\.\s)/);const want=(m?m[1]:'')+tWant;if(cur!==want)t.textContent=want};
- const setB=(row,sid)=>{const song=SONG.get(sid);if(!song)return;const want=badge(song,pref(sid));let b=row.querySelector('.sb');
+ const setB=(row,sid)=>{
+  // Dual "ลิสต์วันนี้" rows are compact — library .sb chips steal width and truncate titles. Strip if leftover.
+  if(row.classList&&row.classList.contains('dd-song')||(row.closest&&row.closest('#dd-list,#op-dualui'))){const x=row.querySelector('.sb');if(x)x.remove();return}
+  const song=SONG.get(sid);if(!song)return;const want=badge(song,pref(sid));let b=row.querySelector('.sb');
   if(!want){if(b)b.remove();return}if(b){if(b.outerHTML!==want)b.outerHTML=want}else{const host=row.querySelector('.m')||row.querySelector('.i')||row;if(host)host.insertAdjacentHTML('afterbegin',want)}};
  for(const sid of ids){
   document.querySelectorAll('#main [data-play],#main [data-cue],#main [data-meta]').forEach(el=>{
@@ -6314,6 +6317,7 @@ setInterval(async()=>{try{if(typeof BD==='undefined'||!CLD.user)return;const on=
       }).join('')||'<div class="dd-empty">ลิสต์ว่าง — ค้นด้านบนเพื่อแทรกเพลง หรือแตะไอคอนคลังในช่องค้น</div>';
     }
     box.querySelectorAll('.dd-song').forEach(function(row){
+      const dead=row.querySelector('.sb');if(dead)dead.remove();
       const id=row.dataset.sid,ona=DUAL.a.id===id,onb=DUAL.b.id===id,pa=ona&&DUAL.a.playing,pb=onb&&DUAL.b.playing;
       row.classList.toggle('ona',ona);row.classList.toggle('onb',onb);row.classList.toggle('now',!!(pa||pb));
       const ba=row.querySelector('[data-to="A"]'),bb=row.querySelector('[data-to="B"]');
