@@ -33,13 +33,20 @@ export async function emailIn(em,pw){await init();return A.signInWithEmailAndPas
 export async function emailUp(em,pw){await init();return A.createUserWithEmailAndPassword(auth,em,pw)}
 export async function reset(em){await init();return A.sendPasswordResetEmail(auth,em)}
 export async function out(){await init();return A.signOut(auth)}
-export async function backup(payload,dev,ver){if(!user)throw new Error('not signed in');const s=JSON.stringify(payload),n=Math.max(1,Math.ceil(s.length/CH));if(n>20)throw new Error('backup too large');
+export async function backup(payload,dev,ver){if(!user)throw new Error('not signed in');const s=JSON.stringify(payload),n=Math.max(1,Math.ceil(s.length/CH));
+ // v1.0.108: c19 reserved for lite META (metaPut19) — full backup uses c0–c18 only
+ if(n>19)throw new Error('backup too large');
  const b=F.writeBatch(db);for(let i=0;i<n;i++)b.set(F.doc(db,'bp_users',user.uid,'bk','c'+i),{i,d:s.slice(i*CH,(i+1)*CH),ts:F.serverTimestamp()});
  b.set(F.doc(db,'bp_users',user.uid),{n,ver:String(ver).slice(0,20),dev:String(dev).slice(0,200),bytes:s.length,ts:F.serverTimestamp()});await b.commit();return {n,bytes:s.length}}
 export async function head(){if(!user)return null;const h=await F.getDoc(F.doc(db,'bp_users',user.uid));if(!h.exists())return null;const d=h.data();return {...d,ts:d.ts&&d.ts.toDate?d.ts.toDate():null}}
 // v1.0.105: listen to own backup head — same Google account on phone (APK + mobile web) pulls META when PC saves
 export async function headSub(cb,err){await TO(init(),8000);const u=uidOf();
  return rsub(()=>F.doc(db,'bp_users',u),s=>{if(!s.exists())return cb(null);const d=s.data()||{};cb({...d,ts:d.ts&&d.ts.toDate?d.ts.toDate():null})},err)}
+// v1.0.108: lite META sync via bk/c19 (rules already allow c0–c19). Fast path for นอม/title — no full backup restore.
+export async function metaPut19(metaObj){if(!user)throw new Error('not signed in');const j=JSON.stringify({v:1,meta:metaObj||{},t:Date.now()});if(j.length>900000)throw new Error('meta too large');
+ await TO(F.setDoc(F.doc(db,'bp_users',user.uid,'bk','c19'),{i:19,d:j,ts:F.serverTimestamp()}),10000);return {bytes:j.length}}
+export async function metaGet19(){if(!user)return null;const c=await TO(F.getDoc(F.doc(db,'bp_users',user.uid,'bk','c19')),8000);if(!c.exists())return null;
+ try{const o=JSON.parse(c.data().d||'null');if(!o||typeof o.meta!=='object'||!o.meta)return null;return {meta:o.meta,t:+o.t||0}}catch(e){return null}}
 export async function catGet(){if(!user)throw new Error('not signed in');await TO(init(),8000);const s=await TO(F.getDoc(F.doc(db,'bp_cat','v1')),10000);if(!s.exists())return null;const d=s.data()||{};if(typeof d.j==='string'){try{const a=JSON.parse(d.j);return Array.isArray(a)?a:null}catch(e){return null}}return Array.isArray(d.songs)?d.songs:null}
 // v1.0.100: per-chunk timeout + size gate + yield before JSON.parse (meta sync used to freeze UI)
 export async function restore(){const h=await TO(head(),10000);if(!h)return null;let s='';for(let i=0;i<h.n;i++){const c=await TO(F.getDoc(F.doc(db,'bp_users',user.uid,'bk','c'+i)),15000);if(!c.exists())throw new Error('backup incomplete');s+=c.data().d}
