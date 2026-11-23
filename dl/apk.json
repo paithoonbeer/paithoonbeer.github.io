@@ -1,6 +1,6 @@
 {
-  "build": 97,
-  "ver": "1.0.103",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b97-1.0.103/SetSod.apk",
-  "notes": "1.0.103: กฎใหม่: มีวงแล้วทุกการแก้ส่งเข้าทีมทันที · ไม่มีวงแก้เฉพาะบัญชีตัวเอง"
+  "build": 98,
+  "ver": "1.0.104",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b98-1.0.104/SetSod.apk",
+  "notes": "1.0.104: แก้ นอม/ชื่อ บนพีซีแล้วขึ้นมือถือทีมแบบเรียลไทม์ (เหมือนสลับเพลงในลิสต์)"
 }
