@@ -1,6 +1,6 @@
 {
-  "build": 102,
-  "ver": "1.0.108",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b102-1.0.108/SetSod.apk",
-  "notes": "1.0.108: แก้ นอมเพลงเดียว (เช่น 17นาที) พีซี→มือถือ: ซิงก์ META เบา + ไม่ให้ล็อกอินมือถือทับค่าจากพีซี"
+  "build": 103,
+  "ver": "1.0.109",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b103-1.0.109/SetSod.apk",
+  "notes": "1.0.109: แก้สลับนอมพีซี→มือถือแบบเรียลไทม์ — ชื่อตามแล้วแต่นอมถูกวงเขียนทับกลับ"
 }
