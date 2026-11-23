@@ -38,7 +38,9 @@ export async function backup(payload,dev,ver){if(!user)throw new Error('not sign
  b.set(F.doc(db,'bp_users',user.uid),{n,ver:String(ver).slice(0,20),dev:String(dev).slice(0,200),bytes:s.length,ts:F.serverTimestamp()});await b.commit();return {n,bytes:s.length}}
 export async function head(){if(!user)return null;const h=await F.getDoc(F.doc(db,'bp_users',user.uid));if(!h.exists())return null;const d=h.data();return {...d,ts:d.ts&&d.ts.toDate?d.ts.toDate():null}}
 export async function catGet(){if(!user)throw new Error('not signed in');await TO(init(),8000);const s=await TO(F.getDoc(F.doc(db,'bp_cat','v1')),10000);if(!s.exists())return null;const d=s.data()||{};if(typeof d.j==='string'){try{const a=JSON.parse(d.j);return Array.isArray(a)?a:null}catch(e){return null}}return Array.isArray(d.songs)?d.songs:null}
-export async function restore(){const h=await head();if(!h)return null;let s='';for(let i=0;i<h.n;i++){const c=await F.getDoc(F.doc(db,'bp_users',user.uid,'bk','c'+i));if(!c.exists())throw new Error('backup incomplete');s+=c.data().d}
+// v1.0.100: per-chunk timeout + size gate + yield before JSON.parse (meta sync used to freeze UI)
+export async function restore(){const h=await TO(head(),10000);if(!h)return null;let s='';for(let i=0;i<h.n;i++){const c=await TO(F.getDoc(F.doc(db,'bp_users',user.uid,'bk','c'+i)),15000);if(!c.exists())throw new Error('backup incomplete');s+=c.data().d}
+ if(s.length>8e6)throw new Error('backup too large');await new Promise(r=>setTimeout(r,0));
  return {head:h,data:JSON.parse(s)}}
 // v1.48 short setlist links: sl/{id} = {d: compressed payload, t}. Public get by id, create-only (see fbcfg/firestore.rules).
 // v1.77: Spark daily quota → 'resource-exhausted'. Tell the app once (friendly banner, pause background sync) instead of hanging.
