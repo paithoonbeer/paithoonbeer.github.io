@@ -21,7 +21,14 @@ export function createStudio(ui){
   };
 
   function ac(){if(!state.ac)state.ac=new (window.AudioContext||window.webkitAudioContext)();return state.ac}
-  function dur(){let d=4;for(const t of state.tracks)for(const c of t.clips)d=Math.max(d,c.start+c.dur);return d}
+  function dur(){
+    let d=4;
+    for(const t of state.tracks){
+      for(const c of t.clips)d=Math.max(d,c.start+c.dur);
+      for(const n of t.notes)d=Math.max(d,(n.t||0)+(n.d||0));
+    }
+    return d;
+  }
   function beatSec(){return 60/state.bpm}
   function snapT(t){if(!state.snap)return t;const g=beatSec()/4;return Math.round(t/g)*g}
   function mark(){state.undo.push(snapshot());if(state.undo.length>40)state.undo.shift();state.redo.length=0;state.dirty=true}
@@ -58,10 +65,12 @@ export function createStudio(ui){
       mark();
       const id=putBuf(buf);
       const tr=state.tracks[trackIdx]||addAudioTrack(file.name.replace(/\.[^.]+$/,''));
-      if(trackIdx<0) {/* new */}
-      const t=state.tracks.find(x=>x.id===tr.id);
+      const t=state.tracks.find(x=>x.id===tr.id)||tr;
       t.clips.push({id:uid(),buf:id,start:snapT(atTime||0),offset:0,dur:buf.duration,gain:1,peaks:peaksOf(buf),name:file.name});
       state.dirty=true;renderAll();return t;
+    }).catch(e=>{
+      ui.toast?.('นำเข้าเสียงไม่ได้: '+(e.message||e.name||'ไฟล์ไม่รองรับ'));
+      throw e;
     });
   }
 
@@ -204,9 +213,17 @@ export function createStudio(ui){
     if(state.recording){await stopRecord();return}
     mark();
     let tr=state.tracks[state.sel.track];
-    if(!tr||tr.type!=='audio'){tr=addAudioTrack('อัดเสียง');state.sel.track=state.tracks.length-1}
-    const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false}});
-    const a=ac();const src=a.createMediaStreamSource(stream);
+    if(!tr||tr.type!=='audio'){tr=addAudioTrack('อัดเสียง');state.sel.track=state.tracks.length-1;renderTracks()}
+    let stream;
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false}});
+    }catch(e){
+      ui.toast?.('ไมโครโฟนไม่พร้อม: '+(e.message||e.name||e));
+      ui.onTransport?.(state);
+      return;
+    }
+    const a=ac();if(a.state==='suspended')await a.resume();
+    const src=a.createMediaStreamSource(stream);
     const rec=a.createScriptProcessor(4096,1,1);
     const chunks=[];const silent=a.createGain();silent.gain.value=0;
     rec.onaudioprocess=e=>{if(!state.recording)return;chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))};
@@ -218,15 +235,15 @@ export function createStudio(ui){
   async function stopRecord(){
     if(!state.recording)return;
     state.recording=false;
-    const {stream,proc,src,chunks,start,tr}=state.rec;
-    try{proc.disconnect();src.disconnect();stream.getTracks().forEach(t=>t.stop())}catch(e){}
-    if(!chunks.length){ui.onTransport?.(state);return}
+    const {stream,proc,src,chunks,start,tr}=state.rec||{};
+    try{proc?.disconnect();src?.disconnect();stream?.getTracks?.().forEach(t=>t.stop())}catch(e){}
+    if(!chunks?.length){state.rec={};ui.onTransport?.(state);return}
     const len=chunks.reduce((a,c)=>a+c.length,0);
     const buf=ac().createBuffer(1,len,ac().sampleRate);
     const d=buf.getChannelData(0);let o=0;for(const c of chunks){d.set(c,o);o+=c.length}
     const id=putBuf(buf);
-    const track=state.tracks.find(t=>t.id===tr);
-    track.clips.push({id:uid(),buf:id,start:snapT(start),offset:0,dur:buf.duration,gain:1,peaks:peaksOf(buf),name:'อัด'});
+    const track=state.tracks.find(t=>t.id===tr)||addAudioTrack('อัดเสียง');
+    track.clips.push({id:uid(),buf:id,start:snapT(start||0),offset:0,dur:buf.duration,gain:1,peaks:peaksOf(buf),name:'อัด'});
     state.rec={};ui.onTransport?.(state);renderAll();
   }
 
@@ -352,8 +369,11 @@ export function createStudio(ui){
   function renderPiano(){
     const roll=$('pianoRoll');if(!roll)return;
     const tr=state.tracks[state.sel.track];
-    roll.hidden=!(tr&&tr.type==='midi');
-    if(roll.hidden)return;
+    const show=!!(tr&&tr.type==='midi');
+    roll.hidden=!show;
+    roll.classList.toggle('on',show);
+    ui.onTransport?.(state);
+    if(!show)return;
     const grid=$('pianoGrid'),keys=$('pianoKeys');
     const W=Math.max(1200,Math.ceil((dur()+4)*state.pxPerSec));
     const keyH=14,midiLo=36,midiHi=84,rows=midiHi-midiLo;
@@ -382,7 +402,12 @@ export function createStudio(ui){
 
   /* events wiring */
   function bind(){
-    $('btnPlay').onclick=()=>{if(state.playing){stopPlay();renderPlayhead(state.offset)}else startPlay()};
+    $('btnPlay').onclick=()=>{
+      if(state.playing){stopPlay();renderPlayhead(state.offset);return}
+      // if parked at/past the end, restart from 0 (DAW-style)
+      if(state.offset>=dur()-0.05)state.offset=0;
+      startPlay();
+    };
     $('btnStop').onclick=()=>{stopPlay();state.offset=0;renderPlayhead(0);ui.onTransport?.(state)};
     $('btnRec').onclick=()=>toggleRecord();
     $('btnUndo').onclick=undo;$('btnRedo').onclick=redo;
@@ -435,9 +460,12 @@ export function createStudio(ui){
     wrap.addEventListener('dblclick',e=>{
       const lane=e.target.closest('.lane');if(!lane)return;
       const ti=+lane.dataset.ti;state.sel.track=ti;
+      const tr=state.tracks[ti];
+      if(tr&&tr.type==='midi'){renderAll();return} // MIDI lanes: select only
       const input=document.createElement('input');input.type='file';input.accept='audio/*';
       input.onchange=async()=>{const f=input.files[0];if(!f)return;const rect=$('lanes').getBoundingClientRect();
-        const at=(e.clientX-rect.left+wrap.scrollLeft)/state.pxPerSec;await importAudioToTrack(ti,f,snapT(at))};
+        const at=(e.clientX-rect.left+wrap.scrollLeft)/state.pxPerSec;
+        try{await importAudioToTrack(ti,f,snapT(at))}catch(_){}};
       input.click();
     });
 
@@ -450,22 +478,37 @@ export function createStudio(ui){
       const tr=state.tracks[ti];const clip=tr.clips.find(c=>c.id===cid);
       state.sel.track=ti;state.sel.clip=cid;renderArrange();
       const mode=h?h.classList.contains('L')?'L':'R':'move';
-      drag={ti,cid,mode,x0:e.clientX,start0:clip.start,dur0:clip.dur,off0:clip.offset};
+      mark(); // snapshot before drag/trim so undo can revert
+      drag={ti,cid,mode,x0:e.clientX,start0:clip.start,dur0:clip.dur,off0:clip.offset,moved:false};
       clipEl.setPointerCapture(e.pointerId);
     });
     wrap.addEventListener('pointermove',e=>{
       if(!drag)return;
       const dx=(e.clientX-drag.x0)/state.pxPerSec;
+      if(Math.abs(dx)<1e-4)return;
+      drag.moved=true;
       const tr=state.tracks[drag.ti];const clip=tr.clips.find(c=>c.id===drag.cid);if(!clip)return;
+      const buf=state.buffers.get(clip.buf);const maxDur=buf?buf.duration:Infinity;
       if(drag.mode==='move'){clip.start=snapT(Math.max(0,drag.start0+dx))}
-      else if(drag.mode==='R'){clip.dur=snapT(Math.max(0.05,drag.dur0+dx))}
+      else if(drag.mode==='R'){
+        const nd=snapT(Math.max(0.05,drag.dur0+dx));
+        clip.dur=Math.min(nd,Math.max(0.05,maxDur-clip.offset));
+      }
       else if(drag.mode==='L'){
-        const ns=snapT(Math.max(0,drag.start0+dx));const delta=ns-clip.start;
-        if(clip.dur-delta>0.05){clip.start=ns;clip.offset=drag.off0+delta;clip.dur=drag.dur0-delta}
+        const ns=snapT(Math.max(0,drag.start0+dx));const delta=ns-drag.start0;
+        const noff=Math.max(0,drag.off0+delta);
+        const ndur=drag.dur0-delta;
+        if(ndur>0.05&&noff+ndur<=maxDur+1e-6){clip.start=ns;clip.offset=noff;clip.dur=ndur}
       }
       renderArrange();
     });
-    wrap.addEventListener('pointerup',()=>{if(drag){mark();drag=null}});
+    wrap.addEventListener('pointerup',()=>{
+      if(!drag)return;
+      // if never moved, drop the empty undo snapshot
+      if(!drag.moved&&state.undo.length)state.undo.pop();
+      else state.dirty=true;
+      drag=null;
+    });
 
     // piano roll draw
     const grid=$('pianoGrid');
@@ -473,7 +516,12 @@ export function createStudio(ui){
       const tr=state.tracks[state.sel.track];if(!tr||tr.type!=='midi')return;
       const noteEl=e.target.closest('.pnote');
       if(noteEl){state.sel.notes=[noteEl.dataset.id];renderPiano();return}
-      if(state.tool!=='draw'&&state.tool!=='select')return;
+      // only Draw tool creates notes — Select just clears selection / seeks
+      if(state.tool!=='draw'){
+        if(state.tool==='select'){state.sel.notes=[];const rect=grid.getBoundingClientRect();
+          seek(snapT((e.clientX-rect.left+grid.parentElement.scrollLeft)/state.pxPerSec));renderPiano()}
+        return;
+      }
       const rect=grid.getBoundingClientRect();
       const x=e.clientX-rect.left+grid.parentElement.scrollLeft;
       const y=e.clientY-rect.top+grid.parentElement.scrollTop;
@@ -482,7 +530,6 @@ export function createStudio(ui){
       mark();
       const note={id:uid(),n:clamp(n,36,83),t,d:beatSec()/2,v:0.9};
       tr.notes.push(note);state.sel.notes=[note.id];renderArrange();renderPiano();
-      // preview
       previewNote(note.n);
     });
     $('pianoKeys').onmousedown=e=>{const k=e.target.closest('[data-n]');if(k)previewNote(+k.dataset.n)};
@@ -517,21 +564,25 @@ export function createStudio(ui){
     await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(proj,'current');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});
     // also download .ssd.json sidecar without audio for safety + full blob download
     const blob=new Blob([JSON.stringify(proj)],{type:'application/json'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(state.title||'project')+'.setsod-project.json';a.click();
+    const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=(state.title||'project')+'.setsod-project.json';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
     state.dirty=false;ui.toast?.('บันทึกโปรเจกต์แล้ว');
   }
   async function loadProjectFile(file){
-    const proj=JSON.parse(await file.text());
-    stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;
-    const a=ac();
-    for(const id of Object.keys(proj.bufs||{})){
-      const u8=new Uint8Array(proj.bufs[id]);
-      const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
-      state.buffers.set(id,buf);
-    }
-    // rebuild peaks
-    for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
-    renderAll();ui.toast?.('โหลดโปรเจกต์แล้ว');
+    try{
+      const proj=JSON.parse(await file.text());
+      if(!proj||typeof proj!=='object')throw new Error('ไฟล์ไม่ใช่โปรเจกต์ SetSod Data');
+      stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;
+      const a=ac();
+      for(const id of Object.keys(proj.bufs||{})){
+        const raw=proj.bufs[id];
+        const u8=raw instanceof Uint8Array?raw:new Uint8Array(raw);
+        const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
+        state.buffers.set(id,buf);
+      }
+      for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
+      state.dirty=false;renderAll();ui.toast?.('โหลดโปรเจกต์แล้ว');
+    }catch(e){ui.toast?.('เปิดโปรเจกต์ไม่ได้: '+(e.message||e))}
   }
   async function bufToWavArray(buf){
     const n=buf.length,ch=buf.numberOfChannels,sr=buf.sampleRate;
@@ -571,7 +622,8 @@ export function createStudio(ui){
     const rendered=await off.startRendering();
     const wav=await bufToWavArray(rendered);
     const blob=new Blob([new Uint8Array(wav)],{type:'audio/wav'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=(state.title||'mix')+'-mixdown.wav';a.click();
+    const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=(state.title||'mix')+'-mixdown.wav';a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),4000);
     ui.toast?.('มิกซ์ดาวน์เสร็จ');
   }
 
@@ -592,12 +644,13 @@ export function createStudio(ui){
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
     async boot(){bind();newProject();syncToolsInit();
-      // keyboard
+      // keyboard — guard non-Element targets (Document/Window) that lack .matches
       addEventListener('keydown',e=>{
-        if(e.target.matches('input,textarea'))return;
+        const t=e.target;
+        if(t&&typeof t.matches==='function'&&t.matches('input,textarea'))return;
         if(e.code==='Space'){e.preventDefault();$('btnPlay').click()}
         if(e.key==='Delete'||e.key==='Backspace')deleteSelected();
-        if(e.key==='s'&&!e.metaKey&&!e.ctrlKey){state.tool='split';syncTools()}
+        if(e.key==='s'&&!e.metaKey&&!e.ctrlKey){state.tool='split';syncTools();splitAt(state.offset)}
         if(e.key==='v'){state.tool='select';syncTools()}
         if(e.key==='d'){state.tool='draw';syncTools()}
         if((e.metaKey||e.ctrlKey)&&e.key==='z'){e.preventDefault();undo()}

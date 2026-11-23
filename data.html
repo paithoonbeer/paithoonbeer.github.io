@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.0">
+<meta name="bp-data" content="1.0.1">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -236,7 +236,8 @@ async function startAi(){
     });
     $('sAi').textContent='✅ แยกเสร็จ — โหลดเข้าสตูดิโอแล้ว';
     studio.state.title=title;
-    studio.loadStemChannels({title,src:d.src,channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),sampleRate:44100});
+    // Keep source sampleRate (worker returns same-length PCM as input L/R)
+    studio.loadStemChannels({title,src:d.src,channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),sampleRate:buf.sampleRate||44100});
     toast('ได้แทร็ก stems + MIDI พร้อมแต่ง');
   }catch(e){$('sAi').textContent='❌ '+(e.message||e)}
   finally{aiBusy=false;$('goAi').disabled=!aiFile}
@@ -245,9 +246,14 @@ $('goAi').onclick=startAi;
 
 $('fAud').onchange=async e=>{
   const f=e.target.files[0];e.target.value='';if(!f)return;
-  const i=studio.state.sel.track;
-  await studio.importAudioToTrack(i,f,studio.state.offset);
-  toast('นำเข้าเสียงแล้ว');
+  try{
+    const i=studio.state.sel.track;
+    // if selected track is MIDI, add/use an audio track
+    const tr=studio.state.tracks[i];
+    const idx=(!tr||tr.type!=='audio')?-1:i;
+    await studio.importAudioToTrack(idx,f,studio.state.offset);
+    toast('นำเข้าเสียงแล้ว');
+  }catch(err){/* toast already shown in studio */}
 };
 
 $('sendSs').onclick=async()=>{

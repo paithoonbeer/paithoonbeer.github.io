@@ -2,8 +2,9 @@
  * Bump DATAV here (and meta bp-data in data.html) when shipping Data-only changes.
  * Do NOT bump public/app.js APPV / sw cache / APK for Data-only work.
  */
-export const DATAV='1.0.0';
+export const DATAV='1.0.1';
 export const DATACHG={
+  '1.0.1':'แก้บั๊ก QA: Undo ไม่พัง · เปียโนโรลโชว์เมื่อเลือก MIDI · Play เริ่มใหม่ถ้าอยู่ท้าย · ความยาวโปรเจกต์นับโน้ต · นำเข้า/ไมค์แจ้ง error · ตัดคลิปไม่เกินบัฟเฟอร์ · เลือกไม่สร้างโน้ต · S ตัดที่หัวเล่น',
   '1.0.0':'สตูดิโอแต่งเพลงแยกเวอร์ชันจากแอปเล่นสด — ตัดต่อ · MIDI · อัดเสียง · EQ/Reverb · บันทึกโปรเจกต์ · มิกซ์ดาวน์'
 };
 export function dataWhatsNew(v=DATAV){return DATACHG[v]||''}
