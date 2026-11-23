@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="2.0">
+<meta name="bp-data" content="1.0.0">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -28,7 +28,11 @@ button,input{font:inherit;color:inherit}
 .top{display:flex;align-items:center;gap:10px;padding:8px 12px;background:linear-gradient(180deg,#171c22,#10141a);border-bottom:1px solid var(--line)}
 .brand{font-size:17px;font-weight:700;letter-spacing:-.02em}
 .brand small{display:block;font-size:11px;color:var(--mut);font-weight:400}
+.verpill{font-family:JetMono,ui-monospace,monospace;font-size:11px;color:var(--acc);border:1px solid #2a4a3c;background:#12201a;border-radius:999px;padding:4px 10px;white-space:nowrap}
+.verpill b{font-weight:600}
 .spacer{flex:1}
+.wn{display:none;margin:0;padding:8px 12px;background:#14241c;border-bottom:1px solid #2a4a3c;color:#b8e0cc;font-size:12px}
+.wn.on{display:block}
 .clock{font-family:JetMono,ui-monospace,monospace;font-size:18px;min-width:7ch}
 .gate{display:none;margin:0;padding:8px 12px;background:#1a1510;color:#e8d2b0;border-bottom:1px solid #5a4030}
 .gate.on{display:block}
@@ -85,9 +89,11 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 </head>
 <body>
 <div class="gate" id="gate">สตูดิโอนี้ใช้ได้บนคอมพิวเตอร์เท่านั้น — มือถือใช้แอป SetSod สำหรับเล่นสด</div>
+<div class="wn" id="dataWn"></div>
 <div class="shell" id="app">
   <header class="top">
-    <div class="brand">SetSod Data <small>สตูดิโอแต่งเพลง · ตัดต่อ · MIDI · อัดเสียง</small></div>
+    <div class="brand">SetSod Data <small>สตูดิโอแต่งเพลง · ตัดต่อ · MIDI · อัดเสียง · แยกจากแอปเล่นสด</small></div>
+    <span class="verpill" id="dataVer" title="เวอร์ชัน SetSod Data (แยกจากแอป SetSod)">Data <b>—</b></span>
     <button type="button" class="btn icon" id="btnPlay" title="Space">▶</button>
     <button type="button" class="btn icon" id="btnStop">■</button>
     <button type="button" class="btn icon" id="btnRec" title="อัดเสียง" style="color:#f66">●</button>
@@ -148,13 +154,30 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 
 <script type="module">
 import {createStudio} from './data-studio.js';
+import {DATAV,DATACHG,dataWhatsNew} from './data-ver.js';
 
 const desk=matchMedia('(pointer:fine)').matches&&!/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)&&innerWidth>=900;
 if(!desk)document.getElementById('gate').classList.add('on');
 let gpuF16=false;
 (async()=>{try{const p=navigator.gpu?.requestAdapter?.();if(!p)return;const a=await Promise.race([p,new Promise(r=>setTimeout(()=>r(null),2000))]);gpuF16=!!(a&&a.features?.has('shader-f16'))}catch(e){}})();
 
-function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast._);toast._=setTimeout(()=>t.classList.remove('on'),2500)}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast._);toast._=setTimeout(()=>t.classList.remove('on'),2800)}
+
+/* Own version line — independent of SetSod APPV / APK */
+document.getElementById('dataVer').innerHTML='Data <b>'+DATAV+'</b>';
+document.title='SetSod Data '+DATAV;
+{const prev=localStorage.getItem('ssd-ver');
+ if(prev!==DATAV){
+   const note=(dataWhatsNew(DATAV)||DATACHG[DATAV]||'').replace(/</g,'');
+   const wn=document.getElementById('dataWn');
+   wn.innerHTML=(prev
+     ?`<b>อัปเดต SetSod Data ${DATAV}</b> — ${note||'มีปรับปรุงใหม่'}`
+     :`<b>SetSod Data ${DATAV}</b> — เวอร์ชันแยกจากแอปเล่นสด · ${note}`)+
+     ` <button type="button" class="btn" id="wnOk" style="margin-left:8px;min-height:26px">รับทราบ</button>`;
+   wn.classList.add('on');
+   document.getElementById('wnOk').onclick=()=>{wn.classList.remove('on');localStorage.setItem('ssd-ver',DATAV)};
+ }
+}
 
 const studio=createStudio({
   root:document.getElementById('app'),
@@ -166,10 +189,11 @@ const studio=createStudio({
     document.getElementById('btnRec').classList.toggle('on',!!st.recording);
     document.getElementById('pianoRoll').classList.toggle('on',!!(st.tracks[st.sel.track]?.type==='midi'));
   },
-  onProject(st){document.getElementById('sOut').textContent=`${st.title} · ${st.tracks.length} แทร็ก · BPM ${st.bpm}${st.dirty?' · ยังไม่บันทึก':''}`}
+  onProject(st){document.getElementById('sOut').textContent=`Data ${DATAV} · ${st.title} · ${st.tracks.length} แทร็ก · BPM ${st.bpm}${st.dirty?' · ยังไม่บันทึก':''}`}
 });
 await studio.boot();
 window.__ssd=studio;
+window.__DATAV=DATAV;
 
 /* AI split → load as tracks */
 const $=id=>document.getElementById(id);
