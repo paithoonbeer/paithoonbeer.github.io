@@ -37,6 +37,9 @@ export async function backup(payload,dev,ver){if(!user)throw new Error('not sign
  const b=F.writeBatch(db);for(let i=0;i<n;i++)b.set(F.doc(db,'bp_users',user.uid,'bk','c'+i),{i,d:s.slice(i*CH,(i+1)*CH),ts:F.serverTimestamp()});
  b.set(F.doc(db,'bp_users',user.uid),{n,ver:String(ver).slice(0,20),dev:String(dev).slice(0,200),bytes:s.length,ts:F.serverTimestamp()});await b.commit();return {n,bytes:s.length}}
 export async function head(){if(!user)return null;const h=await F.getDoc(F.doc(db,'bp_users',user.uid));if(!h.exists())return null;const d=h.data();return {...d,ts:d.ts&&d.ts.toDate?d.ts.toDate():null}}
+// v1.0.105: listen to own backup head — same Google account on phone (APK + mobile web) pulls META when PC saves
+export async function headSub(cb,err){await TO(init(),8000);const u=uidOf();
+ return rsub(()=>F.doc(db,'bp_users',u),s=>{if(!s.exists())return cb(null);const d=s.data()||{};cb({...d,ts:d.ts&&d.ts.toDate?d.ts.toDate():null})},err)}
 export async function catGet(){if(!user)throw new Error('not signed in');await TO(init(),8000);const s=await TO(F.getDoc(F.doc(db,'bp_cat','v1')),10000);if(!s.exists())return null;const d=s.data()||{};if(typeof d.j==='string'){try{const a=JSON.parse(d.j);return Array.isArray(a)?a:null}catch(e){return null}}return Array.isArray(d.songs)?d.songs:null}
 // v1.0.100: per-chunk timeout + size gate + yield before JSON.parse (meta sync used to freeze UI)
 export async function restore(){const h=await TO(head(),10000);if(!h)return null;let s='';for(let i=0;i<h.n;i++){const c=await TO(F.getDoc(F.doc(db,'bp_users',user.uid,'bk','c'+i)),15000);if(!c.exists())throw new Error('backup incomplete');s+=c.data().d}
