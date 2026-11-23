@@ -1,6 +1,6 @@
 {
-  "build": 109,
-  "ver": "1.0.115",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b109-1.0.115/SetSod.apk",
-  "notes": "1.0.115: แก้สมาชิกยังไม่เห็นสลับนอมในคลัง — จับคู่เพลงออนไลน์/ชื่อเดียวกันกับ band.sw แล้วโชว์ badge สลับ"
+  "build": 110,
+  "ver": "1.0.116",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b110-1.0.116/SetSod.apk",
+  "notes": "1.0.116: แก้เว็บค้าง/ช้าหลังอัปเดตสลับนอมทีม — ไม่สแกนคลังทั้งก้อนทุก 5 วิ"
 }
