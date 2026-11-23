@@ -1,6 +1,6 @@
 {
-  "build": 98,
-  "ver": "1.0.104",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b98-1.0.104/SetSod.apk",
-  "notes": "1.0.104: แก้ นอม/ชื่อ บนพีซีแล้วขึ้นมือถือทีมแบบเรียลไทม์ (เหมือนสลับเพลงในลิสต์)"
+  "build": 99,
+  "ver": "1.0.105",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b99-1.0.105/SetSod.apk",
+  "notes": "1.0.105: บัญชี Google เดียวกัน: แก้ นอม/ข้อมูลเพลงบนพีซีแล้วขึ้นแอปและเว็บมือถือทันที (ไม่ต้องรีเฟรช)"
 }
