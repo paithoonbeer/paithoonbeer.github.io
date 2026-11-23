@@ -42,7 +42,7 @@ export async function head(){if(!user)return null;const h=await F.getDoc(F.doc(d
 // v1.0.105: listen to own backup head — same Google account on phone (APK + mobile web) pulls META when PC saves
 export async function headSub(cb,err){await TO(init(),8000);const u=uidOf();
  return rsub(()=>F.doc(db,'bp_users',u),s=>{if(!s.exists())return cb(null);const d=s.data()||{};cb({...d,ts:d.ts&&d.ts.toDate?d.ts.toDate():null})},err)}
-// v1.0.108/112: lite META+prefs (สลับ L/R) via bk/c19 — realtime same Google account PC↔มือถือ
+// v1.0.108/113: lite META+prefs (คีย์/เทมโป/สลับ L/R/ตัด/…) via bk/c19 — realtime same Google account PC↔มือถือ
 export async function metaPut19(payload){if(!user)throw new Error('not signed in');
  const meta=payload&&payload.meta!==undefined?payload.meta:(payload||{});
  const prefs=payload&&payload.prefs&&typeof payload.prefs==='object'?payload.prefs:{};
