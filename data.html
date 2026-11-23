@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.3">
+<meta name="bp-data" content="1.0.4">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -42,12 +42,12 @@ button,input{font:inherit;color:inherit}
 .import .drop{flex:1;min-width:200px;border:1px dashed #3a4650;border-radius:8px;padding:8px 12px;text-align:center;cursor:pointer}
 .import .drop.over{border-color:var(--acc);background:rgba(61,186,138,.08)}
 .status{color:var(--mut);font-family:JetMono,ui-monospace,monospace;font-size:11px}
-.main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 1fr minmax(160px,28vh);min-height:0}
+.main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 1fr auto;min-height:0}
 .corner{background:#0a0c0f;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .ruler-wrap{overflow:hidden;background:#0a0c0f;border-bottom:1px solid var(--line)}
 #ruler{display:block;height:28px}
 .heads{overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
-.thead{height:84px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px}
+.thead{height:120px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px;box-sizing:border-box}
 .thead.on{background:#18222c}
 .tn{display:flex;align-items:center;gap:6px}
 .tn i{width:8px;height:8px;border-radius:50%}
@@ -57,17 +57,23 @@ button,input{font:inherit;color:inherit}
 .tops{display:flex;gap:3px;flex-wrap:wrap}
 .lanes-wrap{overflow:auto;position:relative;background:#0d1116;cursor:crosshair;grid-row:2;grid-column:2}
 .lanes{position:relative;min-height:100%}
-.lane{height:84px;border-bottom:1px solid #1a222b;position:relative}
+.lane{height:120px;border-bottom:1px solid #1a222b;position:relative;box-sizing:border-box}
 .lane.on{background:rgba(61,186,138,.03)}
-.clip{position:absolute;top:8px;height:68px;border:1px solid;border-radius:4px;overflow:hidden;cursor:grab}
+.clip{position:absolute;top:10px;height:100px;border:1px solid;border-radius:4px;overflow:hidden;cursor:grab}
 .clip.sel{outline:1px solid #fff8}
 .cw{display:block;pointer-events:none;width:100%;height:100%}
 .clab{position:absolute;left:6px;top:2px;font-size:10px;text-shadow:0 1px 2px #000;pointer-events:none}
 .hndl{position:absolute;top:0;bottom:0;width:6px;background:transparent;cursor:ew-resize}
 .hndl.L{left:0}.hndl.R{right:0}
 .mblock{position:absolute;height:8px;border-radius:2px;opacity:.85}
-.playhead{position:absolute;top:0;bottom:0;width:2px;background:var(--play);z-index:5;pointer-events:none;box-shadow:0 0 8px rgba(255,107,61,.5)}
-.mixer{grid-column:1/-1;display:flex;gap:6px;overflow-x:auto;padding:8px;border-top:1px solid var(--line);background:#101419}
+.playhead{position:absolute;top:0;left:0;width:2px;height:100%;background:var(--play);z-index:5;pointer-events:none;box-shadow:0 0 8px rgba(255,107,61,.5)}
+.mixer-wrap{grid-column:1/-1;border-top:1px solid var(--line);background:#101419;display:flex;flex-direction:column;min-height:0}
+.mixer-fold{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:4px 10px;border:0;border-bottom:1px solid var(--line);background:#151a21;color:var(--mut);cursor:pointer;font:650 12px NotoThai,system-ui,sans-serif;text-align:left}
+.mixer-fold:hover{color:var(--tx);background:#1a222c}
+.mixer-fold .chev{margin-left:auto;font-family:JetMono,monospace;color:var(--acc)}
+.mixer{display:flex;gap:6px;overflow-x:auto;padding:8px;max-height:min(28vh,220px)}
+.mixer-wrap.folded .mixer{display:none}
+.mixer-wrap.folded .mixer-fold{border-bottom:0}
 .strip{flex:0 0 110px;background:#151a21;border:1px solid var(--line);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:3px}
 .strip .lab{font-size:11px;font-weight:700;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .strip .fx{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--mut)}
@@ -135,10 +141,12 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <div class="ruler-wrap"><canvas id="ruler" height="28"></canvas></div>
     <div class="heads" id="trackHeads"></div>
     <div class="lanes-wrap" id="lanesWrap">
-      <div class="lanes" id="lanes"></div>
-      <div class="playhead" id="playhead"></div>
+      <div class="lanes" id="lanes"><div class="playhead" id="playhead"></div></div>
     </div>
-    <div class="mixer" id="mixer"></div>
+    <div class="mixer-wrap" id="mixerWrap">
+      <button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="true" title="หุบ/กางมิกเซอร์">มิกเซอร์ / EQ · Reverb · ระดับเสียง <span class="chev" id="mixerChev">▾</span></button>
+      <div class="mixer" id="mixer"></div>
+    </div>
   </div>
 
   <div class="piano" id="pianoRoll">

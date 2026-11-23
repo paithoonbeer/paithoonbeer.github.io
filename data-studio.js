@@ -225,9 +225,17 @@ export function createStudio(ui){
     if(state.metro)scheduleMetro(when,state.offset);
     ui.onTransport?.(state);tick();
   }
+  const LANE_H=120;
   function playTrack(i){
     const tr=state.tracks[i];if(!tr)return;
     state.sel.track=i;
+    // Already playing → switch audible track without restarting transport
+    if(state.playing&&state.live){
+      state.playOnly=tr.id;
+      applyLiveMix();
+      renderTracks();renderMixer();
+      return;
+    }
     if(state.offset>=dur()-0.05)state.offset=0;
     startPlay(state.offset,{onlyTrackId:tr.id});
     renderTracks();renderMixer();
@@ -351,7 +359,11 @@ export function createStudio(ui){
       // loop region
       if(state.loop){g.fillStyle='rgba(61,186,138,.12)';g.fillRect(state.loopA*state.pxPerSec,0,(state.loopB-state.loopA)*state.pxPerSec,28)}
     }
+    const phKeep=$('playhead');
     lanes.innerHTML='';
+    // Playhead lives inside .lanes so it scrolls with tracks and spans full height
+    const ph=phKeep||document.createElement('div');ph.id='playhead';ph.className='playhead';
+    lanes.appendChild(ph);
     state.tracks.forEach((tr,ti)=>{
       const lane=document.createElement('div');lane.className='lane'+(state.sel.track===ti?' on':'');lane.dataset.ti=ti;
       if(tr.type==='audio'){
@@ -371,18 +383,20 @@ export function createStudio(ui){
         // MIDI blocks overview
         tr.notes.forEach(n=>{
           const x=n.t*state.pxPerSec,w=Math.max(3,n.d*state.pxPerSec);
-          const y=((84-n.n)/48)*70+8;
+          const y=((84-n.n)/48)*100+10;
           const note=document.createElement('div');note.className='mblock';note.style.cssText=`left:${x}px;width:${w}px;top:${y}px;background:${tr.color}`;
           lane.appendChild(note);
         });
       }
       lanes.appendChild(lane);
     });
+    const totalH=Math.max(LANE_H,state.tracks.length*LANE_H);
+    ph.style.height=totalH+'px';
     renderPlayhead(state.playing?ac().currentTime-state.t0+state.offset:state.offset);
   }
 
   function drawClipWave(cv,clip,color){
-    const dpr=devicePixelRatio||1,w=cv.parentElement.clientWidth,h=64;
+    const dpr=devicePixelRatio||1,w=cv.parentElement.clientWidth,h=cv.parentElement.clientHeight||100;
     if(w<2)return;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.width=w+'px';cv.style.height=h+'px';
     const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
     g.clearRect(0,0,w,h);
@@ -476,11 +490,28 @@ export function createStudio(ui){
   /* events wiring */
   function bind(){
     $('btnPlay').onclick=()=>{
-      if(state.playing){stopPlay();renderPlayhead(state.offset);return}
+      if(state.playing){
+        // If listening to one track only, first ▶ resumes all from same place
+        if(state.playOnly){state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+        stopPlay();renderPlayhead(state.offset);return
+      }
       // if parked at/past the end, restart from 0 (DAW-style)
       if(state.offset>=dur()-0.05)state.offset=0;
+      state.playOnly=null;
       startPlay();
+      renderTracks();renderMixer();
     };
+    // Collapsible mixer — more room for tall waveforms
+    const foldMix=$('btnMixerFold'), mixWrap=$('mixerWrap');
+    if(foldMix&&mixWrap){
+      try{if(localStorage.getItem('ssd-mixfold')==='1'){mixWrap.classList.add('folded');foldMix.setAttribute('aria-expanded','false');const c=$('mixerChev');if(c)c.textContent='▸'}}catch(e){}
+      foldMix.onclick=()=>{
+        const on=mixWrap.classList.toggle('folded');
+        foldMix.setAttribute('aria-expanded',on?'false':'true');
+        const c=$('mixerChev');if(c)c.textContent=on?'▸':'▾';
+        try{localStorage.setItem('ssd-mixfold',on?'1':'0')}catch(e){}
+      };
+    }
     $('btnStop').onclick=()=>{stopPlay();state.offset=0;renderPlayhead(0);ui.onTransport?.(state)};
     $('btnRec').onclick=()=>toggleRecord();
     $('btnUndo').onclick=undo;$('btnRedo').onclick=redo;
