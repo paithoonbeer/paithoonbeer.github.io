@@ -1,6 +1,6 @@
 {
-  "build": 110,
-  "ver": "1.0.116",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b110-1.0.116/SetSod.apk",
-  "notes": "1.0.116: แก้เว็บค้าง/ช้าหลังอัปเดตสลับนอมทีม — ไม่สแกนคลังทั้งก้อนทุก 5 วิ"
+  "build": 111,
+  "ver": "1.0.117",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b111-1.0.117/SetSod.apk",
+  "notes": "1.0.117: แก้ทีมไม่ตามนอมเก่า (ซ้าย→ขวา): ไม่ล็อกค่าเก่า + ซีดค่าที่เคยแก้เข้าวง"
 }
