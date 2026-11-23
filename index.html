@@ -16,7 +16,7 @@ document.body.appendChild(d);function cp(t){var ok=function(){document.getElemen
 function fb(t){var i=document.createElement('textarea');i.value=t;document.body.appendChild(i);i.select();try{document.execCommand('copy')}catch(e){}i.remove()}
 document.getElementById('lbcl').onclick=function(){cp(link)};var c=document.getElementById('lbcc');if(c)c.onclick=function(){cp(code)};if(auto){auto=false;setTimeout(function(){L.href=IT},400)}}
 if(document.body)show();else document.addEventListener('DOMContentLoaded',show);setInterval(show,1000)}catch(e){}})();</script><script>try{var q=(location.search.match(/[?&]theme=(\w+)/)||[])[1];if(q)localStorage.setItem("bp-theme",q);var t=localStorage.getItem("bp-theme")||"stage";if(t&&t!="studio")document.documentElement.classList.add("th-"+t)}catch(e){}</script>
-<meta name="bp-ver" content="1.0.100"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
+<meta name="bp-ver" content="1.0.101"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,shrink-to-fit=no">
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="theme-color" content="#0b0b0f"><link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-512.png">
 <title>SetSod</title><meta name="apple-mobile-web-app-title" content="SetSod"><meta name="application-name" content="SetSod">
@@ -876,6 +876,16 @@ setInterval(()=>{const s=document.getElementById('sk');document.getElementById('
 </script>
 <script src="i18n.js"></script>
 <script src="icons.js"></script>
+<script>/* v1.0.101: if module boot fails (broken cached app), force SW update + one reload */
+(function(){var V='1.0.101';function go(){try{if(sessionStorage.getItem('bp-swfix')===V)return;sessionStorage.setItem('bp-swfix',V)}catch(e){return}
+if(!('serviceWorker' in navigator)){location.reload();return}
+navigator.serviceWorker.getRegistration().then(function(r){if(!r){location.reload();return}
+var w=r.waiting;if(w){try{w.postMessage('skip');w.postMessage({type:'SKIP_WAITING'})}catch(e){}}
+return r.update().then(function(){var w2=r.waiting;if(w2){try{w2.postMessage('skip')}catch(e){}}
+setTimeout(function(){location.reload()},900)})}).catch(function(){location.reload()})}
+window.addEventListener('error',function(e){var m=String((e&&e.message)||'');if(/Unexpected end of input|Failed to fetch|error loading dynamically|Importing a module script failed/i.test(m))go()},true);
+window.addEventListener('unhandledrejection',function(e){var m=String((e&&e.reason&&e.reason.message)||e.reason||'');if(/Unexpected end of input|Failed to fetch|Importing a module script failed/i.test(m))go()});
+})();</script>
 <script type="module" src="app.js"></script>
 <script src="imp77.js?v=158"></script></body></html>
 <style>/* v39 PC mode · v1.0.64/74: pin studio tools/graph on ≥900×501 two-pane (not only .pcm; not phone landscape) */
