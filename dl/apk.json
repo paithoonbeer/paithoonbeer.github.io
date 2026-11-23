@@ -1,6 +1,6 @@
 {
-  "build": 93,
-  "ver": "1.0.99",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b93-1.0.99/SetSod.apk",
-  "notes": "1.0.99: แก้แอปค้างหลังอัปเดต 1.0.98 (คลังว่าง · กดปุ่มไม่ติด) — พีซีและมือถือ"
+  "build": 94,
+  "ver": "1.0.100",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b94-1.0.100/SetSod.apk",
+  "notes": "1.0.100: แก้กดปุ่มไม่ติดตอนออกจากไลฟ์→สตูดิโอ + กันซิงก์คลาวด์ค้างจอหลังล็อกอิน"
 }
