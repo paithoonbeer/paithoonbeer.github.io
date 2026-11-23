@@ -76,8 +76,8 @@ export function createStudio(ui){
 
   function loadStemChannels({title,src,channels,sampleRate}){
     mark();state.title=title||state.title;
-    // replace project tracks with stem tracks
-    state.tracks=[];state.buffers.clear();
+    // replace tracks with stem tracks — keep prior buffers so Undo can restore previous clips
+    state.tracks=[];
     const a=ac();
     src.forEach((s,i)=>{
       const {L,R}=channels[i];
@@ -127,13 +127,13 @@ export function createStudio(ui){
     const src=a.createBufferSource();src.buffer=buf;
     const g=a.createGain();g.gain.value=clip.gain||1;
     src.connect(g);g.connect(chain.input);
-    // clip window
+    // clip window — clamp offset into [0, buf.duration] so bad trims never throw RangeError
     const local=Math.max(0,playFrom-clip.start);
     if(local>=clip.dur)return;
-    const off=clip.offset+local;
-    const remain=clip.dur-local;
-    src.start(when,off,remain);
-    state.nodes.push(src);
+    const maxOff=Math.max(0,buf.duration-1e-4);
+    const off=clamp(clip.offset+local,0,maxOff);
+    const remain=Math.min(Math.max(0.001,clip.dur-local),Math.max(0.001,buf.duration-off));
+    try{src.start(when,off,remain);state.nodes.push(src)}catch(e){console.warn('clip schedule',e)}
   }
 
   function scheduleMidi(tr,chain,when,playFrom){
@@ -551,6 +551,7 @@ export function createStudio(ui){
 
   function newProject(){
     stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.offset=0;state.dirty=false;
+    state.undo.length=0;state.redo.length=0;
     addAudioTrack('แทร็ก 1');addMidiTrack('เมโลดี้');renderAll();
   }
 
@@ -609,7 +610,11 @@ export function createStudio(ui){
         for(const c of tr.clips){
           const buf=state.buffers.get(c.buf);if(!buf)continue;
           const src=off.createBufferSource();src.buffer=buf;const cg=off.createGain();cg.gain.value=c.gain||1;
-          src.connect(cg);cg.connect(g);src.start(c.start,c.offset,c.dur);
+          src.connect(cg);cg.connect(g);
+          const maxOff=Math.max(0,buf.duration-1e-4);
+          const off0=clamp(c.offset||0,0,maxOff);
+          const dur0=Math.min(Math.max(0.001,c.dur||0),Math.max(0.001,buf.duration-off0));
+          try{src.start(c.start,off0,dur0)}catch(e){}
         }
       }else{
         for(const n of tr.notes){
@@ -643,7 +648,30 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
-    async boot(){bind();newProject();syncToolsInit();
+    async boot(){bind();
+      // scroll sync: track headers follow the lane vertical scroll
+      try{const wrap=$('lanesWrap'),heads=$('trackHeads');
+        if(wrap&&heads)wrap.addEventListener('scroll',()=>{heads.scrollTop=wrap.scrollTop},{passive:true})}catch(e){}
+      // restore last saved project from IndexedDB when present; else empty project
+      let restored=false;
+      try{
+        const db=await idb();
+        const proj=await new Promise((ok,no)=>{const tx=db.transaction('projects','readonly');const g=tx.objectStore('projects').get('current');g.onsuccess=()=>ok(g.result);g.onerror=()=>no(g.error)});
+        if(proj&&proj.tracks&&proj.bufs){
+          stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;
+          const a=ac();
+          for(const id of Object.keys(proj.bufs||{})){
+            const raw=proj.bufs[id];const u8=raw instanceof Uint8Array?raw:new Uint8Array(raw);
+            const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
+            state.buffers.set(id,buf);
+          }
+          for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
+          state.dirty=false;restored=true;renderAll();
+          ui.toast?.('โหลดโปรเจกต์ล่าสุด: '+(state.title||'Untitled'));
+        }
+      }catch(e){}
+      if(!restored)newProject();
+      syncToolsInit();
       // keyboard — guard non-Element targets (Document/Window) that lack .matches
       addEventListener('keydown',e=>{
         const t=e.target;
