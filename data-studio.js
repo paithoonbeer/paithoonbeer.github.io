@@ -179,86 +179,75 @@ export function createStudio(ui){
     }catch(e){}
   }
   /**
-   * Fill mid-song demucs dropouts: where stem K is locally quiet but
-   * complement (mix − Σother stems) still has energy, blend that back into K.
-   * Injected audio is peeled off "other" so summing all stems stays near the mix.
+   * Rebuild EVERY named stem so graphs/audio are continuous for ทำดาต้า.
+   * Named stem K = soft blend of demucs[K] with (mix − other named stems).
+   * Excludes "other" from the subtract so energy Demucs dumped there comes back.
+   * Then other = mix − Σnamed so the set still sums ≈ mix.
    */
-  function fillStemGaps(by,mix){
+  function rebuildStemsComplete(by,mix){
     try{
       if(!mix||!mix.L||!by)return;
-      const keys=['drums','bass','guitar','piano','vocals','other'];
+      const named=['drums','bass','guitar','piano','vocals'];
       const n=mix.L.length;
       const mR=mix.R&&mix.R.length===n?mix.R:mix.L;
       const src={};
-      for(const k of keys){
+      for(const k of [...named,'other']){
         if(!by[k]||!by[k].L||by[k].L.length!==n)continue;
         src[k]={L:by[k].L,R:(by[k].R&&by[k].R.length===n)?by[k].R:by[k].L};
       }
-      const present=Object.keys(src);
-      if(present.length<2)return;
-      let mixPeak=0;
-      const step=Math.max(1,(n/200000)|0);
+      if(Object.keys(src).length<2)return;
+      let mixPeak=0;const step=Math.max(1,(n/200000)|0);
       for(let i=0;i<n;i+=step){
         const a=mix.L[i]<0?-mix.L[i]:mix.L[i],b=mR[i]<0?-mR[i]:mR[i];
         if(a>mixPeak)mixPeak=a;if(b>mixPeak)mixPeak=b;
       }
       if(mixPeak<1e-4)return;
-      const inject={};
-      const fillKeys=present.filter(k=>k!=='other');
-      for(const k of fillKeys){
+      const thr=mixPeak*0.035;
+      for(const k of named){
+        if(!src[k])continue;
         const L=src[k].L,R=src[k].R;
-        let peak=0;
-        for(let i=0;i<n;i+=step){
-          const a=L[i]<0?-L[i]:L[i],b=R[i]<0?-R[i]:R[i];
-          if(a>peak)peak=a;if(b>peak)peak=b;
-        }
-        // Threshold: relative to this stem's peak, or mix if stem nearly empty
-        // More aggressive than before — catch demucs mid-song dropouts (user screenshots)
-        const thr=Math.max((peak>1e-4?peak:mixPeak)*0.08,mixPeak*0.02,0.01);
         const oL=new Float32Array(n),oR=new Float32Array(n);
-        const iL=new Float32Array(n),iR=new Float32Array(n);
-        let env=0;
-        const atk=0.08,rel=0.006;
+        let env=0;const atk=0.12,rel=0.008;
         for(let i=0;i<n;i++){
           let aL=mix.L[i],aR=mR[i];
-          // Don't subtract "other" — demucs often dumps missing drums/guitar there
-          for(const j of present){
-            if(j===k||j==='other')continue;
+          for(const j of named){
+            if(j===k||!src[j])continue;
             aL-=src[j].L[i];aR-=src[j].R[i];
           }
-          const sMag=Math.max(L[i]<0?-L[i]:L[i],R[i]<0?-R[i]:R[i]);
+          const sL=L[i],sR=R[i];
+          const sMag=Math.max(sL<0?-sL:sL,sR<0?-sR:sR);
           const aMag=Math.max(aL<0?-aL:aL,aR<0?-aR:aR);
           env+=(sMag>env?atk:rel)*(sMag-env);
-          let g=0;
-          if(env<thr&&aMag>thr*0.45){
-            g=Math.min(1,(thr-env)/Math.max(thr,1e-6))*Math.min(1,aMag/(thr*1.6));
-            if(k==='vocals')g*=0.7;
-          }
-          const addL=aL*g,addR=aR*g;
-          iL[i]=addL;iR[i]=addR;
-          oL[i]=clamp(L[i]+addL,-1,1);
-          oR[i]=clamp(R[i]+addR,-1,1);
+          // Demucs loud → keep it; Demucs quiet → take complement (continuous graph)
+          let keep=1;
+          if(env<thr)keep=Math.max(0.05,env/thr)*0.35;
+          else if(env<thr*2.5)keep=0.35+(env-thr)/(thr*1.5)*0.65;
+          else keep=1;
+          if(aMag<thr*0.3)keep=1; // nothing useful in complement
+          const g=1-keep;
+          oL[i]=clamp(sL*keep+aL*g,-1,1);
+          oR[i]=clamp(sR*keep+aR*g,-1,1);
         }
         by[k]={L:oL,R:oR};
-        inject[k]={L:iL,R:iR};
       }
-      // Keep Σstems ≈ mix: peel what we injected out of "other"
-      if(src.other){
-        const oL=new Float32Array(n),oR=new Float32Array(n);
-        oL.set(src.other.L);oR.set(src.other.R);
-        for(const k of Object.keys(inject)){
-          const iL=inject[k].L,iR=inject[k].R;
-          for(let i=0;i<n;i++){oL[i]=clamp(oL[i]-iL[i],-1,1);oR[i]=clamp(oR[i]-iR[i],-1,1)}
+      // other = residual so Σ ≈ mix
+      const oL=new Float32Array(n),oR=new Float32Array(n);
+      for(let i=0;i<n;i++){
+        let aL=mix.L[i],aR=mR[i];
+        for(const j of named){
+          if(!by[j])continue;
+          aL-=by[j].L[i];aR-=by[j].R[i];
         }
-        by.other={L:oL,R:oR};
+        oL[i]=clamp(aL,-1,1);oR[i]=clamp(aR,-1,1);
       }
+      by.other={L:oL,R:oR};
     }catch(e){}
   }
   function loadStemChannels({title,src,channels,sampleRate,mix}){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
     fillQuietBass(by,mix);
-    fillStemGaps(by,mix); // restore mid-song demucs dropouts from mix complement
+    rebuildStemsComplete(by,mix); // every named lane gets continuous audio+graph for ทำดาต้า
     // Mild boost only when a stem is quiet end-to-end
     for(const k of Object.keys(by))by[k]=peakNormLR(by[k],0.75);
     const sr=sampleRate||44100;
