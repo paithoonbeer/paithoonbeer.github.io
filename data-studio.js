@@ -54,15 +54,23 @@ export function createStudio(ui){
   }
   function putBuf(buf){const id=uid();state.buffers.set(id,buf);return id}
   // denser min/max peaks for smoother waveforms (pairs: min,max per bin)
+  // Auto-normalize quiet stems so bass/guitar graphs stay visible when separation is weak
   function peaksOf(buf,bins){
     const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
     const n=L.length;
     const nb=Math.max(800,Math.min(bins||Math.ceil(buf.duration*400),12000));
     const step=Math.max(1,Math.floor(n/nb)),out=new Float32Array(Math.ceil(n/step)*2);
+    let peak=0;
     for(let i=0,o=0;i<n;i+=step,o+=2){
       let mn=1,mx=-1;const e=Math.min(n,i+step);
       for(let j=i;j<e;j+=2){const v=(L[j]+(R[j]||L[j]))*0.5;if(v<mn)mn=v;if(v>mx)mx=v}
       if(mn>mx){mn=0;mx=0}out[o]=mn;out[o+1]=mx;
+      const a=mx>-mn?-mx:mn;const aa=a<0?-a:a;if(aa>peak)peak=aa;
+    }
+    // Boost display of quiet stems (keep true silence flat)
+    if(peak>1e-4&&peak<0.22){
+      const g=Math.min(0.85/peak,12);
+      for(let i=0;i<out.length;i++)out[i]=clamp(out[i]*g,-1,1);
     }
     return out;
   }
@@ -91,18 +99,32 @@ export function createStudio(ui){
     return {L,R};
   }
   // Fixed band layout: กลอง · เบส · กีตาร์ · คีย์ · อื่นๆ · ร้อง  (+ นอม/นับเข้า ทีหลัง)
-  // AI (htdemucs 6s) → drums/bass/other/vocals/piano/guitar (Meta order)
-  function loadStemChannels({title,src,channels,sampleRate}){
+  // AI (htdemucs 6s ONNX) → drums/bass/other/vocals/guitar/piano  (index 4 = guitar)
+  function rmsLR(ch){if(!ch||!ch.L)return 0;let s=0,n=ch.L.length,step=Math.max(1,(n/12000)|0);for(let i=0;i<n;i+=step){const v=(ch.L[i]+(ch.R&&ch.R[i]||0))*0.5;s+=v*v}return s}
+  // If demucs left bass nearly empty, rebuild a usable bass lane from low end of the mix
+  function fillQuietBass(by,mix){
+    try{
+      if(!by.bass||!by.bass.L)return;
+      const br=rmsLR(by.bass);let mx=br;
+      for(const k of ['drums','guitar','other','vocals','piano'])mx=Math.max(mx,rmsLR(by[k]));
+      if(br>mx*0.06)return; // bass already has content
+      const src=mix&&mix.L?mix:(by.guitar&&rmsLR(by.guitar)>rmsLR(by.other)?by.guitar:by.other);
+      if(!src||!src.L)return;
+      const n=src.L.length,L=new Float32Array(n),R=new Float32Array(n);
+      // one-pole lowpass ~180 Hz @ 44.1k (coef≈0.025)
+      let aL=0,aR=0,c=0.025;
+      for(let i=0;i<n;i++){
+        const xL=src.L[i],xR=(src.R&&src.R[i])||xL;
+        aL+=c*(xL-aL);aR+=c*(xR-aR);
+        L[i]=aL*1.6;R[i]=aR*1.6;
+      }
+      by.bass={L,R};
+    }catch(e){}
+  }
+  function loadStemChannels({title,src,channels,sampleRate,mix}){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
-    // Safety: if labels were ever swapped, put the louder mid-band lane on กีตาร์
-    try{
-      const g=by.guitar,p=by.piano;
-      if(g&&p&&g.L&&p.L){
-        const rms=ch=>{let s=0,n=ch.L.length,step=Math.max(1,(n/8000)|0);for(let i=0;i<n;i+=step){const v=(ch.L[i]+(ch.R[i]||0))*0.5;s+=v*v}return s};
-        if(rms(g)<rms(p)*0.35){const tmp=by.guitar;by.guitar=by.piano;by.piano=tmp}
-      }
-    }catch(e){}
+    fillQuietBass(by,mix);
     const sr=sampleRate||44100;
     const layout=[
       {key:'drums',name:'กลอง',ch:by.drums,color:COLS[0]},
@@ -155,10 +177,9 @@ export function createStudio(ui){
     if(!state.playing||!state.live)return;
     const a=ac(),t=a.currentTime;
     const anySolo=state.tracks.some(x=>x.solo);
-    const only=state.playOnly;
     for(const tr of state.tracks){
       const L=state.live.get(tr.id);if(!L)continue;
-      const silent=only!=null?(tr.id!==only):(tr.mute||(anySolo&&!tr.solo));
+      const silent=tr.mute||(anySolo&&!tr.solo);
       try{L.muteG.gain.setTargetAtTime(silent?0:1,t,0.02)}catch(e){}
       try{L.volG.gain.setTargetAtTime((tr.vol||0)/100,t,0.02)}catch(e){}
     }
@@ -203,8 +224,11 @@ export function createStudio(ui){
     stopPlay();
     const a=ac();if(a.state==='suspended')a.resume();
     state.offset=from!=null?from:state.offset;
-    state.t0=a.currentTime;state.playing=true;
-    state.playOnly=(opt&&opt.onlyTrackId)||null;
+    state.playOnly=null; // multi-track play uses mute/solo only (same as mixer)
+    if(opt&&opt.onlyTrackId){
+      // legacy single-track: map to solo so graph ▶ matches mixer S behaviour
+      state.tracks.forEach(t=>{t.solo=(t.id===opt.onlyTrackId)});
+    }
     state.live=new Map();
     const master=a.createGain();master.gain.value=1;
     const merge=a.createGain();
@@ -216,12 +240,14 @@ export function createStudio(ui){
     merge.connect(master);master.connect(a.destination);
 
     const anySolo=state.tracks.some(t=>t.solo);
-    const when=a.currentTime+0.03;
+    const when=a.currentTime+0.02;
+    // Playhead clock starts at the same instant audio is scheduled (fixes graph≠sound drift)
+    state.t0=when;state.playing=true;
     // Schedule ALL tracks; mute/solo only gates gain so M/S works while playing
     state.tracks.forEach(tr=>{
       const chain=makeTrackChain(tr);
       const muteG=a.createGain();
-      const silent=state.playOnly?(tr.id!==state.playOnly):(tr.mute||(anySolo&&!tr.solo));
+      const silent=tr.mute||(anySolo&&!tr.solo);
       muteG.gain.value=silent?0:1;
       chain.dry.connect(muteG);muteG.connect(merge);
       chain.conv.connect(revGain);
@@ -230,7 +256,7 @@ export function createStudio(ui){
       if(tr.type==='audio')tr.clips.forEach(c=>scheduleAudioClip(tr,c,chain,when,state.offset));
       else scheduleMidi(tr,chain,when,state.offset);
     });
-    // Metro UI checkbox → unmute click track (guide tracks carry the audible click)
+    // Metro: only unmute the click guide track — never stack a second oscillator metro on top
     if(state.metro){
       const ck=state.tracks.find(t=>t.stem==='click');
       if(ck){ck.mute=false;const live=state.live.get(ck.id);if(live)live.muteG.gain.value=1}
@@ -239,18 +265,15 @@ export function createStudio(ui){
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
+  // Graph-tab ▶ = toggle Solo (same as mixer S). Multi-solo then main ▶ plays all solos together.
   function playTrack(i){
     const tr=state.tracks[i];if(!tr)return;
-    state.sel.track=i;
-    // Already playing → switch audible track without restarting transport
-    if(state.playing&&state.live){
-      state.playOnly=tr.id;
-      applyLiveMix();
-      renderTracks();renderMixer();
-      return;
-    }
+    mark();state.sel.track=i;
+    tr.solo=!tr.solo;
+    state.playOnly=null;
+    if(state.playing&&state.live){applyLiveMix();renderTracks();renderMixer();return}
     if(state.offset>=dur()-0.05)state.offset=0;
-    startPlay(state.offset,{onlyTrackId:tr.id});
+    startPlay(state.offset);
     renderTracks();renderMixer();
   }
 
@@ -340,10 +363,9 @@ export function createStudio(ui){
     const box=$('trackHeads');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'');el.dataset.i=i;
-      const soloPlay=state.playing&&state.playOnly===tr.id;
       el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b></div>
         <div class="tops">
-          <button type="button" class="tb play ${soloPlay?'on':''}" data-tp="${i}" title="เล่นเฉพาะแทร็กนี้" aria-label="เล่น ${escAttr(tr.name)}">▶</button>
+          <button type="button" class="tb play ${tr.solo?'on':''}" data-tp="${i}" title="โซโล่แทร็กนี้ (กดหลายแทร็กได้ แล้วกด ▶ หลัก)" aria-label="โซโล่ ${escAttr(tr.name)}">▶</button>
           <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="ปิดเสียง">M</button>
           <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
           <button type="button" class="tb" data-arm="${i}" title="เลือกแทร็ก">◎</button>
@@ -451,14 +473,16 @@ export function createStudio(ui){
     const box=$('mixer');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='strip';el.dataset.i=i;
-      el.innerHTML=`<div class="lab">${tr.name}</div>
-        <label class="fx">Lo <input type="range" min="-12" max="12" value="${tr.eq.lo}" data-eq="lo" data-i="${i}"></label>
-        <label class="fx">Mid <input type="range" min="-12" max="12" value="${tr.eq.mid}" data-eq="mid" data-i="${i}"></label>
-        <label class="fx">Hi <input type="range" min="-12" max="12" value="${tr.eq.hi}" data-eq="hi" data-i="${i}"></label>
-        <label class="fx">Rev <input type="range" min="0" max="100" value="${(tr.rev||0)*100}" data-rev="${i}"></label>
-        <input class="fader" type="range" min="0" max="100" value="${tr.vol}" data-vol="${i}">
+      el.innerHTML=`<div class="lab" title="${escAttr(tr.name)}">${tr.name}</div>
+        <div class="eqcol">
+          <label class="vfx" title="Low">Lo<input type="range" min="-12" max="12" value="${tr.eq.lo}" data-eq="lo" data-i="${i}" orient="vertical"></label>
+          <label class="vfx" title="Mid">Mid<input type="range" min="-12" max="12" value="${tr.eq.mid}" data-eq="mid" data-i="${i}" orient="vertical"></label>
+          <label class="vfx" title="High">Hi<input type="range" min="-12" max="12" value="${tr.eq.hi}" data-eq="hi" data-i="${i}" orient="vertical"></label>
+          <label class="vfx" title="Reverb">Rv<input type="range" min="0" max="100" value="${(tr.rev||0)*100}" data-rev="${i}" orient="vertical"></label>
+        </div>
+        <div class="fader-wrap"><input class="fader" type="range" min="0" max="100" value="${tr.vol}" data-vol="${i}" orient="vertical" title="ระดับเสียง ${tr.vol}"><span class="fader-val">${tr.vol}</span></div>
         <div class="ms">
-        <button type="button" class="tb play" data-tp="${i}" title="เล่นเฉพาะแทร็ก">▶</button>
+        <button type="button" class="tb play ${tr.solo?'on':''}" data-tp="${i}" title="โซโล่">▶</button>
         <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
         <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}">S</button></div>`;
       box.appendChild(el);
@@ -504,8 +528,6 @@ export function createStudio(ui){
   function bind(){
     $('btnPlay').onclick=()=>{
       if(state.playing){
-        // If listening to one track only, first ▶ resumes all from same place
-        if(state.playOnly){state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
         stopPlay();renderPlayhead(state.offset);return
       }
       // if parked at/past the end, restart from 0 (DAW-style)
@@ -563,9 +585,13 @@ export function createStudio(ui){
 
     $('mixer').oninput=e=>{
       const i=+e.target.dataset.i;
-      if(e.target.dataset.vol!=null){state.tracks[+e.target.dataset.vol].vol=+e.target.value;applyLiveMix()}
-      if(e.target.dataset.eq){state.tracks[i].eq[e.target.dataset.eq]=+e.target.value}
-      if(e.target.dataset.rev!=null){state.tracks[+e.target.dataset.rev].rev=+e.target.value/100}
+      if(e.target.dataset.vol!=null){
+        const ti=+e.target.dataset.vol;state.tracks[ti].vol=+e.target.value;applyLiveMix();
+        const lab=e.target.parentElement&&e.target.parentElement.querySelector('.fader-val');
+        if(lab)lab.textContent=String(e.target.value|0);
+      }
+      if(e.target.dataset.eq){state.tracks[i].eq[e.target.dataset.eq]=+e.target.value;applyLiveMix()}
+      if(e.target.dataset.rev!=null){state.tracks[+e.target.dataset.rev].rev=+e.target.value/100;applyLiveMix()}
     };
     $('mixer').onclick=e=>{
       const m=e.target.closest('[data-m]');if(m){mark();state.tracks[+m.dataset.m].mute=!state.tracks[+m.dataset.m].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
@@ -848,9 +874,25 @@ export function createStudio(ui){
   // Onset-interval method (same idea as live app detectBpm) — more stable than autocorr for rock.
   function detectBeatGrid(preferStem){
     const pick=stem=>{const tr=state.tracks.find(t=>t.stem===stem&&t.clips[0]);return tr?state.buffers.get(tr.clips[0].buf):null};
+    const loudest=()=>{
+      let best=null,bestR=-1;
+      for(const tr of state.tracks){
+        if(tr.type!=='audio'||!tr.clips[0]||tr.stem==='click'||tr.stem==='countin')continue;
+        const b=state.buffers.get(tr.clips[0].buf);if(!b)continue;
+        const d=b.getChannelData(0);let s=0,step=Math.max(1,(d.length/8000)|0);
+        for(let i=0;i<d.length;i+=step){const v=d[i];s+=v*v}
+        if(s>bestR){bestR=s;best=b}
+      }
+      return best;
+    };
     let buf=preferStem?pick(preferStem):null;
-    if(!buf)buf=pick('drums')||pick('bass');
-    if(!buf){for(const tr of state.tracks){if(tr.type!=='audio'||!tr.clips[0]||tr.stem==='click'||tr.stem==='countin')continue;const b=state.buffers.get(tr.clips[0].buf);if(b&&(!buf||b.length>buf.length))buf=b}}
+    // If preferred stem is near-silent (common when drums empty on acoustic songs), fall back
+    if(buf){
+      const d=buf.getChannelData(0);let s=0,step=Math.max(1,(d.length/8000)|0);
+      for(let i=0;i<d.length;i+=step){const v=d[i];s+=v*v}
+      if(s<1e-6)buf=null;
+    }
+    if(!buf)buf=pick('drums')||pick('bass')||pick('guitar')||loudest();
     if(!buf)return{bpm:state.bpm||120,t0:0};
     const sr=buf.sampleRate,ch0=buf.getChannelData(0),ch1=buf.numberOfChannels>1?buf.getChannelData(1):ch0;
     // Mix drums+bass when available for stronger kick pulse

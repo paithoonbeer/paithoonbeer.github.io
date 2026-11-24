@@ -1,13 +1,12 @@
 // SetSod — AI stem splitter worker. htdemucs 6s (MIT) via onnxruntime-web.
-// Demucs v4 htdemucs_6s output order (Meta release notes):
-//   drums · bass · other · vocals · piano · guitar
-// (piano BEFORE guitar — swapping these dumps electric guitar into the wrong lane)
+// ONNX output order verified on real songs (index 4 = guitar energy, index 5 = piano):
+//   drums · bass · other · vocals · guitar · piano
 const ORT='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/';
 const MODEL='https://huggingface.co/alfajgjK/stemstudio-htdemucs-onnx/resolve/main/htdemucs_6s.opt.fp16.istft.s2s.onnx';
-const N=343980,OV=N>>2,ST=N-OV,SRC=['drums','bass','other','vocals','piano','guitar'];
+const N=343980,OV=N>>2,ST=N-OV,SRC=['drums','bass','other','vocals','guitar','piano'];
 const NS=SRC.length;
 let ort,sess,ep;
-async function model(url){const c=await caches.open('bp-ai-models-v3');let r=await c.match(url);
+async function model(url){const c=await caches.open('bp-ai-models-v4');let r=await c.match(url);
   if(!r){const n=await fetch(url);if(!n.ok)throw Error('model '+n.status);const len=+n.headers.get('content-length')||142604923;
     const rd=n.body.getReader(),parts=[];let got=0;for(;;){const{done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;postMessage({t:'dl',p:got/len})}
     const b=new Blob(parts);await c.put(url,new Response(b));return new Uint8Array(await b.arrayBuffer())}
@@ -25,5 +24,14 @@ async function sep(L,R){const T=L.length,n=Math.max(1,Math.ceil((T-OV)/ST)),w=ne
     for(let k=0;k<NS;k++)for(let ch=0;ch<2;ch++){const o=out[k][ch],b=(k*2+ch)*N;for(let i=0;i<len;i++)o[s+i]+=y[b+i]*w[i]}
     for(let i=0;i<len;i++)wt[s+i]+=w[i];postMessage({t:'prog',p:(c+1)/n,ms:performance.now()-t0})}
   for(const st of out)for(const o of st)for(let i=0;i<T;i++)o[i]/=wt[i]||1;return out}
-onmessage=async({data:d})=>{try{await init(d.opt||{});if(d.L){const o=await sep(d.L,d.R);postMessage({t:'done',src:SRC,out:o},o.flat().map(a=>a.buffer))}
-}catch(e){postMessage({t:'err',m:String(e&&e.message||e)})}};
+// Send stems one-by-one so large songs don't truncate on a single giant postMessage
+onmessage=async({data:d})=>{try{await init(d.opt||{});if(d.L){
+  const T=d.L.length,sr=d.sr||44100;
+  postMessage({t:'sepStart',n:T,sec:T/sr,sr,src:SRC});
+  const o=await sep(d.L,d.R);
+  for(let k=0;k<NS;k++){
+    const L=o[k][0],R=o[k][1];
+    postMessage({t:'stem',i:k,name:SRC[k],L,R,n:T},[L.buffer,R.buffer]);
+  }
+  postMessage({t:'done',src:SRC,n:T,sr});
+}}catch(e){postMessage({t:'err',m:String(e&&e.message||e)})}};

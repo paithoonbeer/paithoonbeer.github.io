@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.8">
+<meta name="bp-data" content="1.0.9">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -78,15 +78,18 @@ button,input{font:inherit;color:inherit}
 .mixer-fold{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:4px 10px;border:0;border-bottom:1px solid var(--line);background:#151a21;color:var(--mut);cursor:pointer;font:650 12px NotoThai,system-ui,sans-serif;text-align:left}
 .mixer-fold:hover{color:var(--tx);background:#1a222c}
 .mixer-fold .chev{margin-left:auto;font-family:JetMono,monospace;color:var(--acc)}
-.mixer{display:flex;gap:6px;overflow-x:auto;padding:8px;max-height:min(28vh,220px)}
+.mixer{display:flex;gap:8px;overflow-x:auto;padding:10px 8px 12px;max-height:min(42vh,340px);align-items:stretch}
 .mixer-wrap.folded .mixer{display:none}
 .mixer-wrap.folded .mixer-fold{border-bottom:0}
-.strip{flex:0 0 110px;background:#151a21;border:1px solid var(--line);border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:3px}
-.strip .lab{font-size:11px;font-weight:700;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.strip .fx{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--mut)}
-.strip .fx input{flex:1;accent-color:var(--acc)}
-.strip .fader{width:100%;accent-color:var(--acc)}
-.ms{display:flex;gap:4px;justify-content:center}
+.strip{flex:0 0 88px;background:#151a21;border:1px solid var(--line);border-radius:8px;padding:6px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:280px}
+.strip .lab{font-size:10px;font-weight:700;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;max-width:80px}
+.strip .eqcol{display:flex;gap:3px;align-items:flex-end;justify-content:center;height:110px}
+.strip .vfx{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;color:var(--mut)}
+.strip .vfx input[type=range]{writing-mode:vertical-lr;direction:rtl;width:18px;height:90px;accent-color:var(--acc);padding:0;margin:0}
+.strip .fader-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;justify-content:flex-end}
+.strip .fader{writing-mode:vertical-lr;direction:rtl;width:22px;height:120px;accent-color:var(--acc)}
+.strip .fader-val{font:500 10px JetMono,ui-monospace,monospace;color:var(--mut)}
+.ms{display:flex;gap:3px;justify-content:center;flex-wrap:wrap}
 .piano{display:none;grid-template-columns:56px 1fr;height:180px;border-top:1px solid var(--line);background:#0c0f14}
 .piano.on{display:grid}
 #pianoKeys{overflow:hidden;background:#151a20;border-right:1px solid var(--line)}
@@ -222,6 +225,7 @@ let gpuF16=false;
 (async()=>{try{const p=navigator.gpu?.requestAdapter?.();if(!p)return;const a=await Promise.race([p,new Promise(r=>setTimeout(()=>r(null),2000))]);gpuF16=!!(a&&a.features?.has('shader-f16'))}catch(e){}})();
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(toast._);toast._=setTimeout(()=>t.classList.remove('on'),2800)}
+function fmtMmSs(sec){sec=Math.max(0,+sec||0);const m=Math.floor(sec/60),s=Math.round(sec%60);return m+':'+String(s).padStart(2,'0')}
 
 /* Own version line — independent of SetSod APPV / APK */
 document.getElementById('dataVer').innerHTML='Data <b>'+DATAV+'</b>';
@@ -280,25 +284,48 @@ async function startAi(){
   try{
     const ac=new OfflineAudioContext(2,1,44100);
     const buf=await ac.decodeAudioData(await aiFile.arrayBuffer());
-    const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L.slice();
+    // Copy channels — worker transfers detach the originals
+    const L=Float32Array.from(buf.getChannelData(0));
+    const R=buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):L.slice();
     const title=aiFile.name.replace(/\.[^.]+$/,'');
+    const sr=buf.sampleRate||44100;
+    const secIn=buf.duration;
+    $('sAi').textContent=`⏳ ไฟล์ ${fmtMmSs(secIn)} · เริ่มแยก…`;
     const w=new Worker('stems-ai-worker.js');
     const d=await new Promise((ok,no)=>{
+      const stems=[];let src=null;let nExp=0;
       w.onmessage=({data:m})=>{
         if(m.t==='dl')$('sAi').textContent=`⏳ โหลดโมเดล ${(m.p*100|0)}%`;
-        else if(m.t==='ready')$('sAi').textContent='⏳ กำลังแยก…';
-        else if(m.t==='prog')$('sAi').textContent=`⏳ แยก ${(m.p*100|0)}%`;
+        else if(m.t==='ready')$('sAi').textContent=`⏳ กำลังแยก ${fmtMmSs(secIn)}…`;
+        else if(m.t==='sepStart'){src=m.src;nExp=m.n;$('sAi').textContent=`⏳ แยก ${fmtMmSs(m.sec)}…`}
+        else if(m.t==='prog')$('sAi').textContent=`⏳ แยก ${(m.p*100|0)}% · ${fmtMmSs(secIn)}`;
+        else if(m.t==='stem'){stems[m.i]={L:m.L,R:m.R};$('sAi').textContent=`⏳ ได้สเต็ม ${m.name} (${stems.filter(Boolean).length}/${(src||[]).length||6})`}
         else if(m.t==='err'){w.terminate();no(new Error(m.m))}
-        else if(m.t==='done'){w.terminate();ok(m)}
+        else if(m.t==='done'){
+          w.terminate();
+          if(!src)src=m.src;
+          if(stems.filter(Boolean).length!==(src||[]).length){no(new Error('แยกไม่ครบสเต็ม — ลองใหม่'));return}
+          if(nExp&&m.n&&m.n!==nExp){no(new Error('ความยาวสเต็มไม่ตรงต้นฉบับ'));return}
+          // Guard: warn if output much shorter than input (truncation)
+          const outSec=(m.n||stems[0].L.length)/sr;
+          ok({src,out:stems.map(s=>[s.L,s.R]),n:m.n||stems[0].L.length,sr,secIn,outSec});
+        }
       };
       w.onerror=e=>{w.terminate();no(e.error||e)};
-      w.postMessage({opt:{wasmOnly:!gpuF16,eps:gpuF16?['webgpu']:['wasm']},L,R});
+      w.postMessage({opt:{wasmOnly:!gpuF16,eps:gpuF16?['webgpu']:['wasm']},L,R,sr},[L.buffer,R.buffer]);
     });
-    $('sAi').textContent='✅ แยกเสร็จ — โหลดเข้าสตูดิโอแล้ว';
+    if(Math.abs((d.outSec||0)-secIn)>0.5){
+      toast(`⚠️ ความยาวหลังแยก ${fmtMmSs(d.outSec)} จากต้นฉบับ ${fmtMmSs(secIn)}`);
+    }
+    $('sAi').textContent=`✅ แยกเสร็จ ${fmtMmSs(d.outSec||secIn)} — โหลดเข้าสตูดิโอแล้ว`;
     studio.state.title=title;
-    // Keep source sampleRate (worker returns same-length PCM as input L/R)
-    studio.loadStemChannels({title,src:d.src,channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),sampleRate:buf.sampleRate||44100});
-    // ล็อก BPM/จุดบีดจากกลอง + สร้างแทร็กนอม/นับเข้า (พูด one–two–three–four)
+    studio.loadStemChannels({
+      title,src:d.src,
+      channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),
+      sampleRate:sr,
+      mix:{L:Float32Array.from(buf.getChannelData(0)),R:buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):null}
+    });
+    // ล็อก BPM จากกลอง หรือสเต็มดังสุดถ้ากลองว่าง + นับเข้าพูด
     try{
       await studio.loadCiVoices();
       const g=studio.detectBeatGrid('drums');
@@ -307,8 +334,8 @@ async function startAi(){
       document.getElementById('chkMetro').checked=true;studio.state.metro=true;
       refreshGuides();
       applyRecipeMutes();
-      toast(`ได้แทร็ก 6 ส่วน · ${g.bpm} BPM · นับเข้าพูด + นอมล็อกบีด`);
-      $('sRecipe').textContent=`พร้อม · ${title} · ${g.bpm} BPM · กีตาร์/ร้องแยก`;
+      toast(`ได้แทร็ก 6 ส่วน · ${fmtMmSs(d.outSec||secIn)} · ${g.bpm} BPM · กีตาร์เลนถูกต้อง`);
+      $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · ${g.bpm} BPM`;
     }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — เลือกสูตรแล้วกดส่ง');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
     if($('rAuto')&&$('rAuto').checked)setTimeout(()=>$('btnMakeData').click(),400);
   }catch(e){$('sAi').textContent='❌ '+(e.message||e)}
@@ -430,7 +457,7 @@ async function makeDataNow(){
       out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
     }
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
-    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.8'};
+    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.9'};
     if(ci===0)meta.cia=0;
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
