@@ -39,13 +39,25 @@ export function createStudio(ui){
 
   function addAudioTrack(name,color){
     const t={id:uid(),type:'audio',name:name||('แทร็ก '+(state.tracks.length+1)),color:color||COLS[state.tracks.length%COLS.length],
-      mute:false,solo:false,vol:100,pan:0,eq:{lo:0,mid:0,hi:0},rev:0,clips:[],notes:[]};
+      mute:false,solo:false,vol:100,pan:0,eq:{lo:0,mid:0,hi:0},rev:0,waveZoom:1,clips:[],notes:[]};
     state.tracks.push(t);return t;
   }
   function addMidiTrack(name){
     const t={id:uid(),type:'midi',name:name||('MIDI '+(state.tracks.length+1)),color:COLS[state.tracks.length%COLS.length],
-      mute:false,solo:false,vol:100,pan:0,eq:{lo:0,mid:0,hi:0},rev:0.15,clips:[],notes:[]};
+      mute:false,solo:false,vol:100,pan:0,eq:{lo:0,mid:0,hi:0},rev:0.15,waveZoom:1,clips:[],notes:[]};
     state.tracks.push(t);return t;
+  }
+  function setTrackWaveZoom(i,delta){
+    const tr=state.tracks[i];if(!tr)return;
+    tr.waveZoom=clamp(+(tr.waveZoom||1)*(delta>0?1.35:1/1.35),0.5,8);
+    renderArrange();renderTracks();
+  }
+  function setNomVol(v){
+    v=clamp(+v||0,0,200);
+    state.nomVol=v;
+    const ck=state.tracks.find(t=>t.stem==='click');
+    if(ck){ck.vol=v;applyLiveMix();renderMixer()}
+    try{localStorage.setItem('ssd-nomvol',String(v))}catch(e){}
   }
 
   async function decodeFile(file){
@@ -174,7 +186,7 @@ export function createStudio(ui){
     if(state.playing)state.offset=clamp(ac().currentTime-state.t0+state.offset,0,dur());
     for(const n of state.nodes){try{n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
-    state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;state._sched=null;
+    state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;state._midi=null;state._metroJob=null;
     ui.onTransport?.(state);
   }
   // Live mute/solo/vol — schedule every track, silence via gain (so M mid-play actually cuts)
@@ -190,9 +202,9 @@ export function createStudio(ui){
     }
   }
 
-  // Look-ahead window (sec). Browsers drop far-future BufferSource starts (~1min+)
-  // while the playhead keeps running — schedule only the near future, refill on tick.
-  const LOOKAHEAD=8,SLICE=4;
+  // One BufferSource per clip, start ≈ now (or after short count-in).
+  // Do NOT pre-schedule many future chunk starts — browsers drop those around ~60–80s
+  // while the playhead (driven by currentTime) keeps moving → silent graph.
   function clipAbsDur(clip,buf){
     if(!buf)return Math.max(0.001,clip.dur||0);
     const d=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
@@ -200,61 +212,61 @@ export function createStudio(ui){
     return Math.max(0.001,d);
   }
   function scheduleAudioClip(tr,clip,chain,when,playFrom){
-    // Enqueue for look-ahead — actual BufferSources created in pumpSchedule()
-    if(!state._sched)state._sched=[];
+    const a=ac();
     const buf=state.buffers.get(clip.buf);if(!buf)return;
     const clipDur=clipAbsDur(clip,buf);
-    state._sched.push({tr,clip,chain,buf,clipDur,playFrom,anchor:when,nextLocal:Math.max(0,playFrom-clip.start)});
-  }
-  function pumpSchedule(){
-    if(!state.playing||!state._sched||!state._sched.length)return;
-    const a=ac();
-    const now=a.currentTime;
-    const playT=now-state.t0+state.offset; // timeline seconds
-    for(const job of state._sched){
-      const {clip,chain,buf,clipDur,anchor,playFrom}=job;
-      // How far ahead on the timeline we should have audio armed
-      const needUntil=playT+LOOKAHEAD;
-      while(job.nextLocal<clipDur-1e-4){
-        const absStart=clip.start+job.nextLocal; // timeline time of this slice
-        if(absStart>=needUntil)break;
-        if(absStart+0.001<playFrom){job.nextLocal+=SLICE;continue}
-        const delay=absStart-playFrom; // relative to transport start
-        const tWhen=anchor+delay;
-        if(tWhen+SLICE<now-0.05){job.nextLocal+=SLICE;continue} // already past
-        const maxOff=Math.max(0,buf.duration-1e-4);
-        const off=clamp((clip.offset||0)+job.nextLocal,0,maxOff);
-        const slice=Math.min(SLICE, clipDur-job.nextLocal, buf.duration-off);
-        if(!(slice>0.001)){job.nextLocal=clipDur;break}
-        const src=a.createBufferSource();src.buffer=buf;
-        const g=a.createGain();g.gain.value=clip.gain||1;
-        src.connect(g);g.connect(chain.input);
-        try{
-          src.start(Math.max(tWhen,now+0.01),off,slice);
-          state.nodes.push(src);
-        }catch(e){console.warn('clip schedule',e);job.nextLocal=clipDur;break}
-        job.nextLocal+=slice;
-      }
-    }
+    if(clip.start+clipDur<=playFrom+1e-4)return;
+    const localOff=Math.max(0,playFrom-clip.start);
+    const remain=clipDur-localOff;
+    if(!(remain>0.001))return;
+    const maxOff=Math.max(0,buf.duration-1e-4);
+    const bufOff=clamp((clip.offset||0)+localOff,0,maxOff);
+    const playLen=Math.min(remain,buf.duration-bufOff);
+    if(!(playLen>0.001))return;
+    const delay=Math.max(0,clip.start-playFrom); // count-in only (seconds, not minutes)
+    const tWhen=when+delay;
+    const src=a.createBufferSource();src.buffer=buf;
+    const g=a.createGain();g.gain.value=clip.gain||1;
+    src.connect(g);g.connect(chain.input);
+    try{src.start(tWhen,bufOff,playLen);state.nodes.push(src)}
+    catch(e){console.warn('clip schedule',e)}
   }
 
+  // MIDI notes also drop if started minutes ahead — look-ahead refill on tick
+  const MIDI_LOOK=10;
   function scheduleMidi(tr,chain,when,playFrom){
+    if(!state._midi)state._midi=[];
+    const notes=[...tr.notes].sort((a,b)=>a.t-b.t);
+    state._midi.push({tr,chain,when,playFrom,notes,i:0});
+    pumpMidi();
+  }
+  function pumpMidi(){
+    if(!state.playing||!state._midi||!state._midi.length)return;
     const a=ac();
-    for(const n of tr.notes){
-      const start=n.t,end=n.t+n.d;
-      if(end<=playFrom)continue;
-      const delay=Math.max(0,start-playFrom);
-      const durN=end-Math.max(start,playFrom);
-      const osc=a.createOscillator();osc.type='sawtooth';osc.frequency.value=midiHz(n.n);
-      const g=a.createGain();
-      const t0=when+delay;
-      g.gain.setValueAtTime(0,t0);
-      g.gain.linearRampToValueAtTime(0.18*(n.v||1),t0+0.01);
-      g.gain.exponentialRampToValueAtTime(0.001,t0+Math.max(0.05,durN));
-      const f=a.createBiquadFilter();f.type='lowpass';f.frequency.value=2200;
-      osc.connect(f);f.connect(g);g.connect(chain.input);
-      osc.start(t0);osc.stop(t0+durN+0.05);
-      state.nodes.push(osc);
+    const playT=a.currentTime-state.t0+state.offset;
+    const until=playT+MIDI_LOOK;
+    for(const job of state._midi){
+      const {chain,when,playFrom,notes}=job;
+      while(job.i<notes.length){
+        const n=notes[job.i];
+        const end=n.t+(n.d||0);
+        if(end<=playFrom){job.i++;continue}
+        if(n.t>=until)break;
+        const delay=Math.max(0,n.t-playFrom);
+        const durN=end-Math.max(n.t,playFrom);
+        const t0=when+delay;
+        if(t0+durN<a.currentTime-0.05){job.i++;continue}
+        const osc=a.createOscillator();osc.type='sawtooth';osc.frequency.value=midiHz(n.n);
+        const g=a.createGain();
+        const at=Math.max(t0,a.currentTime+0.005);
+        g.gain.setValueAtTime(0,at);
+        g.gain.linearRampToValueAtTime(0.18*(n.v||1),at+0.01);
+        g.gain.exponentialRampToValueAtTime(0.001,at+Math.max(0.05,durN));
+        const f=a.createBiquadFilter();f.type='lowpass';f.frequency.value=2200;
+        osc.connect(f);f.connect(g);g.connect(chain.input);
+        try{osc.start(at);osc.stop(at+durN+0.05);state.nodes.push(osc)}catch(e){}
+        job.i++;
+      }
     }
   }
 
@@ -268,7 +280,7 @@ export function createStudio(ui){
       state.tracks.forEach(t=>{t.solo=(t.id===opt.onlyTrackId)});
     }
     state.live=new Map();
-    state._sched=[];
+    state._midi=[];
     const master=a.createGain();master.gain.value=1;
     const merge=a.createGain();
     const revGain=a.createGain();revGain.gain.value=1;
@@ -282,7 +294,7 @@ export function createStudio(ui){
     const when=a.currentTime+0.02;
     // Playhead clock starts at the same instant audio is scheduled (fixes graph≠sound drift)
     state.t0=when;state.playing=true;
-    // Arm chains; audio slices filled by look-ahead pump (not all-at-once)
+    // One BufferSource per audio clip (full remainder from playhead) — no far-future chunks
     state.tracks.forEach(tr=>{
       const chain=makeTrackChain(tr);
       const muteG=a.createGain();
@@ -298,10 +310,13 @@ export function createStudio(ui){
     // Metro: unmute existing นอม track only — never stack a second click source
     if(state.metro){
       const ck=state.tracks.find(t=>t.stem==='click');
-      if(ck){ck.mute=false;const live=state.live.get(ck.id);if(live)live.muteG.gain.value=(anySolo&&!ck.solo)?0:1}
+      if(ck){
+        ck.mute=false;
+        if(state.nomVol!=null)ck.vol=state.nomVol;
+        const live=state.live.get(ck.id);if(live){live.muteG.gain.value=(anySolo&&!ck.solo)?0:1;live.volG.gain.value=(ck.vol||100)/100}
+      }
       else scheduleMetro(when,state.offset);
     }
-    pumpSchedule();
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
@@ -318,15 +333,30 @@ export function createStudio(ui){
   }
 
   function scheduleMetro(when,playFrom){
+    // Fallback click if no click track — look-ahead style (64 beats was cutting long songs)
+    if(!state._metroJob)state._metroJob={when,playFrom,nextBeat:Math.ceil(playFrom/beatSec()-1e-6)};
+    pumpMetro();
+  }
+  function pumpMetro(){
+    if(!state.playing||!state._metroJob)return;
     const a=ac();const bs=beatSec();
-    const startBeat=Math.ceil(playFrom/bs-1e-6);
-    for(let b=startBeat;b<startBeat+64;b++){
-      const t=b*bs;if(t<playFrom)continue;
+    const {when,playFrom}=state._metroJob;
+    const playT=a.currentTime-state.t0+state.offset;
+    const until=playT+8;
+    const vol=(state.nomVol!=null?state.nomVol:140)/100*0.22;
+    while(true){
+      const b=state._metroJob.nextBeat;
+      const t=b*bs;
+      if(t>=until)break;
+      if(t<playFrom){state._metroJob.nextBeat++;continue}
+      const at=when+(t-playFrom);
+      if(at+0.1<a.currentTime-0.05){state._metroJob.nextBeat++;continue}
       const osc=a.createOscillator();const g=a.createGain();
       osc.frequency.value=(b%4===0)?1200:800;
-      const at=when+(t-playFrom);
-      g.gain.setValueAtTime(0,at);g.gain.linearRampToValueAtTime(0.2,at+0.005);g.gain.exponentialRampToValueAtTime(0.001,at+0.08);
-      osc.connect(g);g.connect(a.destination);osc.start(at);osc.stop(at+0.1);state.nodes.push(osc);
+      const startAt=Math.max(at,a.currentTime+0.005);
+      g.gain.setValueAtTime(0,startAt);g.gain.linearRampToValueAtTime(vol,startAt+0.005);g.gain.exponentialRampToValueAtTime(0.001,startAt+0.08);
+      osc.connect(g);g.connect(a.destination);osc.start(startAt);osc.stop(startAt+0.1);state.nodes.push(osc);
+      state._metroJob.nextBeat++;
     }
   }
 
@@ -335,7 +365,7 @@ export function createStudio(ui){
     let t=ac().currentTime-state.t0+state.offset;
     if(state.loop&&t>=state.loopB){startPlay(state.loopA);return}
     if(t>=dur()+0.05){stopPlay();state.offset=0;ui.onTransport?.(state);renderArrange();return}
-    try{pumpSchedule()}catch(e){}
+    try{pumpMidi();pumpMetro()}catch(e){}
     ui.onTransport?.(state);renderPlayhead(t);
     state._raf=requestAnimationFrame(tick);
   }
@@ -404,12 +434,16 @@ export function createStudio(ui){
     const box=$('trackHeads');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'');el.dataset.i=i;
+      const wz=+(tr.waveZoom||1);
       el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b></div>
         <div class="tops">
-          <button type="button" class="tb play ${tr.solo?'on':''}" data-tp="${i}" title="โซโล่แทร็กนี้ (กดหลายแทร็กได้ แล้วกด ▶ หลัก)" aria-label="โซโล่ ${escAttr(tr.name)}">▶</button>
           <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="ปิดเสียง">M</button>
           <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
-          <button type="button" class="tb" data-arm="${i}" title="เลือกแทร็ก">◎</button>
+          <span class="wz" title="ซูมกราฟแทร็กนี้">
+            <button type="button" class="tb" data-wz="${i}" data-d="-1" aria-label="ซูมออก">−</button>
+            <b>${wz>=1?wz.toFixed(1):wz.toFixed(2)}×</b>
+            <button type="button" class="tb" data-wz="${i}" data-d="1" aria-label="ซูมเข้า">+</button>
+          </span>
         </div>`;
       box.appendChild(el);
     });
@@ -453,7 +487,7 @@ export function createStudio(ui){
           const hL=document.createElement('i');hL.className='hndl L';clip.appendChild(hL);
           const hR=document.createElement('i');hR.className='hndl R';clip.appendChild(hR);
           lane.appendChild(clip);
-          requestAnimationFrame(()=>drawClipWave(cv,c,tr.color));
+          requestAnimationFrame(()=>drawClipWave(cv,c,tr.color,tr.waveZoom));
         });
       }else{
         // MIDI blocks overview
@@ -471,13 +505,14 @@ export function createStudio(ui){
     renderPlayhead(state.playing?ac().currentTime-state.t0+state.offset:state.offset);
   }
 
-  function drawClipWave(cv,clip,color){
+  function drawClipWave(cv,clip,color,waveZoom){
     const dpr=devicePixelRatio||1,w=cv.parentElement.clientWidth,h=cv.parentElement.clientHeight||100;
     if(w<2)return;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.width=w+'px';cv.style.height=h+'px';
     const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
     g.clearRect(0,0,w,h);
     const pk=clip.peaks;if(!pk||!pk.length)return;
-    const mid=h/2,pad=2,amp=mid-pad;
+    const z=clamp(+(waveZoom||1),0.5,8);
+    const mid=h/2,pad=2,amp=(mid-pad)*z;
     const buf=state.buffers.get(clip.buf);const total=buf?buf.duration:clip.dur;
     const a0=clip.offset/total,a1=(clip.offset+clip.dur)/total;
     const pairs=pk.length>=4&&pk.length%2===0; // min/max pairs
@@ -526,7 +561,6 @@ export function createStudio(ui){
         <div class="fader-wrap"><input class="fader" type="range" min="0" max="150" value="${tr.vol}" data-vol="${i}" title="ระดับ ${tr.name}"></div>
         <span class="fader-val">${tr.vol}</span>
         <div class="ms">
-        <button type="button" class="tb play ${tr.solo?'on':''}" data-tp="${i}" title="โซโล่">▶</button>
         <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
         <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}">S</button></div>`;
       box.appendChild(el);
@@ -606,8 +640,24 @@ export function createStudio(ui){
     $('chkSnap').onchange=e=>state.snap=e.target.checked;
     $('bpm').onchange=e=>{mark();state.bpm=clamp(+e.target.value||120,40,240);renderArrange()};
     $('zoom').oninput=e=>{state.pxPerSec=+e.target.value;renderArrange();renderPiano()};
-    $('btnAddAud').onclick=()=>{mark();addAudioTrack();renderAll()};
-    $('btnAddMidi').onclick=()=>{mark();addMidiTrack();renderAll()};
+    const nomVolEl=$('nomVol');
+    if(nomVolEl){
+      try{const nv=+localStorage.getItem('ssd-nomvol');if(nv>0){state.nomVol=nv;nomVolEl.value=String(nv)}}catch(e){}
+      if(state.nomVol==null)state.nomVol=+nomVolEl.value||140;
+      nomVolEl.oninput=e=>setNomVol(e.target.value);
+    }else if(state.nomVol==null)state.nomVol=140;
+    $('btnAddAud').onclick=()=>{mark();addAudioTrack();state.sel.track=state.tracks.length-1;renderAll();ui.toast?.('เพิ่มช่องเสียงแล้ว — ดับเบิลคลิกเลนหรือกดนำเข้าไฟล์')};
+    $('btnAddMidi').onclick=()=>{mark();addMidiTrack();state.sel.track=state.tracks.length-1;renderAll()};
+    const fNew=$('fAudNew');
+    if(fNew)fNew.onchange=async e=>{
+      const f=e.target.files[0];e.target.value='';if(!f)return;
+      try{
+        const t=addAudioTrack(f.name.replace(/\.[^.]+$/,''));
+        state.sel.track=state.tracks.length-1;
+        await importAudioToTrack(state.tracks.length-1,f,state.offset);
+        ui.toast?.('เพิ่มช่องจากไฟล์แล้ว');
+      }catch(_){}
+    };
     $('btnDel').onclick=deleteSelected;
     $('btnSave').onclick=()=>saveProject();
     $('btnLoad').onclick=()=>$('fileProj').click();
@@ -616,10 +666,9 @@ export function createStudio(ui){
     $('btnNew').onclick=()=>{if(!state.dirty||confirm('เริ่มโปรเจกต์ใหม่?'))newProject()};
 
     $('trackHeads').onclick=e=>{
-      const tp=e.target.closest('[data-tp]');if(tp){playTrack(+tp.dataset.tp);return}
+      const wz=e.target.closest('[data-wz]');if(wz){setTrackWaveZoom(+wz.dataset.wz,+wz.dataset.d);return}
       const m=e.target.closest('[data-m]');if(m){mark();const i=+m.dataset.m;state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
-      const arm=e.target.closest('[data-arm]');if(arm){state.sel.track=+arm.dataset.arm;renderAll();return}
       const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){state.sel.track=+th.dataset.i;renderAll()}
     };
     $('trackHeads').onchange=e=>{const rn=e.target.closest('[data-rn]');if(rn){state.tracks[+rn.dataset.rn].name=rn.value;renderMixer()}};
@@ -649,7 +698,6 @@ export function createStudio(ui){
     $('mixer').onclick=e=>{
       const m=e.target.closest('[data-m]');if(m){mark();state.tracks[+m.dataset.m].mute=!state.tracks[+m.dataset.m].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const s=e.target.closest('[data-s]');if(s){mark();state.tracks[+s.dataset.s].solo=!state.tracks[+s.dataset.s].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
-      const tp=e.target.closest('[data-tp]');if(tp)playTrack(+tp.dataset.tp);
     };
 
     // arrange interactions
@@ -1049,7 +1097,7 @@ export function createStudio(ui){
         if(b4===0)hitAt(L,R,at,sr,1500,0.45,16);
         else if(b4===2)hitAt(L,R,at,sr,1100,0.22,12);
       }else{
-        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.55:0.32,12);
+        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.85:0.5,12);
       }
     }
     if(flourish){
@@ -1138,8 +1186,8 @@ export function createStudio(ui){
       let spoke=false;
       if(hasVoice)spoke=mixVoiceAt(L,R,at,word,sr,b4===0?1.05:0.95);
       // Soft click under the word (or alone if samples missing) so the beat stays clear
-      if(b4===0)hitAt(L,R,at,sr,2100,spoke?0.22:0.9,16);
-      else hitAt(L,R,at,sr,1550,spoke?0.12:0.55,11);
+      if(b4===0)hitAt(L,R,at,sr,2100,spoke?0.28:1.0,16);
+      else hitAt(L,R,at,sr,1550,spoke?0.16:0.7,11);
     }
     return floatToBuf(L,R,sr);
   }
@@ -1167,7 +1215,7 @@ export function createStudio(ui){
         if(b4===0)hitAt(L,R,at,sr,1500,0.5,16);
         else if(b4===2)hitAt(L,R,at,sr,1100,0.25,12);
       }else{
-        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.55:0.32,12);
+        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.85:0.5,12);
       }
     }
     if(flourish){
@@ -1239,7 +1287,8 @@ export function createStudio(ui){
     const clickFlour=preview?false:flourish;
     const click=makeClickBuf(musicDur,bpm,sr,{style:clickStyle,flourish:clickFlour,t0});
     const cid=putBuf(click);
-    const ct=addAudioTrack('เมโทรนอม / นอม', '#45c4d4');ct.stem='click';ct.vol=90;ct.mute=!metroOn;
+    const nomV=state.nomVol!=null?state.nomVol:140;
+    const ct=addAudioTrack('เมโทรนอม / นอม', '#45c4d4');ct.stem='click';ct.vol=nomV;ct.mute=!metroOn;
     ct.clips.push({id:uid(),buf:cid,start:ciSec,offset:0,dur:click.duration,gain:1,peaks:peaksOf(click),name:'click'});
 
     renderAll();
@@ -1251,7 +1300,7 @@ export function createStudio(ui){
   // public API
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
-    playTrack,applyLiveMix,addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
+    playTrack,applyLiveMix,addAudioTrack,addMidiTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
     applyStemMutes,renderTrackWav,makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
     async boot(){bind();
