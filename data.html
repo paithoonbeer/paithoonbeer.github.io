@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.10">
+<meta name="bp-data" content="1.0.11">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -462,7 +462,7 @@ async function makeDataNow(){
       out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
     }
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
-    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.10'};
+    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.11'};
     if(ci===0)meta.cia=0;
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;

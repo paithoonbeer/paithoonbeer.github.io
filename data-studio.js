@@ -174,7 +174,7 @@ export function createStudio(ui){
     if(state.playing)state.offset=clamp(ac().currentTime-state.t0+state.offset,0,dur());
     for(const n of state.nodes){try{n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
-    state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;
+    state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;state._sched=null;
     ui.onTransport?.(state);
   }
   // Live mute/solo/vol — schedule every track, silence via gain (so M mid-play actually cuts)
@@ -190,27 +190,51 @@ export function createStudio(ui){
     }
   }
 
+  // Look-ahead window (sec). Browsers drop far-future BufferSource starts (~1min+)
+  // while the playhead keeps running — schedule only the near future, refill on tick.
+  const LOOKAHEAD=8,SLICE=4;
+  function clipAbsDur(clip,buf){
+    if(!buf)return Math.max(0.001,clip.dur||0);
+    const d=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
+    if((clip.dur||0)<buf.duration-0.05)clip.dur=buf.duration-(clip.offset||0);
+    return Math.max(0.001,d);
+  }
   function scheduleAudioClip(tr,clip,chain,when,playFrom){
+    // Enqueue for look-ahead — actual BufferSources created in pumpSchedule()
+    if(!state._sched)state._sched=[];
     const buf=state.buffers.get(clip.buf);if(!buf)return;
+    const clipDur=clipAbsDur(clip,buf);
+    state._sched.push({tr,clip,chain,buf,clipDur,playFrom,anchor:when,nextLocal:Math.max(0,playFrom-clip.start)});
+  }
+  function pumpSchedule(){
+    if(!state.playing||!state._sched||!state._sched.length)return;
     const a=ac();
-    // Prefer buffer length — clip.dur can lag after long AI separates
-    const clipDur=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
-    if(clip.dur<buf.duration-0.05)clip.dur=buf.duration-(clip.offset||0);
-    const local=Math.max(0,playFrom-clip.start);
-    if(local>=clipDur-1e-4)return;
-    const maxOff=Math.max(0,buf.duration-1e-4);
-    const off0=clamp((clip.offset||0)+local,0,maxOff);
-    let left=Math.min(clipDur-local, buf.duration-off0);
-    if(!(left>0.001))return;
-    // Chunk long clips so some browsers don't drop a single multi-minute start()
-    const CHUNK=45;let tWhen=when,off=off0;
-    while(left>0.001){
-      const slice=Math.min(CHUNK,left);
-      const src=a.createBufferSource();src.buffer=buf;
-      const g=a.createGain();g.gain.value=clip.gain||1;
-      src.connect(g);g.connect(chain.input);
-      try{src.start(tWhen,off,slice);state.nodes.push(src)}catch(e){console.warn('clip schedule',e);break}
-      tWhen+=slice;off+=slice;left-=slice;
+    const now=a.currentTime;
+    const playT=now-state.t0+state.offset; // timeline seconds
+    for(const job of state._sched){
+      const {clip,chain,buf,clipDur,anchor,playFrom}=job;
+      // How far ahead on the timeline we should have audio armed
+      const needUntil=playT+LOOKAHEAD;
+      while(job.nextLocal<clipDur-1e-4){
+        const absStart=clip.start+job.nextLocal; // timeline time of this slice
+        if(absStart>=needUntil)break;
+        if(absStart+0.001<playFrom){job.nextLocal+=SLICE;continue}
+        const delay=absStart-playFrom; // relative to transport start
+        const tWhen=anchor+delay;
+        if(tWhen+SLICE<now-0.05){job.nextLocal+=SLICE;continue} // already past
+        const maxOff=Math.max(0,buf.duration-1e-4);
+        const off=clamp((clip.offset||0)+job.nextLocal,0,maxOff);
+        const slice=Math.min(SLICE, clipDur-job.nextLocal, buf.duration-off);
+        if(!(slice>0.001)){job.nextLocal=clipDur;break}
+        const src=a.createBufferSource();src.buffer=buf;
+        const g=a.createGain();g.gain.value=clip.gain||1;
+        src.connect(g);g.connect(chain.input);
+        try{
+          src.start(Math.max(tWhen,now+0.01),off,slice);
+          state.nodes.push(src);
+        }catch(e){console.warn('clip schedule',e);job.nextLocal=clipDur;break}
+        job.nextLocal+=slice;
+      }
     }
   }
 
@@ -244,6 +268,7 @@ export function createStudio(ui){
       state.tracks.forEach(t=>{t.solo=(t.id===opt.onlyTrackId)});
     }
     state.live=new Map();
+    state._sched=[];
     const master=a.createGain();master.gain.value=1;
     const merge=a.createGain();
     const revGain=a.createGain();revGain.gain.value=1;
@@ -257,7 +282,7 @@ export function createStudio(ui){
     const when=a.currentTime+0.02;
     // Playhead clock starts at the same instant audio is scheduled (fixes graph≠sound drift)
     state.t0=when;state.playing=true;
-    // Schedule ALL tracks; mute/solo only gates gain so M/S works while playing
+    // Arm chains; audio slices filled by look-ahead pump (not all-at-once)
     state.tracks.forEach(tr=>{
       const chain=makeTrackChain(tr);
       const muteG=a.createGain();
@@ -276,6 +301,7 @@ export function createStudio(ui){
       if(ck){ck.mute=false;const live=state.live.get(ck.id);if(live)live.muteG.gain.value=(anySolo&&!ck.solo)?0:1}
       else scheduleMetro(when,state.offset);
     }
+    pumpSchedule();
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
@@ -309,6 +335,7 @@ export function createStudio(ui){
     let t=ac().currentTime-state.t0+state.offset;
     if(state.loop&&t>=state.loopB){startPlay(state.loopA);return}
     if(t>=dur()+0.05){stopPlay();state.offset=0;ui.onTransport?.(state);renderArrange();return}
+    try{pumpSchedule()}catch(e){}
     ui.onTransport?.(state);renderPlayhead(t);
     state._raf=requestAnimationFrame(tick);
   }
