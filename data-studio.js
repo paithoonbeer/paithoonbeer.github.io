@@ -138,6 +138,14 @@ export function createStudio(ui){
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
     fillQuietBass(by,mix);
     const sr=sampleRate||44100;
+    // Keep original mix — mix-minus muted stems beats summing demucs parts for clean beds
+    state.mixBuf=null;
+    try{
+      if(mix&&mix.L){
+        const R=mix.R&&mix.R.length===mix.L.length?mix.R:mix.L;
+        state.mixBuf=bufFromLR(mix.L,R,sr);
+      }
+    }catch(e){state.mixBuf=null}
     const layout=[
       {key:'drums',name:'กลอง',ch:by.drums,color:COLS[0]},
       {key:'bass',name:'เบส',ch:by.bass,color:COLS[1]},
@@ -187,11 +195,14 @@ export function createStudio(ui){
     if(state.playing)state.offset=clamp(ac().currentTime-state.t0+state.offset,0,dur());
     for(const n of state.nodes){try{n.onended=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
+    try{state._meter?.disconnect()}catch(e){}
     state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;
     state._midi=null;state._metroJob=null;state._sched=null;
+    state._meter=null;state._meterTd=null;state._silentMs=0;
     ui.onTransport?.(state);
   }
-  // Live mute/solo/vol — schedule every track, silence via gain (so M mid-play actually cuts)
+  // Live mute/solo/vol — muteG carries effective level (mute × vol) so fader
+  // changes while muted still apply the instant you unmute (no “stuck loud” feel).
   function applyLiveMix(){
     if(!state.playing||!state.live)return;
     const a=ac(),t=a.currentTime;
@@ -199,20 +210,62 @@ export function createStudio(ui){
     for(const tr of state.tracks){
       const L=state.live.get(tr.id);if(!L)continue;
       const silent=tr.mute||(anySolo&&!tr.solo);
-      try{L.muteG.gain.setTargetAtTime(silent?0:1,t,0.02)}catch(e){}
-      try{L.volG.gain.setTargetAtTime((tr.vol||0)/100,t,0.02)}catch(e){}
+      const vol=Math.max(0,(tr.vol||0)/100);
+      try{
+        L.volG.gain.cancelScheduledValues(t);
+        L.volG.gain.setValueAtTime(1,t); // level lives on muteG
+        L.muteG.gain.cancelScheduledValues(t);
+        L.muteG.gain.setValueAtTime(silent?0:vol,t);
+      }catch(e){}
     }
   }
 
-  // Chunked look-ahead. Single long BufferSource.start(..., fullDur) dies silently
-  // around ~60–90s in Chromium while the playhead (currentTime) keeps moving.
-  // Schedule only short slices a few seconds ahead and refill every tick/watchdog.
-  const LOOKAHEAD=10, SLICE=5;
+  // Playback engine notes (Chromium):
+  // 1) One long BufferSource over a multi-minute buffer can go silent ~60–90s
+  //    while currentTime (playhead) keeps advancing — classic Windows Chrome bug.
+  // 2) Even short slices that still point into a huge AudioBuffer via start(when,offset)
+  //    can fail the same way on some GPUs/drivers. Fix: COPY each slice into a fresh
+  //    short AudioBuffer and start() it with no offset.
+  // 3) Soft-reseed the whole graph every ~45s and on silence detect so a dead audio
+  //    thread never leaves the playhead walking alone.
+  const LOOKAHEAD=8, SLICE=2, RESEED_EVERY=45;
   function clipAbsDur(clip,buf){
     if(!buf)return Math.max(0.001,clip.dur||0);
     const d=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
     if((clip.dur||0)<buf.duration-0.05)clip.dur=buf.duration-(clip.offset||0);
     return Math.max(0.001,d);
+  }
+  // Copy a short window out of a (possibly huge) buffer so BufferSource never
+  // seeks deep into multi-minute PCM — this is the durable Chromium workaround.
+  function copyAudioSlice(buf,offSec,durSec){
+    const a=ac();
+    const sr=buf.sampleRate||a.sampleRate;
+    const i0=Math.max(0,Math.min(buf.length-1,Math.floor((offSec||0)*sr)));
+    const n=Math.max(1,Math.min(Math.floor(Math.max(0.001,durSec)*sr), buf.length-i0));
+    const out=a.createBuffer(buf.numberOfChannels,n,sr);
+    for(let c=0;c<buf.numberOfChannels;c++){
+      out.getChannelData(c).set(buf.getChannelData(c).subarray(i0,i0+n));
+    }
+    return out;
+  }
+  // Quick RMS at a timeline position — used so silence-watchdog ignores true rests.
+  function expectedRmsAt(playT){
+    let best=0;
+    for(const tr of state.tracks){
+      if(tr.type!=='audio'||tr.mute)continue;
+      for(const c of tr.clips){
+        const buf=state.buffers.get(c.buf);if(!buf)continue;
+        const local=playT-c.start;
+        if(local<0||local>=(c.dur||buf.duration))continue;
+        const off=(c.offset||0)+local;
+        const sr=buf.sampleRate, i0=Math.floor(off*sr);
+        if(i0<0||i0>=buf.length)continue;
+        const ch=buf.getChannelData(0);const n=Math.min(ch.length,i0+2048);
+        let s=0,cnt=0;for(let i=i0;i<n;i+=8){const v=ch[i];s+=v*v;cnt++}
+        if(cnt)best=Math.max(best,Math.sqrt(s/cnt));
+      }
+    }
+    return best;
   }
   function scheduleAudioClip(tr,clip,chain,when,playFrom){
     if(!state._sched)state._sched=[];
@@ -251,17 +304,56 @@ export function createStudio(ui){
           tWhen=now+0.01;
           if(!(slice>0.001)){job.nextLocal=local0+step;continue}
         }
-        const src=a.createBufferSource();src.buffer=buf;
+        // IMPORTANT: play a copied short buffer (offset=0), not the giant source buffer
+        let playBuf;
+        try{playBuf=copyAudioSlice(buf,off,slice)}catch(e){console.warn('slice copy',e);job.nextLocal=clipDur;break}
+        const src=a.createBufferSource();src.buffer=playBuf;
         const g=a.createGain();g.gain.value=clip.gain||1;
         src.connect(g);g.connect(chain.input);
         try{
-          src.start(tWhen,off,slice);
+          src.start(tWhen);
           state.nodes.push(src);
           src.onended=()=>{if(state.playing)try{pumpSchedule()}catch(e){}};
         }catch(e){console.warn('clip schedule',e);job.nextLocal=clipDur;break}
         job.nextLocal=local0+step;
       }
     }
+  }
+  // Rebuild the audio graph from the current playhead without a user-visible stop.
+  // Defeats Chromium audio-thread death that leaves currentTime advancing alone.
+  function softReseed(at){
+    if(!state.playing||state._reseeding)return;
+    state._reseeding=true;
+    try{
+      cancelAnimationFrame(state._raf);
+      if(state._watch){clearInterval(state._watch);state._watch=null}
+      for(const n of state.nodes){try{n.onended=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
+      for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
+      state.nodes=[];state.fx=[];state.live=null;
+      state._midi=null;state._metroJob=null;state._sched=null;
+      state.playing=false; // so startPlay→stopPlay won't rewrite offset
+      startPlay(at,{reseed:true});
+    }finally{state._reseeding=false}
+  }
+  function watchAudioHealth(){
+    if(!state.playing||state._reseeding)return;
+    const a=ac();
+    if(state._reseedGuard && a.currentTime<state._reseedGuard)return;
+    const playT=a.currentTime-state.t0+state.offset;
+    if(playT<1||playT>=dur()-0.5)return;
+    // Proactive reseed before the typical ~60–90s Chromium death window
+    if(playT-(state._lastReseed||0)>=RESEED_EVERY){softReseed(playT);return}
+    const an=state._meter;
+    if(!an||!state._meterTd)return;
+    an.getByteTimeDomainData(state._meterTd);
+    let peak=0;const td=state._meterTd;
+    for(let i=0;i<td.length;i++){const v=td[i]-128;if(v>peak)peak=v;else if(-v>peak)peak=-v}
+    if(peak>=3){state._silentMs=0;return}
+    // Output is flat — only recover if the project actually has energy here
+    const expect=expectedRmsAt(playT);
+    if(expect<0.01){state._silentMs=0;return}
+    state._silentMs=(state._silentMs||0)+250;
+    if(state._silentMs>=900){state._silentMs=0;softReseed(playT)}
   }
 
   // MIDI notes also drop if started minutes ahead — look-ahead refill on tick
@@ -323,6 +415,9 @@ export function createStudio(ui){
     state.live=new Map();
     state._midi=[];
     state._sched=[];
+    state._silentMs=0;
+    state._lastReseed=state.offset;
+    state._reseedGuard=a.currentTime+1.2; // ignore silence watchdog while graph primes
     const master=a.createGain();master.gain.value=1;
     const merge=a.createGain();
     const revGain=a.createGain();revGain.gain.value=1;
@@ -341,16 +436,21 @@ export function createStudio(ui){
     }else{
       merge.connect(master);
     }
-    master.connect(a.destination);
+    // Meter tap before destination — silence watchdog uses this
+    const meter=a.createAnalyser();meter.fftSize=2048;meter.smoothingTimeConstant=0.2;
+    master.connect(meter);meter.connect(a.destination);
+    state._meter=meter;state._meterTd=new Uint8Array(meter.fftSize);
 
     const anySolo=state.tracks.some(t=>t.solo);
     const when=a.currentTime+0.02;
     state.t0=when;state.playing=true;
     state.tracks.forEach(tr=>{
       const chain=makeTrackChain(tr);
+      // vol lives on muteG (see applyLiveMix); chain input gain stays unity
+      try{chain.input.gain.value=1}catch(e){}
       const muteG=a.createGain();
       const silent=tr.mute||(anySolo&&!tr.solo);
-      muteG.gain.value=silent?0:1;
+      muteG.gain.value=silent?0:Math.max(0,(tr.vol||0)/100);
       chain.dry.connect(muteG);
       const isGuide=tr.stem==='click'||tr.stem==='countin';
       if(lrOn&&merger){
@@ -374,8 +474,8 @@ export function createStudio(ui){
       else scheduleMetro(when,state.offset);
     }
     pumpSchedule();
-    // Watchdog: Chromium can stall the audio graph; keep refilling slices on a timer too
-    state._watch=setInterval(()=>{if(state.playing){try{pumpSchedule();pumpMidi();pumpMetro()}catch(e){}}},400);
+    // Watchdog: refill slices + health check (silence → soft reseed)
+    state._watch=setInterval(()=>{if(state.playing){try{pumpSchedule();pumpMidi();pumpMetro();watchAudioHealth()}catch(e){}}},250);
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
@@ -626,6 +726,7 @@ export function createStudio(ui){
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='strip';el.dataset.i=i;
       const labBg=tr.color||'#85909b';
+      el.classList.toggle('muted',!!tr.mute);
       el.innerHTML=`<div class="lab" style="background:${labBg}" title="${escAttr(tr.name)}">${tr.name}</div>
         <div class="eqcol">
           <label class="eqrow"><span>Lo</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.lo}" data-eq="lo" data-i="${i}"><b data-eqv="lo">${eqLabel(tr.eq.lo)}</b></label>
@@ -633,8 +734,8 @@ export function createStudio(ui){
           <label class="eqrow"><span>Hi</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.hi}" data-eq="hi" data-i="${i}"><b data-eqv="hi">${eqLabel(tr.eq.hi)}</b></label>
           <label class="eqrow"><span>Rv</span><input type="range" min="0" max="100" step="1" value="${(tr.rev||0)*100|0}" data-rev="${i}"><b data-eqv="rv">${(tr.rev||0)*100|0}</b></label>
         </div>
-        <div class="fader-wrap"><input class="fader" type="range" min="0" max="150" value="${tr.vol}" data-vol="${i}" title="ระดับ ${tr.name}"></div>
-        <span class="fader-val">${tr.vol}</span>
+        <div class="fader-wrap"><input class="fader" type="range" min="0" max="200" value="${tr.vol}" data-vol="${i}" title="ระดับ ${tr.name}${tr.mute?' (มิวต์ — ค่าจะใช้ตอนเปิด M)':''}"></div>
+        <span class="fader-val">${tr.vol}${tr.mute?' ·M':''}</span>
         <div class="ms">
         <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
         <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}">S</button></div>`;
@@ -1058,27 +1159,53 @@ export function createStudio(ui){
     return bufToWavBlob(rendered,{targetPeak:0.89,maxGain:4});
   }
 
-  /** Mix unmuted audio stems → mono music bed (for dual-mono ready file). */
+  /**
+   * Mix unmuted audio stems → mono music bed (for dual-mono ready file).
+   * Prefer original-mix minus muted stems when available — much cleaner than
+   * summing demucs parts (matches reference dual-mono packs like「เด๋อ」).
+   */
   async function renderMusicMono(tracks,sr,padLead,totalDur){
     sr=sr||nativeSr();
     const pad=Math.max(0,+padLead||0);
     const length=Math.max(1,Math.ceil((totalDur||dur())*sr));
+    const mutedMusic=state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.clips.length);
+    const useMixMinus=!!(state.mixBuf&&mutedMusic.length&&mutedMusic.length<6);
     const off=new OfflineAudioContext(1,length,sr);
     const merge=off.createGain();merge.gain.value=1;merge.connect(off.destination);
-    for(const tr of tracks){
-      if(!tr||tr.type!=='audio'||tr.mute||!tr.clips.length)continue;
-      if(tr.stem==='click'||tr.stem==='countin')continue;
-      const g=off.createGain();g.gain.value=(tr.vol||100)/100;g.connect(merge);
-      for(const c of tr.clips){
-        const buf=state.buffers.get(c.buf);if(!buf)continue;
-        const src=off.createBufferSource();src.buffer=buf;
-        const cg=off.createGain();cg.gain.value=c.gain||1;
-        src.connect(cg);cg.connect(g);
-        const maxOff=Math.max(0,buf.duration-1e-4);
-        const off0=clamp(c.offset||0,0,maxOff);
-        const dur0=Math.min(Math.max(0.001,c.dur||0),Math.max(0.001,buf.duration-off0));
-        // Export: music starts after count-in pad (clip.start forced 0)
-        try{src.start(pad,off0,dur0)}catch(e){}
+    function scheduleBuf(buf,gain,at){
+      if(!buf)return;
+      const src=off.createBufferSource();src.buffer=buf;
+      const g=off.createGain();g.gain.value=gain;
+      src.connect(g);g.connect(merge);
+      const maxOff=Math.max(0,buf.duration-1e-4);
+      const dur0=Math.max(0.001,Math.min(buf.duration,maxOff));
+      try{src.start(at,0,dur0)}catch(e){}
+    }
+    if(useMixMinus){
+      // Clean bed: original mix − each muted stem (phase-aligned demucs cancel)
+      scheduleBuf(state.mixBuf,1,pad);
+      for(const tr of mutedMusic){
+        for(const c of tr.clips){
+          const buf=state.buffers.get(c.buf);if(!buf)continue;
+          scheduleBuf(buf,-(tr.vol||100)/100,pad+(c.start||0));
+        }
+      }
+      // Also add any unmuted stem that isn't in the mix path? All music stems are in mix.
+      // If user lowered an unmuted stem's vol below 100, remix by scaling: skip for now (mute-centric).
+    }else{
+      for(const tr of tracks){
+        if(!tr||tr.type!=='audio'||tr.mute||!tr.clips.length)continue;
+        if(tr.stem==='click'||tr.stem==='countin')continue;
+        for(const c of tr.clips){
+          const buf=state.buffers.get(c.buf);if(!buf)continue;
+          const src=off.createBufferSource();src.buffer=buf;
+          const g=off.createGain();g.gain.value=(tr.vol||100)/100*(c.gain||1);
+          src.connect(g);g.connect(merge);
+          const maxOff=Math.max(0,buf.duration-1e-4);
+          const off0=clamp(c.offset||0,0,maxOff);
+          const dur0=Math.min(Math.max(0.001,c.dur||0),Math.max(0.001,buf.duration-off0));
+          try{src.start(pad,off0,dur0)}catch(e){}
+        }
       }
     }
     return await off.startRendering();
@@ -1131,9 +1258,10 @@ export function createStudio(ui){
       if(ci>=2&&bar===0&&(b4===1||b4===3))speak=false; // half-time first bar
       let spoke=false;
       if(speak&&hasVoice)spoke=mixVoiceAt(L,R,at,word,sr,b4===0?1.15:1.0);
+      // Louder transient clicks like reference「เด๋อ」nom channel
       if(speak||!hasVoice){
-        if(b4===0)hitAt(L,R,at,sr,2100,spoke?0.35:1.0,16);
-        else if(speak)hitAt(L,R,at,sr,1550,spoke?0.22:0.75,11);
+        if(b4===0)hitAt(L,R,at,sr,2200,spoke?0.55:1.25,18);
+        else if(speak)hitAt(L,R,at,sr,1650,spoke?0.38:0.95,12);
       }
     }
     // —— song clicks (after count-in), grid locked to music t0 ——
@@ -1143,19 +1271,19 @@ export function createStudio(ui){
       const at=Math.floor(t*sr);if(at>=n)break;
       const b4=beat%4;
       if(style==='rock'){
-        if(b4===0)hitAt(L,R,at,sr,1800,0.78,14);
-        else if(b4===2)hitAt(L,R,at,sr,1600,0.5,12);
-        if(b4===1||b4===3)hitAt(L,R,at,sr,900,0.58,10);
+        if(b4===0)hitAt(L,R,at,sr,1900,1.05,15);
+        else if(b4===2)hitAt(L,R,at,sr,1650,0.72,12);
+        if(b4===1||b4===3)hitAt(L,R,at,sr,950,0.78,10);
       }else if(style==='samcha'){
-        if(b4===0)hitAt(L,R,at,sr,2000,0.72,14);
-        else if(b4===1){hitAt(L,R,at,sr,1400,0.35,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1500,0.45,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1500,0.45,9)}
-        else if(b4===2){hitAt(L,R,at,sr,1300,0.32,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1450,0.42,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1450,0.42,9)}
-        else hitAt(L,R,at,sr,1200,0.38,10);
+        if(b4===0)hitAt(L,R,at,sr,2100,1.0,15);
+        else if(b4===1){hitAt(L,R,at,sr,1450,0.48,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1550,0.58,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1550,0.58,9)}
+        else if(b4===2){hitAt(L,R,at,sr,1350,0.42,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1500,0.55,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1500,0.55,9)}
+        else hitAt(L,R,at,sr,1250,0.5,10);
       }else if(style==='slow'){
-        if(b4===0)hitAt(L,R,at,sr,1500,0.7,16);
-        else if(b4===2)hitAt(L,R,at,sr,1100,0.35,12);
+        if(b4===0)hitAt(L,R,at,sr,1600,0.95,18);
+        else if(b4===2)hitAt(L,R,at,sr,1150,0.48,13);
       }else{
-        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.95:0.58,12);
+        const accent=b4===0;hitAt(L,R,at,sr,accent?2100:1300,accent?1.2:0.78,13);
       }
     }
     if(flourish){

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.16">
+<meta name="bp-data" content="1.0.18">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -90,6 +90,9 @@ button,input{font:inherit;color:inherit}
 .mixer-wrap.folded .mixer{display:none}
 .mixer-wrap.folded .mixer-fold{border-bottom:0}
 .strip{flex:0 0 108px;background:#151a21;border:1px solid var(--line);border-radius:8px;padding:0 6px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:300px}
+.strip.muted{opacity:.72;border-color:#5a3030}
+.strip.muted .fader{accent-color:#c45a5a}
+.strip.muted .fader-val{color:#e08888}
 .strip .lab{font-size:12px;font-weight:800;text-align:center;width:100%;padding:8px 4px 6px;border-radius:8px 8px 0 0;margin:0 -6px;color:#0b0d10;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .strip .eqcol{display:flex;flex-direction:column;gap:3px;width:100%;padding:0 2px}
 .strip .eqrow{display:grid;grid-template-columns:22px 1fr 28px;align-items:center;gap:4px;font-size:10px;color:var(--mut)}
@@ -230,8 +233,11 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 <div class="toast" id="toast"></div>
 
 <script type="module">
-import {createStudio} from './data-studio.js';
-import {DATAV,DATACHG,dataWhatsNew} from './data-ver.js';
+const _DV=(document.querySelector('meta[name="bp-data"]')?.content||'')+'';
+const [{createStudio},{DATAV,DATACHG,dataWhatsNew}]=await Promise.all([
+  import('./data-studio.js?v='+_DV),
+  import('./data-ver.js?v='+_DV)
+]);
 
 const desk=matchMedia('(pointer:fine)').matches&&!/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)&&innerWidth>=900;
 if(!desk)document.getElementById('gate').classList.add('on');
@@ -471,13 +477,13 @@ async function makeDataNow(){
     // Dual-mono ready file (L/R split like reference เด๋อ E) for simple import
     try{
       const mono=await studio.renderMusicMono(music,sr,pad,total);
-      const dual=studio.makeDualMonoBlob(mono,guide.buf,nomSide,{targetPeak:0.95,maxGain:1.4});
+      const dual=studio.makeDualMonoBlob(mono,guide.buf,nomSide,{targetPeak:0.97,maxGain:1.6});
       const sideLab=nomSide==='R'?'L=เพลง R=นอม':'L=นอม R=เพลง';
       out.push(new File([dual],`${title} (พร้อมใช้ ${sideLab}).wav`,{type:'audio/wav'}));
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.16',ciBaked:ci||0};
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.18',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);

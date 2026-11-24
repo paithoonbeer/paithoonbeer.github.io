@@ -2,8 +2,10 @@
  * Bump DATAV here (and meta bp-data in data.html) when shipping Data-only changes.
  * Do NOT bump public/app.js APPV / sw cache / APK for Data-only work.
  */
-export const DATAV='1.0.16';
+export const DATAV='1.0.18';
 export const DATACHG={
+  '1.0.18':'มิกเซอร์: ปรับดังตอนมิวต์แล้วเปิดกลับมีผลทันที · ดาต้าสะอาดขึ้น (mix−สเต็มที่ปิด) · นอมดังชัดแบบเด๋อ · กันเสียงตัด 1:20',
+  '1.0.17':'แก้เสียงตัด ~1:20 ถาวร: คัดลอกชิ้นสั้นไม่ seek บัฟเฟอร์ใหญ่ · soft-reseed ทุก 45วิ · ตรวจเงียบแล้วต่อเอง',
   '1.0.16':'ลบแทร็กได้ · แก้เสียงตัด ~1:20 จริง (คิวชิ้นสั้น+watchdog) · ฟัง L/R แบบ SetSod ในสตูดิโอ',
   '1.0.15':'เปิดฟังตัวอย่างรูปแบบเด๋อในหน้า Data + ลิงก์ Drive / โฟลเดอร์ Desktop',
   '1.0.14':'ตามตัวอย่างเด๋อ: นับเข้าฝังในช่องนอม · ไฟล์พร้อมใช้ dual-mono · นอมดังขึ้น · กันนับซ้ำในแอป',

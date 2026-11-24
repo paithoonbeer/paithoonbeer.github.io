@@ -1,6 +1,6 @@
 {
-  "build": 113,
-  "ver": "1.0.119",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b113-1.0.119/SetSod.apk",
-  "notes": "1.0.119: คุณภาพดาต้า — WAV เต็มเรทบนพีซี + เรนเดอร์ normalize/dither"
+  "build": 112,
+  "ver": "1.0.118",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b112-1.0.118/SetSod.apk",
+  "notes": "1.0.118 — แก้ลิงก์อัปเดต APK ที่พัง (build 113 ยังไม่มีไฟล์บน GitHub) · ใช้ลิงก์ release ที่มีไฟล์จริง"
 }
