@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.14">
+<meta name="bp-data" content="1.0.15">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -42,6 +42,12 @@ button,input{font:inherit;color:inherit}
 .import .drop{flex:1;min-width:200px;border:1px dashed #3a4650;border-radius:8px;padding:8px 12px;text-align:center;cursor:pointer}
 .import .drop.over{border-color:var(--acc);background:rgba(61,186,138,.08)}
 .status{color:var(--mut);font-family:JetMono,ui-monospace,monospace;font-size:11px}
+.exref{flex:1 1 100%;border:1px solid var(--line);border-radius:8px;background:#0e1318;padding:4px 10px;color:var(--mut);font-size:12px}
+.exref summary{cursor:pointer;color:var(--acc);font-weight:650;padding:4px 0}
+.exref-body{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:6px 0 8px}
+.exref-body label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--mut)}
+.exref-body audio{height:28px;max-width:220px}
+.exref-body code{font-family:JetMono,monospace;font-size:10px;color:#9ab}
 .recipe{display:flex;gap:10px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);background:#10151b;flex-wrap:wrap}
 .recipe b{font-size:12px;color:var(--acc)}
 .recipe .rmutes{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mut);font-size:11px}
@@ -147,6 +153,16 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button class="btn" id="btnLoad">เปิดโปรเจกต์</button>
     <input id="fileProj" type="file" accept=".json,application/json" hidden>
     <span class="status" id="sAi"></span>
+    <details class="exref" id="exRef">
+      <summary>🎧 ฟังตัวอย่างรูปแบบเด๋อ (dual-mono)</summary>
+      <div class="exref-body">
+        <span class="status">L = ดนตรี · R = นอม+นับเข้า · ไฟล์เต็มอยู่บน Drive / Desktop <code>SetSod_Data_Example</code></span>
+        <label>สเตอริโอ <audio controls preload="none" src="./data-example/01_stereo_first20s.mp3"></audio></label>
+        <label>ซ้าย=เพลง <audio controls preload="none" src="./data-example/02_LEFT_music_only.mp3"></audio></label>
+        <label>ขวา=นอม <audio controls preload="none" src="./data-example/03_RIGHT_nom_countin_only.mp3"></audio></label>
+        <a class="btn" href="https://drive.google.com/drive/folders/1wGZXKgCuWJOBygMtUkz2HexA9MDorW6j" target="_blank" rel="noopener">เปิดโฟลเดอร์ Drive</a>
+      </div>
+    </details>
   </div>
 
   <div class="recipe" id="recipe" title="ทำดาต้าครบ: ปิดเครื่อง · นอม · นับเข้า · จังหวะ · ลูกเล่น · โปรไฟล์">
@@ -458,7 +474,7 @@ async function makeDataNow(){
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.14',ciBaked:ci||0};
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.15',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);
