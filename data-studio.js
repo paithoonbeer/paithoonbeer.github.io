@@ -149,19 +149,24 @@ export function createStudio(ui){
     const a=ac();
     const g=a.createGain();g.gain.value=tr.vol/100;
     const p=a.createStereoPanner();p.pan.value=tr.pan||0;
-    // simple shelving via biquads
-    const lo=a.createBiquadFilter();lo.type='lowshelf';lo.frequency.value=180;lo.gain.value=tr.eq.lo;
-    const mid=a.createBiquadFilter();mid.type='peaking';mid.frequency.value=1200;mid.Q.value=0.8;mid.gain.value=tr.eq.mid;
-    const hi=a.createBiquadFilter();hi.type='highshelf';hi.frequency.value=6000;hi.gain.value=tr.eq.hi;
-    const dry=a.createGain();dry.gain.value=1-(tr.rev||0)*0.7;
-    const wet=a.createGain();wet.gain.value=(tr.rev||0)*0.7;
-    const conv=a.createConvolver();
-    // synthetic impulse
-    if(!state._imp){const len=a.sampleRate*1.2,imp=a.createBuffer(2,len,a.sampleRate);for(let c=0;c<2;c++){const d=imp.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.8)}state._imp=imp}
-    conv.buffer=state._imp;
-    g.connect(lo);lo.connect(mid);mid.connect(hi);hi.connect(p);
-    p.connect(dry);p.connect(wet);wet.connect(conv);
-    return {input:g,dry,conv,nodes:[g,p,lo,mid,hi,dry,wet,conv]};
+    // EQ defaults flat (0 dB) — never boost unless user moves the fader
+    const lo=a.createBiquadFilter();lo.type='lowshelf';lo.frequency.value=180;lo.gain.value=tr.eq.lo||0;
+    const mid=a.createBiquadFilter();mid.type='peaking';mid.frequency.value=1200;mid.Q.value=0.8;mid.gain.value=tr.eq.mid||0;
+    const hi=a.createBiquadFilter();hi.type='highshelf';hi.frequency.value=6000;hi.gain.value=tr.eq.hi||0;
+    const dry=a.createGain();
+    const wet=a.createGain();
+    const revAmt=Math.max(0,Math.min(1,tr.rev||0));
+    dry.gain.value=1-revAmt*0.7;wet.gain.value=revAmt*0.7;
+    const nodes=[g,p,lo,mid,hi,dry,wet];
+    g.connect(lo);lo.connect(mid);mid.connect(hi);hi.connect(p);p.connect(dry);
+    let conv=null;
+    // Only build convolver when reverb is actually on (saves CPU on long songs)
+    if(revAmt>0.001){
+      conv=a.createConvolver();
+      if(!state._imp){const len=a.sampleRate*1.2,imp=a.createBuffer(2,len,a.sampleRate);for(let c=0;c<2;c++){const d=imp.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.8)}state._imp=imp}
+      conv.buffer=state._imp;p.connect(wet);wet.connect(conv);nodes.push(conv);
+    }
+    return {input:g,dry,conv,lo,mid,hi,wet,nodes};
   }
 
   function stopPlay(){
@@ -188,16 +193,25 @@ export function createStudio(ui){
   function scheduleAudioClip(tr,clip,chain,when,playFrom){
     const buf=state.buffers.get(clip.buf);if(!buf)return;
     const a=ac();
-    const src=a.createBufferSource();src.buffer=buf;
-    const g=a.createGain();g.gain.value=clip.gain||1;
-    src.connect(g);g.connect(chain.input);
-    // clip window — clamp offset into [0, buf.duration] so bad trims never throw RangeError
+    // Prefer buffer length — clip.dur can lag after long AI separates
+    const clipDur=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
+    if(clip.dur<buf.duration-0.05)clip.dur=buf.duration-(clip.offset||0);
     const local=Math.max(0,playFrom-clip.start);
-    if(local>=clip.dur)return;
+    if(local>=clipDur-1e-4)return;
     const maxOff=Math.max(0,buf.duration-1e-4);
-    const off=clamp(clip.offset+local,0,maxOff);
-    const remain=Math.min(Math.max(0.001,clip.dur-local),Math.max(0.001,buf.duration-off));
-    try{src.start(when,off,remain);state.nodes.push(src)}catch(e){console.warn('clip schedule',e)}
+    const off0=clamp((clip.offset||0)+local,0,maxOff);
+    let left=Math.min(clipDur-local, buf.duration-off0);
+    if(!(left>0.001))return;
+    // Chunk long clips so some browsers don't drop a single multi-minute start()
+    const CHUNK=45;let tWhen=when,off=off0;
+    while(left>0.001){
+      const slice=Math.min(CHUNK,left);
+      const src=a.createBufferSource();src.buffer=buf;
+      const g=a.createGain();g.gain.value=clip.gain||1;
+      src.connect(g);g.connect(chain.input);
+      try{src.start(tWhen,off,slice);state.nodes.push(src)}catch(e){console.warn('clip schedule',e);break}
+      tWhen+=slice;off+=slice;left-=slice;
+    }
   }
 
   function scheduleMidi(tr,chain,when,playFrom){
@@ -250,16 +264,16 @@ export function createStudio(ui){
       const silent=tr.mute||(anySolo&&!tr.solo);
       muteG.gain.value=silent?0:1;
       chain.dry.connect(muteG);muteG.connect(merge);
-      chain.conv.connect(revGain);
+      if(chain.conv)chain.conv.connect(revGain);
       state.fx.push(chain);
-      state.live.set(tr.id,{muteG,volG:chain.input});
+      state.live.set(tr.id,{muteG,volG:chain.input,lo:chain.lo,mid:chain.mid,hi:chain.hi});
       if(tr.type==='audio')tr.clips.forEach(c=>scheduleAudioClip(tr,c,chain,when,state.offset));
       else scheduleMidi(tr,chain,when,state.offset);
     });
-    // Metro: only unmute the click guide track — never stack a second oscillator metro on top
+    // Metro: unmute existing นอม track only — never stack a second click source
     if(state.metro){
       const ck=state.tracks.find(t=>t.stem==='click');
-      if(ck){ck.mute=false;const live=state.live.get(ck.id);if(live)live.muteG.gain.value=1}
+      if(ck){ck.mute=false;const live=state.live.get(ck.id);if(live)live.muteG.gain.value=(anySolo&&!ck.solo)?0:1}
       else scheduleMetro(when,state.offset);
     }
     ui.onTransport?.(state);tick();
@@ -469,18 +483,21 @@ export function createStudio(ui){
     const ph=$('playhead');if(!ph)return;ph.style.left=(Math.max(0,t)*state.pxPerSec)+'px';
   }
 
+  function eqLabel(v){v=+v||0;return (v>0?'+':'')+v}
   function renderMixer(){
     const box=$('mixer');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='strip';el.dataset.i=i;
-      el.innerHTML=`<div class="lab" title="${escAttr(tr.name)}">${tr.name}</div>
+      const labBg=tr.color||'#85909b';
+      el.innerHTML=`<div class="lab" style="background:${labBg}" title="${escAttr(tr.name)}">${tr.name}</div>
         <div class="eqcol">
-          <label class="vfx" title="Low">Lo<input type="range" min="-12" max="12" value="${tr.eq.lo}" data-eq="lo" data-i="${i}" orient="vertical"></label>
-          <label class="vfx" title="Mid">Mid<input type="range" min="-12" max="12" value="${tr.eq.mid}" data-eq="mid" data-i="${i}" orient="vertical"></label>
-          <label class="vfx" title="High">Hi<input type="range" min="-12" max="12" value="${tr.eq.hi}" data-eq="hi" data-i="${i}" orient="vertical"></label>
-          <label class="vfx" title="Reverb">Rv<input type="range" min="0" max="100" value="${(tr.rev||0)*100}" data-rev="${i}" orient="vertical"></label>
+          <label class="eqrow"><span>Lo</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.lo}" data-eq="lo" data-i="${i}"><b data-eqv="lo">${eqLabel(tr.eq.lo)}</b></label>
+          <label class="eqrow"><span>Mid</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.mid}" data-eq="mid" data-i="${i}"><b data-eqv="mid">${eqLabel(tr.eq.mid)}</b></label>
+          <label class="eqrow"><span>Hi</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.hi}" data-eq="hi" data-i="${i}"><b data-eqv="hi">${eqLabel(tr.eq.hi)}</b></label>
+          <label class="eqrow"><span>Rv</span><input type="range" min="0" max="100" step="1" value="${(tr.rev||0)*100|0}" data-rev="${i}"><b data-eqv="rv">${(tr.rev||0)*100|0}</b></label>
         </div>
-        <div class="fader-wrap"><input class="fader" type="range" min="0" max="100" value="${tr.vol}" data-vol="${i}" orient="vertical" title="ระดับเสียง ${tr.vol}"><span class="fader-val">${tr.vol}</span></div>
+        <div class="fader-wrap"><input class="fader" type="range" min="0" max="150" value="${tr.vol}" data-vol="${i}" title="ระดับ ${tr.name}"></div>
+        <span class="fader-val">${tr.vol}</span>
         <div class="ms">
         <button type="button" class="tb play ${tr.solo?'on':''}" data-tp="${i}" title="โซโล่">▶</button>
         <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
@@ -554,12 +571,9 @@ export function createStudio(ui){
     $('btnSelect').onclick=()=>{state.tool='select';syncTools()};
     $('btnDraw').onclick=()=>{state.tool='draw';syncTools()};
     $('chkMetro').onchange=e=>{
-      state.metro=e.target.checked;
-      const ck=state.tracks.find(t=>t.stem==='click');
-      if(ck){ck.mute=!state.metro;applyLiveMix();renderTracks();renderMixer()}
-      else if(state.metro&&state.tracks.some(t=>t.clips&&t.clips.length)){
-        try{syncGuideTracks({metroOn:true,ci:0})}catch(err){}
-      }
+      // Toggle นอม anytime without rebuilding the whole timeline (avoids click bursts / disappearing)
+      state.metro=!!e.target.checked;
+      setNomAudible(state.metro);
     };
     $('chkLoop').onchange=e=>{state.loop=e.target.checked;renderArrange()};
     $('chkSnap').onchange=e=>state.snap=e.target.checked;
@@ -587,11 +601,23 @@ export function createStudio(ui){
       const i=+e.target.dataset.i;
       if(e.target.dataset.vol!=null){
         const ti=+e.target.dataset.vol;state.tracks[ti].vol=+e.target.value;applyLiveMix();
-        const lab=e.target.parentElement&&e.target.parentElement.querySelector('.fader-val');
+        const strip=e.target.closest('.strip');const lab=strip&&strip.querySelector('.fader-val');
         if(lab)lab.textContent=String(e.target.value|0);
       }
-      if(e.target.dataset.eq){state.tracks[i].eq[e.target.dataset.eq]=+e.target.value;applyLiveMix()}
-      if(e.target.dataset.rev!=null){state.tracks[+e.target.dataset.rev].rev=+e.target.value/100;applyLiveMix()}
+      if(e.target.dataset.eq){
+        const k=e.target.dataset.eq;state.tracks[i].eq[k]=+e.target.value;
+        const b=e.target.parentElement&&e.target.parentElement.querySelector('[data-eqv="'+k+'"]');
+        if(b)b.textContent=eqLabel(e.target.value);
+        try{
+          const live=state.live&&state.live.get(state.tracks[i].id);
+          if(live&&live[k])live[k].gain.setTargetAtTime(+e.target.value,ac().currentTime,0.02);
+        }catch(err){}
+      }
+      if(e.target.dataset.rev!=null){
+        const ti=+e.target.dataset.rev;state.tracks[ti].rev=+e.target.value/100;applyLiveMix();
+        const b=e.target.parentElement&&e.target.parentElement.querySelector('[data-eqv="rv"]');
+        if(b)b.textContent=String(e.target.value|0);
+      }
     };
     $('mixer').onclick=e=>{
       const m=e.target.closest('[data-m]');if(m){mark();state.tracks[+m.dataset.m].mute=!state.tracks[+m.dataset.m].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
@@ -1129,10 +1155,22 @@ export function createStudio(ui){
     return floatToBuf(L,R,sr);
   }
 
+  // Turn นอม on/off live (mute only — no rebuild, no click bursts)
+  function setNomAudible(on){
+    state.metro=!!on;
+    let ck=state.tracks.find(t=>t.stem==='click');
+    if(!ck&&on&&state.tracks.some(t=>t.clips&&t.clips.length&&t.stem&&t.stem!=='countin')){
+      try{syncGuideTracks({metroOn:true,ci:0,preview:true})}catch(e){}
+      ck=state.tracks.find(t=>t.stem==='click');
+    }
+    if(ck){ck.mute=!on;applyLiveMix();renderTracks();renderMixer()}
+    const el=typeof document!=='undefined'&&document.getElementById('chkMetro');
+    if(el)el.checked=!!on;
+  }
   /**
    * Rebuild visible เมโทรนอม/นอม + นับเข้า tracks (waveform + audible on Play).
-   * opts: {bpm,t0,ci,feel,flourish,metroOn}
-   * Music stems shift to start after count-in so you hear 1-2-3-4 then the song.
+   * opts: {bpm,t0,ci,feel,flourish,metroOn,preview}
+   * Studio preview uses clean quarter-note clicks only (no flourish/samcha bursts).
    */
   function syncGuideTracks(opts){
     opts=opts||{};
@@ -1141,37 +1179,44 @@ export function createStudio(ui){
     const ci=Math.max(0,Math.min(4,+(opts.ci!=null?opts.ci:0)|0));
     const feel=opts.feel||'normal',flourish=!!opts.flourish;
     const metroOn=opts.metroOn!=null?!!opts.metroOn:!!state.metro;
+    const preview=opts.preview!==false; // default: studio-safe click
     state.bpm=bpm;state.t0=t0;
     const sr=nativeSr();
     const spb=60/bpm,ciSec=ci*4*spb;
 
-    // Drop previous guide tracks (and free their buffers loosely)
+    // Drop previous guide tracks
     state.tracks=state.tracks.filter(t=>t.stem!=='click'&&t.stem!=='countin');
 
-    // Music stems: place after count-in so audition matches karaoke feel
+    // Music stems after count-in; keep clip.dur = buffer.duration (never shrink)
+    let musicDur=1;
     for(const tr of state.tracks){
       if(tr.type!=='audio'||!tr.stem)continue;
-      for(const c of tr.clips)c.start=ciSec;
+      for(const c of tr.clips){
+        const b=state.buffers.get(c.buf);
+        if(b){c.dur=b.duration;musicDur=Math.max(musicDur,b.duration)}
+        else musicDur=Math.max(musicDur,c.dur||0);
+        c.start=ciSec;
+      }
     }
 
-    const musicDur=Math.max(1,dur()-ciSec);
-    // Count-in track
     if(ci>0){
       const cib=makeCountInBuf(ci,bpm,sr);
       if(cib){
         const id=putBuf(cib);
-        const t=addAudioTrack('นับเข้า', '#ffd60a');t.stem='countin';t.vol=110;
+        const t=addAudioTrack('นับเข้า', '#ffd60a');t.stem='countin';t.vol=110;t.mute=false;
         t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:cib.duration,gain:1,peaks:peaksOf(cib),name:'countin'});
       }
     }
-    // Metronome / nom track — starts with music (after count-in), locked to t0
-    const click=makeClickBuf(musicDur,bpm,sr,{style:feel,flourish,t0});
+    // Audition nom: plain 1-2-3-4 quarter clicks only (export still uses feel/flourish)
+    const clickStyle=preview?'normal':feel;
+    const clickFlour=preview?false:flourish;
+    const click=makeClickBuf(musicDur,bpm,sr,{style:clickStyle,flourish:clickFlour,t0});
     const cid=putBuf(click);
     const ct=addAudioTrack('เมโทรนอม / นอม', '#45c4d4');ct.stem='click';ct.vol=90;ct.mute=!metroOn;
     ct.clips.push({id:uid(),buf:cid,start:ciSec,offset:0,dur:click.duration,gain:1,peaks:peaksOf(click),name:'click'});
 
     renderAll();
-    return{bpm,t0,ci,ciSec,feel};
+    return{bpm,t0,ci,ciSec,feel,musicDur};
   }
 
   function syncToolsInit(){syncTools()}
@@ -1181,7 +1226,7 @@ export function createStudio(ui){
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
     applyStemMutes,renderTrackWav,makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
-    syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,
+    syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
     async boot(){bind();
       // Preload spoken one–two–three–four for Data count-in
       try{loadCiVoices()}catch(e){}

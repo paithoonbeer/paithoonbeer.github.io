@@ -2,8 +2,9 @@
  * Bump DATAV here (and meta bp-data in data.html) when shipping Data-only changes.
  * Do NOT bump public/app.js APPV / sw cache / APK for Data-only work.
  */
-export const DATAV='1.0.9';
+export const DATAV='1.0.10';
 export const DATACHG={
+  '1.0.10':'มิกเซอร์มีชื่อแทร็กชัด · EQ กลาง 0dB · นอมเปิด/ปิดได้ตลอดไม่รัว · กันเพลงยาวถูกตัดตอนเล่น',
   '1.0.9':'แก้กีตาร์↔คีย์จากคลิปจริง · เบสว่างเติมโลว์ · นอมล็อกบีด · มิกเซอร์แนวตั้ง · ▶ กราฟ=โซโล่หลายแทร็ก · กันตัดเพลง',
   '1.0.8':'แก้ลำดับกีตาร์/คีย์ (Demucs 6s) · นับเข้าพูด one–two–three–four · นอมล็อกบีดจาก onset',
   '1.0.7':'แยก 6 ส่วน (กีตาร์≠อื่นๆ + ร้องแยก) · แทร็กเมโทรนอม/นับเข้ามีกราฟและเสียงใน Data',

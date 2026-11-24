@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.9">
+<meta name="bp-data" content="1.0.10">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -78,17 +78,18 @@ button,input{font:inherit;color:inherit}
 .mixer-fold{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:4px 10px;border:0;border-bottom:1px solid var(--line);background:#151a21;color:var(--mut);cursor:pointer;font:650 12px NotoThai,system-ui,sans-serif;text-align:left}
 .mixer-fold:hover{color:var(--tx);background:#1a222c}
 .mixer-fold .chev{margin-left:auto;font-family:JetMono,monospace;color:var(--acc)}
-.mixer{display:flex;gap:8px;overflow-x:auto;padding:10px 8px 12px;max-height:min(42vh,340px);align-items:stretch}
+.mixer{display:flex;gap:10px;overflow-x:auto;padding:10px 8px 12px;max-height:min(48vh,380px);align-items:stretch}
 .mixer-wrap.folded .mixer{display:none}
 .mixer-wrap.folded .mixer-fold{border-bottom:0}
-.strip{flex:0 0 88px;background:#151a21;border:1px solid var(--line);border-radius:8px;padding:6px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:280px}
-.strip .lab{font-size:10px;font-weight:700;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;max-width:80px}
-.strip .eqcol{display:flex;gap:3px;align-items:flex-end;justify-content:center;height:110px}
-.strip .vfx{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:9px;color:var(--mut)}
-.strip .vfx input[type=range]{writing-mode:vertical-lr;direction:rtl;width:18px;height:90px;accent-color:var(--acc);padding:0;margin:0}
-.strip .fader-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;justify-content:flex-end}
-.strip .fader{writing-mode:vertical-lr;direction:rtl;width:22px;height:120px;accent-color:var(--acc)}
-.strip .fader-val{font:500 10px JetMono,ui-monospace,monospace;color:var(--mut)}
+.strip{flex:0 0 108px;background:#151a21;border:1px solid var(--line);border-radius:8px;padding:0 6px 8px;display:flex;flex-direction:column;align-items:center;gap:6px;min-height:300px}
+.strip .lab{font-size:12px;font-weight:800;text-align:center;width:100%;padding:8px 4px 6px;border-radius:8px 8px 0 0;margin:0 -6px;color:#0b0d10;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.strip .eqcol{display:flex;flex-direction:column;gap:3px;width:100%;padding:0 2px}
+.strip .eqrow{display:grid;grid-template-columns:22px 1fr 28px;align-items:center;gap:4px;font-size:10px;color:var(--mut)}
+.strip .eqrow input[type=range]{width:100%;height:18px;accent-color:var(--acc);margin:0}
+.strip .eqrow b{font:600 10px JetMono,ui-monospace,monospace;color:var(--tx);text-align:right}
+.strip .fader-wrap{position:relative;width:36px;height:140px;margin:4px auto 0;flex:1}
+.strip .fader{position:absolute;width:140px;height:36px;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-90deg);transform-origin:center;accent-color:var(--acc);margin:0}
+.strip .fader-val{font:600 11px JetMono,ui-monospace,monospace;color:var(--acc);margin-top:2px}
 .ms{display:flex;gap:3px;justify-content:center;flex-wrap:wrap}
 .piano{display:none;grid-template-columns:56px 1fr;height:180px;border-top:1px solid var(--line);background:#0c0f14}
 .piano.on{display:grid}
@@ -117,7 +118,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button type="button" class="btn icon" id="btnRec" title="อัดเสียง" style="color:#f66">●</button>
     <div class="clock" id="clock">0:00.0</div>
     <label>BPM <input id="bpm" type="number" min="40" max="240" value="120" style="width:56px;background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px"></label>
-    <label class="chk"><input type="checkbox" id="chkMetro"> เมโทรนอม</label>
+    <label class="chk"><input type="checkbox" id="chkMetro"> นอม / เมโทรนอม</label>
     <label class="chk"><input type="checkbox" id="chkLoop"> ลูป</label>
     <label class="chk"><input type="checkbox" id="chkSnap" checked> สแนป</label>
     <label>ซูม <input id="zoom" type="range" min="40" max="200" value="80"></label>
@@ -282,14 +283,17 @@ async function startAi(){
   if(!aiFile||aiBusy||!desk){if(!desk)$('sAi').textContent='❌ ใช้พีซีเท่านั้น';return}
   aiBusy=true;$('goAi').disabled=true;$('sAi').textContent='⏳ ถอดรหัส…';
   try{
-    const ac=new OfflineAudioContext(2,1,44100);
-    const buf=await ac.decodeAudioData(await aiFile.arrayBuffer());
+    // Decode on a realtime context (more reliable for long songs than Offline stub)
+    const decCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const buf=await decCtx.decodeAudioData(await aiFile.arrayBuffer());
+    try{decCtx.close()}catch(e){}
     // Copy channels — worker transfers detach the originals
     const L=Float32Array.from(buf.getChannelData(0));
     const R=buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):L.slice();
     const title=aiFile.name.replace(/\.[^.]+$/,'');
     const sr=buf.sampleRate||44100;
     const secIn=buf.duration;
+    if(!(secIn>1))throw new Error('ไฟล์สั้นเกินไปหรือถอดรหัสไม่ครบ');
     $('sAi').textContent=`⏳ ไฟล์ ${fmtMmSs(secIn)} · เริ่มแยก…`;
     const w=new Worker('stems-ai-worker.js');
     const d=await new Promise((ok,no)=>{
@@ -386,7 +390,8 @@ function refreshGuides(){
       ci:+$('rCi').value||0,
       feel:$('rFeel').value||'normal',
       flourish:!!$('rFlourish').checked,
-      metroOn:!!document.getElementById('chkMetro')?.checked
+      metroOn:!!document.getElementById('chkMetro')?.checked,
+      preview:true // studio nom = clean clicks; export still uses feel/flourish
     });
     applyRecipeMutes();
   }catch(e){console.warn('guides',e)}
@@ -457,7 +462,7 @@ async function makeDataNow(){
       out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
     }
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
-    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.9'};
+    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.10'};
     if(ci===0)meta.cia=0;
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
