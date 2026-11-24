@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.15">
+<meta name="bp-data" content="1.0.16">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -60,7 +60,7 @@ button,input{font:inherit;color:inherit}
 .heads{overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
 .thead{height:120px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px;box-sizing:border-box}
 .thead.on{background:#18222c}
-.tn{display:flex;align-items:center;gap:6px}
+.tn{display:flex;align-items:center;gap:6px;width:100%}
 .tn i{width:8px;height:8px;border-radius:50%}
 .tn input{flex:1;min-width:0;background:transparent;border:0;border-bottom:1px solid transparent;padding:0}
 .tn input:focus{border-bottom-color:#3d4a55;outline:0}
@@ -68,6 +68,8 @@ button,input{font:inherit;color:inherit}
 .tops{display:flex;gap:3px;flex-wrap:wrap;align-items:center}
 .tops .wz{display:inline-flex;gap:2px;align-items:center;margin-left:2px}
 .tops .wz b{font:600 10px JetMono,monospace;color:var(--mut);min-width:3.2ch;text-align:center}
+.tb.del{color:#f88;margin-left:auto;min-width:22px}
+.tb.del:hover{background:#3a2222;border-color:#6a3030}
 .lanes-wrap{overflow:auto;position:relative;background:#0d1116;cursor:crosshair;grid-row:2;grid-column:2}
 .lanes{position:relative;min-height:100%}
 .lane{height:120px;border-bottom:1px solid #1a222b;position:relative;box-sizing:border-box}
@@ -126,6 +128,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <label>BPM <input id="bpm" type="number" min="40" max="240" value="120" style="width:56px;background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px"></label>
     <label class="chk"><input type="checkbox" id="chkMetro"> นอม</label>
     <label title="ความดังนอม">ดังนอม <input id="nomVol" type="range" min="40" max="200" value="140" style="width:72px;accent-color:var(--acc)"></label>
+    <label class="chk" title="เพลงช่องหนึ่ง · นอม/นับเข้าอีกช่อง — เหมือนไฟล์ตัวอย่างเด๋อ"><input type="checkbox" id="chkListenLR"> ฟัง L/R แบบ SetSod</label>
     <label class="chk"><input type="checkbox" id="chkLoop"> ลูป</label>
     <label class="chk"><input type="checkbox" id="chkSnap" checked> สแนป</label>
     <label title="ซูมแกนเวลาทั้งโปรเจกต์ (ซูมกราฟแต่ละแทร็กอยู่ที่หัวแทร็ก − / +)">ซูมเวลา <input id="zoom" type="range" min="40" max="200" value="80"></label>
@@ -474,7 +477,7 @@ async function makeDataNow(){
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.15',ciBaked:ci||0};
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.16',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);

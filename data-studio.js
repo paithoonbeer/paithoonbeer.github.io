@@ -183,10 +183,12 @@ export function createStudio(ui){
 
   function stopPlay(){
     cancelAnimationFrame(state._raf);
+    if(state._watch){clearInterval(state._watch);state._watch=null}
     if(state.playing)state.offset=clamp(ac().currentTime-state.t0+state.offset,0,dur());
-    for(const n of state.nodes){try{n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
+    for(const n of state.nodes){try{n.onended=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
-    state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;state._midi=null;state._metroJob=null;
+    state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;
+    state._midi=null;state._metroJob=null;state._sched=null;
     ui.onTransport?.(state);
   }
   // Live mute/solo/vol — schedule every track, silence via gain (so M mid-play actually cuts)
@@ -202,9 +204,10 @@ export function createStudio(ui){
     }
   }
 
-  // One BufferSource per clip, start ≈ now (or after short count-in).
-  // Do NOT pre-schedule many future chunk starts — browsers drop those around ~60–80s
-  // while the playhead (driven by currentTime) keeps moving → silent graph.
+  // Chunked look-ahead. Single long BufferSource.start(..., fullDur) dies silently
+  // around ~60–90s in Chromium while the playhead (currentTime) keeps moving.
+  // Schedule only short slices a few seconds ahead and refill every tick/watchdog.
+  const LOOKAHEAD=10, SLICE=5;
   function clipAbsDur(clip,buf){
     if(!buf)return Math.max(0.001,clip.dur||0);
     const d=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
@@ -212,24 +215,53 @@ export function createStudio(ui){
     return Math.max(0.001,d);
   }
   function scheduleAudioClip(tr,clip,chain,when,playFrom){
-    const a=ac();
+    if(!state._sched)state._sched=[];
     const buf=state.buffers.get(clip.buf);if(!buf)return;
     const clipDur=clipAbsDur(clip,buf);
     if(clip.start+clipDur<=playFrom+1e-4)return;
-    const localOff=Math.max(0,playFrom-clip.start);
-    const remain=clipDur-localOff;
-    if(!(remain>0.001))return;
-    const maxOff=Math.max(0,buf.duration-1e-4);
-    const bufOff=clamp((clip.offset||0)+localOff,0,maxOff);
-    const playLen=Math.min(remain,buf.duration-bufOff);
-    if(!(playLen>0.001))return;
-    const delay=Math.max(0,clip.start-playFrom); // count-in only (seconds, not minutes)
-    const tWhen=when+delay;
-    const src=a.createBufferSource();src.buffer=buf;
-    const g=a.createGain();g.gain.value=clip.gain||1;
-    src.connect(g);g.connect(chain.input);
-    try{src.start(tWhen,bufOff,playLen);state.nodes.push(src)}
-    catch(e){console.warn('clip schedule',e)}
+    state._sched.push({
+      clip,chain,buf,clipDur,playFrom,anchor:when,
+      nextLocal:Math.max(0,playFrom-clip.start)
+    });
+  }
+  function pumpSchedule(){
+    if(!state.playing||!state._sched||!state._sched.length)return;
+    const a=ac();
+    const now=a.currentTime;
+    const playT=now-state.t0+state.offset;
+    const needUntil=playT+LOOKAHEAD;
+    for(const job of state._sched){
+      const {clip,chain,buf,clipDur,anchor,playFrom}=job;
+      while(job.nextLocal<clipDur-1e-4){
+        const local0=job.nextLocal;
+        const absStart=clip.start+local0;
+        if(absStart>=needUntil)break;
+        const step=Math.min(SLICE, clipDur-local0);
+        const maxOff=Math.max(0,buf.duration-1e-4);
+        let off=clamp((clip.offset||0)+local0,0,maxOff);
+        let slice=Math.min(step, buf.duration-off);
+        if(!(slice>0.001)){job.nextLocal=clipDur;break}
+        let tWhen=anchor+(absStart-playFrom);
+        // Late: play remaining of this timeline step from "now" (never skip a hole)
+        if(tWhen<now-0.015){
+          const late=now-tWhen;
+          if(late>=slice-0.001){job.nextLocal=local0+step;continue}
+          off=clamp(off+late,0,maxOff);
+          slice=Math.min(slice-late, buf.duration-off);
+          tWhen=now+0.01;
+          if(!(slice>0.001)){job.nextLocal=local0+step;continue}
+        }
+        const src=a.createBufferSource();src.buffer=buf;
+        const g=a.createGain();g.gain.value=clip.gain||1;
+        src.connect(g);g.connect(chain.input);
+        try{
+          src.start(tWhen,off,slice);
+          state.nodes.push(src);
+          src.onended=()=>{if(state.playing)try{pumpSchedule()}catch(e){}};
+        }catch(e){console.warn('clip schedule',e);job.nextLocal=clipDur;break}
+        job.nextLocal=local0+step;
+      }
+    }
   }
 
   // MIDI notes also drop if started minutes ahead — look-ahead refill on tick
@@ -270,17 +302,27 @@ export function createStudio(ui){
     }
   }
 
+  // Sum a stereo node to mono, then feed only left (0) or right (1) of a ChannelMerger
+  function connectMonoToChannel(srcNode,merger,ch){
+    const a=ac();
+    const split=a.createChannelSplitter(2);
+    const mid=a.createGain();mid.gain.value=0.707;
+    srcNode.connect(split);
+    try{split.connect(mid,0);split.connect(mid,1)}catch(e){srcNode.connect(mid)}
+    mid.connect(merger,0,ch|0);
+  }
+
   function startPlay(from,opt){
     stopPlay();
     const a=ac();if(a.state==='suspended')a.resume();
     state.offset=from!=null?from:state.offset;
-    state.playOnly=null; // multi-track play uses mute/solo only (same as mixer)
+    state.playOnly=null;
     if(opt&&opt.onlyTrackId){
-      // legacy single-track: map to solo so graph ▶ matches mixer S behaviour
       state.tracks.forEach(t=>{t.solo=(t.id===opt.onlyTrackId)});
     }
     state.live=new Map();
     state._midi=[];
+    state._sched=[];
     const master=a.createGain();master.gain.value=1;
     const merge=a.createGain();
     const revGain=a.createGain();revGain.gain.value=1;
@@ -288,26 +330,40 @@ export function createStudio(ui){
     if(!state._imp){const len=a.sampleRate*1.2,imp=a.createBuffer(2,len,a.sampleRate);for(let c=0;c<2;c++){const d=imp.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.8)}state._imp=imp}
     conv.buffer=state._imp;
     revGain.connect(conv);conv.connect(master);
-    merge.connect(master);master.connect(a.destination);
+    // Dual-mono listen (like เด๋อ): music → one ear, nom/count-in → the other
+    const lrOn=!!state.listenLR;
+    const nomRight=(state.nomSide||'R')!=='L';
+    const musicCh=nomRight?0:1, nomCh=nomRight?1:0;
+    let merger=null;
+    if(lrOn){
+      merger=a.createChannelMerger(2);
+      merger.connect(master);
+    }else{
+      merge.connect(master);
+    }
+    master.connect(a.destination);
 
     const anySolo=state.tracks.some(t=>t.solo);
     const when=a.currentTime+0.02;
-    // Playhead clock starts at the same instant audio is scheduled (fixes graph≠sound drift)
     state.t0=when;state.playing=true;
-    // One BufferSource per audio clip (full remainder from playhead) — no far-future chunks
     state.tracks.forEach(tr=>{
       const chain=makeTrackChain(tr);
       const muteG=a.createGain();
       const silent=tr.mute||(anySolo&&!tr.solo);
       muteG.gain.value=silent?0:1;
-      chain.dry.connect(muteG);muteG.connect(merge);
+      chain.dry.connect(muteG);
+      const isGuide=tr.stem==='click'||tr.stem==='countin';
+      if(lrOn&&merger){
+        connectMonoToChannel(muteG,merger,isGuide?nomCh:musicCh);
+      }else{
+        muteG.connect(merge);
+      }
       if(chain.conv)chain.conv.connect(revGain);
       state.fx.push(chain);
       state.live.set(tr.id,{muteG,volG:chain.input,lo:chain.lo,mid:chain.mid,hi:chain.hi});
       if(tr.type==='audio')tr.clips.forEach(c=>scheduleAudioClip(tr,c,chain,when,state.offset));
       else scheduleMidi(tr,chain,when,state.offset);
     });
-    // Metro: unmute existing นอม track only — never stack a second click source
     if(state.metro){
       const ck=state.tracks.find(t=>t.stem==='click');
       if(ck){
@@ -317,6 +373,9 @@ export function createStudio(ui){
       }
       else scheduleMetro(when,state.offset);
     }
+    pumpSchedule();
+    // Watchdog: Chromium can stall the audio graph; keep refilling slices on a timer too
+    state._watch=setInterval(()=>{if(state.playing){try{pumpSchedule();pumpMidi();pumpMetro()}catch(e){}}},400);
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
@@ -365,9 +424,24 @@ export function createStudio(ui){
     let t=ac().currentTime-state.t0+state.offset;
     if(state.loop&&t>=state.loopB){startPlay(state.loopA);return}
     if(t>=dur()+0.05){stopPlay();state.offset=0;ui.onTransport?.(state);renderArrange();return}
-    try{pumpMidi();pumpMetro()}catch(e){}
+    try{pumpSchedule();pumpMidi();pumpMetro()}catch(e){}
     ui.onTransport?.(state);renderPlayhead(t);
     state._raf=requestAnimationFrame(tick);
+  }
+
+  function deleteTrack(i){
+    const tr=state.tracks[i];if(!tr)return;
+    if(!confirm('ลบแทร็ก "'+tr.name+'" ?'))return;
+    mark();
+    // free buffers only used by this track's clips
+    const keep=new Set();
+    state.tracks.forEach((t,ti)=>{if(ti===i)return;t.clips.forEach(c=>keep.add(c.buf))});
+    tr.clips.forEach(c=>{if(!keep.has(c.buf))state.buffers.delete(c.buf)});
+    state.tracks.splice(i,1);
+    state.sel.track=Math.max(0,Math.min(i,state.tracks.length-1));
+    state.sel.clip=null;state.sel.notes=[];
+    if(state.playing){const at=state.offset;stopPlay();if(state.tracks.length)startPlay(at)}
+    renderAll();
   }
 
   /* ---------- recording ---------- */
@@ -435,7 +509,8 @@ export function createStudio(ui){
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'');el.dataset.i=i;
       const wz=+(tr.waveZoom||1);
-      el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b></div>
+      el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b>
+          <button type="button" class="tb del" data-deltr="${i}" title="ลบแทร็กนี้">✕</button></div>
         <div class="tops">
           <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="ปิดเสียง">M</button>
           <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
@@ -666,11 +741,32 @@ export function createStudio(ui){
     $('btnNew').onclick=()=>{if(!state.dirty||confirm('เริ่มโปรเจกต์ใหม่?'))newProject()};
 
     $('trackHeads').onclick=e=>{
+      const del=e.target.closest('[data-deltr]');if(del){deleteTrack(+del.dataset.deltr);return}
       const wz=e.target.closest('[data-wz]');if(wz){setTrackWaveZoom(+wz.dataset.wz,+wz.dataset.d);return}
       const m=e.target.closest('[data-m]');if(m){mark();const i=+m.dataset.m;state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){state.sel.track=+th.dataset.i;renderAll()}
     };
+    const lrEl=$('chkListenLR');
+    if(lrEl){
+      try{state.listenLR=localStorage.getItem('ssd-listenlr')==='1';lrEl.checked=!!state.listenLR}catch(e){}
+      lrEl.onchange=e=>{
+        state.listenLR=!!e.target.checked;
+        try{localStorage.setItem('ssd-listenlr',state.listenLR?'1':'0')}catch(err){}
+        // pick nom side from recipe if present
+        const nomSel=document.getElementById('rNom');
+        if(nomSel)state.nomSide=nomSel.value==='L'?'L':'R';
+        if(state.playing){const at=ac().currentTime-state.t0+state.offset;startPlay(at)}
+      };
+    }
+    const nomSel=document.getElementById('rNom');
+    if(nomSel){
+      state.nomSide=nomSel.value==='L'?'L':'R';
+      nomSel.addEventListener('change',()=>{
+        state.nomSide=nomSel.value==='L'?'L':'R';
+        if(state.listenLR&&state.playing){const at=ac().currentTime-state.t0+state.offset;startPlay(at)}
+      });
+    }
     $('trackHeads').onchange=e=>{const rn=e.target.closest('[data-rn]');if(rn){state.tracks[+rn.dataset.rn].name=rn.value;renderMixer()}};
 
     $('mixer').oninput=e=>{
@@ -1417,7 +1513,7 @@ export function createStudio(ui){
   // public API
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
-    playTrack,applyLiveMix,addAudioTrack,addMidiTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
+    playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
     applyStemMutes,renderTrackWav,renderMusicMono,makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,

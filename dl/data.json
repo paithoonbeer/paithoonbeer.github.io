@@ -1,5 +1,5 @@
 {
-  "ver": "1.0.15",
-  "notes": "เปิดฟังตัวอย่างรูปแบบเด๋อในหน้า Data + ลิงก์ Drive / โฟลเดอร์ Desktop",
+  "ver": "1.0.16",
+  "notes": "ลบแทร็กได้ · แก้เสียงตัด ~1:20 จริง (คิวชิ้นสั้น+watchdog) · ฟัง L/R แบบ SetSod ในสตูดิโอ",
   "url": "https://paithoonbeer.github.io/data.html"
 }
