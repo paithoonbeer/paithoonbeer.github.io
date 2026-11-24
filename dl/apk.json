@@ -1,6 +1,6 @@
 {
-  "build": 112,
-  "ver": "1.0.118",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b112-1.0.118/SetSod.apk",
-  "notes": "1.0.118: รับดาต้าจาก SetSod Data พร้อมนอม/นับเข้า (สูตรเอาเครื่องออก)"
+  "build": 113,
+  "ver": "1.0.119",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b113-1.0.119/SetSod.apk",
+  "notes": "1.0.119: คุณภาพดาต้า — WAV เต็มเรทบนพีซี + เรนเดอร์ normalize/dither"
 }

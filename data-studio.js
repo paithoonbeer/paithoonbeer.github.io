@@ -90,19 +90,19 @@ export function createStudio(ui){
     for(let i=0;i<n;i++){L[i]=clamp((a.L[i]||0)+(b.L[i]||0),-1,1);R[i]=clamp((a.R[i]||0)+(b.R[i]||0),-1,1)}
     return {L,R};
   }
-  // Fixed band layout: กลอง · กีตาร์ · เบส · คีย์บอร์ด · ดนตรีอื่นๆ
-  // AI (htdemucs 4s) → drums/bass/other/vocals — guitar & keys stay empty for import
+  // Fixed band layout: กลอง · เบส · กีตาร์ · คีย์ · อื่นๆ · ร้อง  (+ นอม/นับเข้า ทีหลัง)
+  // AI (htdemucs 6s) → drums/bass/other/vocals/guitar/piano — ไม่ปนกีตาร์กับอื่นๆ และไม่ปนร้อง
   function loadStemChannels({title,src,channels,sampleRate}){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
     const sr=sampleRate||44100;
-    const other=by.other&&by.vocals?mixLR(by.other,by.vocals):(by.other||by.vocals||null);
     const layout=[
       {key:'drums',name:'กลอง',ch:by.drums,color:COLS[0]},
-      {key:'guitar',name:'กีตาร์',ch:null,color:COLS[5]},
       {key:'bass',name:'เบส',ch:by.bass,color:COLS[1]},
-      {key:'keys',name:'คีย์บอร์ด',ch:null,color:COLS[7]},
-      {key:'other',name:'ดนตรีอื่นๆ',ch:other,color:COLS[2]}
+      {key:'guitar',name:'กีตาร์',ch:by.guitar,color:COLS[5]},
+      {key:'keys',name:'คีย์บอร์ด',ch:by.piano,color:COLS[7]},
+      {key:'other',name:'ดนตรีอื่นๆ',ch:by.other,color:COLS[2]},
+      {key:'vocals',name:'ร้อง',ch:by.vocals,color:COLS[3]}
     ];
     layout.forEach(row=>{
       const t=addAudioTrack(row.name,row.color);t.stem=row.key;
@@ -222,7 +222,12 @@ export function createStudio(ui){
       if(tr.type==='audio')tr.clips.forEach(c=>scheduleAudioClip(tr,c,chain,when,state.offset));
       else scheduleMidi(tr,chain,when,state.offset);
     });
-    if(state.metro)scheduleMetro(when,state.offset);
+    // Metro UI checkbox → unmute click track (guide tracks carry the audible click)
+    if(state.metro){
+      const ck=state.tracks.find(t=>t.stem==='click');
+      if(ck){ck.mute=false;const live=state.live.get(ck.id);if(live)live.muteG.gain.value=1}
+      else scheduleMetro(when,state.offset);
+    }
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
@@ -518,7 +523,14 @@ export function createStudio(ui){
     $('btnSplit').onclick=()=>{state.tool='split';syncTools()};
     $('btnSelect').onclick=()=>{state.tool='select';syncTools()};
     $('btnDraw').onclick=()=>{state.tool='draw';syncTools()};
-    $('chkMetro').onchange=e=>state.metro=e.target.checked;
+    $('chkMetro').onchange=e=>{
+      state.metro=e.target.checked;
+      const ck=state.tracks.find(t=>t.stem==='click');
+      if(ck){ck.mute=!state.metro;applyLiveMix();renderTracks();renderMixer()}
+      else if(state.metro&&state.tracks.some(t=>t.clips&&t.clips.length)){
+        try{syncGuideTracks({metroOn:true,ci:0})}catch(err){}
+      }
+    };
     $('chkLoop').onchange=e=>{state.loop=e.target.checked;renderArrange()};
     $('chkSnap').onchange=e=>state.snap=e.target.checked;
     $('bpm').onchange=e=>{mark();state.bpm=clamp(+e.target.value||120,40,240);renderArrange()};
@@ -655,9 +667,9 @@ export function createStudio(ui){
   function seek(t){const was=state.playing;stopPlay();state.offset=clamp(t,0,dur());renderPlayhead(state.offset);ui.onTransport?.(state);if(was)startPlay(state.offset)}
 
   function newProject(){
-    stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.offset=0;state.dirty=false;
+    stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;
     state.undo.length=0;state.redo.length=0;
-    [['กลอง',COLS[0],'drums'],['กีตาร์',COLS[5],'guitar'],['เบส',COLS[1],'bass'],['คีย์บอร์ด',COLS[7],'keys'],['ดนตรีอื่นๆ',COLS[2],'other']]
+    [['กลอง',COLS[0],'drums'],['เบส',COLS[1],'bass'],['กีตาร์',COLS[5],'guitar'],['คีย์บอร์ด',COLS[7],'keys'],['ดนตรีอื่นๆ',COLS[2],'other'],['ร้อง',COLS[3],'vocals']]
       .forEach(([n,c,k])=>{const t=addAudioTrack(n,c);t.stem=k});
     renderAll();
   }
@@ -692,22 +704,52 @@ export function createStudio(ui){
       state.dirty=false;renderAll();ui.toast?.('โหลดโปรเจกต์แล้ว');
     }catch(e){ui.toast?.('เปิดโปรเจกต์ไม่ได้: '+(e.message||e))}
   }
-  async function bufToWavArray(buf){
-    const n=buf.length,ch=buf.numberOfChannels,sr=buf.sampleRate;
-    const b=new DataView(new ArrayBuffer(44+n*ch*2));
+  // Project/export sample rate: keep source SR (usually 44.1/48k) — never silently drop to a fixed 44.1
+  function nativeSr(){
+    let sr=0;
+    for(const b of state.buffers.values())if(b&&b.sampleRate>sr)sr=b.sampleRate|0;
+    if(!sr)try{sr=ac().sampleRate|0}catch(e){}
+    if(!sr||sr<44100)sr=44100;
+    if(sr>96000)sr=96000;
+    return sr;
+  }
+  function softLimit(x){
+    const a=Math.abs(x);if(a<=0.95)return x;
+    const s=x<0?-1:1;return s*(0.95+0.05*Math.tanh((a-0.95)/0.05*1.4));
+  }
+  // PCM16 stereo/mono WAV: peak-normalize + soft limit + TPDF dither (no hard-clip hash)
+  function encodeWavPCM16(chans,sr,opt){
+    opt=opt||{};const ch=chans.length,n=chans[0].length;
+    let pk=0;for(let c=0;c<ch;c++){const d=chans[c];for(let i=0;i<n;i++){const v=d[i]<0?-d[i]:d[i];if(v>pk)pk=v}}
+    const target=opt.targetPeak!=null?opt.targetPeak:0.89; // ≈ −1 dBFS
+    const maxG=opt.maxGain!=null?opt.maxGain:4; // ≤ +12 dB boost for quiet stems
+    const gain=pk>1e-8?Math.min(target/pk,maxG):1;
+    const dataBytes=n*ch*2;
+    const b=new DataView(new ArrayBuffer(44+dataBytes));
     const w=(o,s)=>[...s].forEach((c,i)=>b.setUint8(o+i,c.charCodeAt(0)));
-    w(0,'RIFF');b.setUint32(4,36+n*ch*2,true);w(8,'WAVEfmt ');
+    w(0,'RIFF');b.setUint32(4,36+dataBytes,true);w(8,'WAVEfmt ');
     b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,ch,true);
     b.setUint32(24,sr,true);b.setUint32(28,sr*ch*2,true);b.setUint16(32,ch*2,true);b.setUint16(34,16,true);
-    w(36,'data');b.setUint32(40,n*ch*2,true);
-    let o=44;for(let i=0;i<n;i++)for(let c=0;c<ch;c++){b.setInt16(o,clamp(buf.getChannelData(c)[i],-1,1)*32767,true);o+=2}
-    return Array.from(new Uint8Array(b.buffer));
+    w(36,'data');b.setUint32(40,dataBytes,true);
+    let o=44;
+    for(let i=0;i<n;i++)for(let c=0;c<ch;c++){
+      const x=softLimit(chans[c][i]*gain);
+      const dither=Math.random()+Math.random()-1; // TPDF ±1 LSB
+      let s=Math.round(x*32767+dither);if(s>32767)s=32767;else if(s<-32768)s=-32768;
+      b.setInt16(o,s,true);o+=2;
+    }
+    return b.buffer;
+  }
+  async function bufToWavArray(buf,opt){
+    const ch=[];for(let c=0;c<buf.numberOfChannels;c++)ch.push(buf.getChannelData(c));
+    return Array.from(new Uint8Array(encodeWavPCM16(ch,buf.sampleRate,opt)));
   }
 
   async function mixdown(){
     ui.toast?.('กำลังมิกซ์ดาวน์…');
-    const length=Math.ceil(dur()*ac().sampleRate)||ac().sampleRate;
-    const off=new OfflineAudioContext(2,length,ac().sampleRate);
+    const sr=nativeSr();
+    const length=Math.ceil(dur()*sr)||sr;
+    const off=new OfflineAudioContext(2,length,sr);
     // schedule into offline — simplified dry mix
     const anySolo=state.tracks.some(t=>t.solo);
     for(const tr of state.tracks){
@@ -732,11 +774,11 @@ export function createStudio(ui){
       }
     }
     const rendered=await off.startRendering();
-    const wav=await bufToWavArray(rendered);
+    const wav=await bufToWavArray(rendered,{targetPeak:0.89,maxGain:2});
     const blob=new Blob([new Uint8Array(wav)],{type:'audio/wav'});
     const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=(state.title||'mix')+'-mixdown.wav';a.click();
     setTimeout(()=>URL.revokeObjectURL(url),4000);
-    ui.toast?.('มิกซ์ดาวน์เสร็จ');
+    ui.toast?.('มิกซ์ดาวน์เสร็จ · WAV 16-bit '+sr+' Hz');
   }
 
   // export stems for SetSod
@@ -749,11 +791,12 @@ export function createStudio(ui){
     return files;
   }
 
-  // v1.0.5: mute by stem key (drums/guitar/bass/keys/other) for ทำดาต้า presets
+  // mute by stem key for ทำดาต้า presets — never auto-mute click/countin here
   function applyStemMutes(muteKeys){
     const set=new Set(muteKeys||[]);
     for(const tr of state.tracks){
       if(tr.type!=='audio')continue;
+      if(tr.stem==='click'||tr.stem==='countin')continue;
       tr.mute=!!(tr.stem&&set.has(tr.stem));
     }
     applyLiveMix();renderAll();
@@ -761,7 +804,7 @@ export function createStudio(ui){
 
   async function renderTrackWav(tr,sr){
     if(!tr||tr.type!=='audio'||!tr.clips.length)return null;
-    sr=sr||44100;
+    sr=sr||nativeSr();
     const length=Math.max(1,Math.ceil(dur()*sr));
     const off=new OfflineAudioContext(2,length,sr);
     const g=off.createGain();g.gain.value=(tr.vol||100)/100;g.connect(off.destination);
@@ -776,36 +819,225 @@ export function createStudio(ui){
       try{src.start(c.start,off0,dur0)}catch(e){}
     }
     const rendered=await off.startRendering();
-    return bufToWavBlob(rendered);
+    // Stems: loudness-match to −1 dBFS so quiet demucs lanes aren't thin
+    return bufToWavBlob(rendered,{targetPeak:0.89,maxGain:4});
   }
 
-  function bufToWavBlob(buf){
-    const ch=buf.numberOfChannels,sr=buf.sampleRate,n=buf.length;
-    const b=new DataView(new ArrayBuffer(44+n*ch*2));
-    const w=(o,s)=>[...s].forEach((c,i)=>b.setUint8(o+i,c.charCodeAt(0)));
-    w(0,'RIFF');b.setUint32(4,36+n*ch*2,true);w(8,'WAVEfmt ');
-    b.setUint32(16,16,true);b.setUint16(20,1,true);b.setUint16(22,ch,true);
-    b.setUint32(24,sr,true);b.setUint32(28,sr*ch*2,true);b.setUint16(32,ch*2,true);b.setUint16(34,16,true);
-    w(36,'data');b.setUint32(40,n*ch*2,true);
-    let o=44;for(let i=0;i<n;i++)for(let c=0;c<ch;c++){b.setInt16(o,clamp(buf.getChannelData(c)[i],-1,1)*32767,true);o+=2}
-    return new Blob([b.buffer],{type:'audio/wav'});
+  function bufToWavBlob(buf,opt){
+    const ch=[];for(let c=0;c<buf.numberOfChannels;c++)ch.push(buf.getChannelData(c));
+    return new Blob([encodeWavPCM16(ch,buf.sampleRate,opt||{})],{type:'audio/wav'});
   }
 
-  function makeClickWav(durSec,bpm,sr){
-    sr=sr||44100;bpm=Math.max(40,Math.min(240,+bpm||120));
+  function hitAt(L,R,at,sr,freq,amp,ms){
+    const n=L.length,len=Math.max(1,Math.floor((ms||12)*sr/1000));
+    for(let i=0;i<len&&at+i<n;i++){
+      // exponential decay — less click/alias than linear ramp
+      const env=Math.exp(-3.2*i/len),v=Math.sin(2*Math.PI*freq*i/sr)*env*amp;
+      L[at+i]+=v;R[at+i]+=v;
+    }
+  }
+  // Beat grid from drums (or loudest audio): {bpm, t0} — t0 = first downbeat (sec)
+  function detectBeatGrid(preferStem){
+    let buf=null;
+    if(preferStem){const tr=state.tracks.find(t=>t.stem===preferStem&&t.clips[0]);if(tr)buf=state.buffers.get(tr.clips[0].buf)}
+    if(!buf){for(const tr of state.tracks){if(tr.type!=='audio'||!tr.clips[0])continue;const b=state.buffers.get(tr.clips[0].buf);if(b&&(!buf||b.length>buf.length))buf=b}}
+    if(!buf)return{bpm:state.bpm||120,t0:0};
+    const sr=buf.sampleRate,ch0=buf.getChannelData(0),ch1=buf.numberOfChannels>1?buf.getChannelData(1):ch0;
+    const hop=256,n=Math.floor(ch0.length/hop);if(n<200)return{bpm:state.bpm||120,t0:0};
+    const env=new Float32Array(n);
+    for(let i=0;i<n;i++){let s=0,a=i*hop,z=a+hop;for(let j=a;j<z;j++){const v=(ch0[j]+ch1[j])*0.5;s+=v<0?-v:v}env[i]=s/hop}
+    const on=new Float32Array(n);for(let i=1;i<n;i++)on[i]=Math.max(0,env[i]-env[i-1]);
+    let omax=0;for(let i=0;i<n;i++)if(on[i]>omax)omax=on[i];if(omax>0)for(let i=0;i<n;i++)on[i]/=omax;
+    const a0=Math.min(n-10,Math.floor(20*sr/hop)),a1=Math.min(n,Math.floor(100*sr/hop));
+    let mean=0,len=Math.max(1,a1-a0);for(let i=a0;i<a1;i++)mean+=on[i];mean/=len;
+    const scores=[];
+    for(let bpm=80;bpm<=160;bpm+=0.25){
+      const lag=Math.round(60/bpm*sr/hop);if(lag<2||lag>=(a1-a0)/3)continue;
+      let s=0;for(let i=a0;i<a1-lag;i++)s+=(on[i]-mean)*(on[i+lag]-mean);
+      scores.push({s,bpm});
+    }
+    scores.sort((a,b)=>b.s-a.s);
+    let bpm=scores[0]?scores[0].bpm:120;
+    // prefer 90–140; fold double/half
+    for(const x of scores.slice(0,30)){const b=x.bpm>140?x.bpm/2:x.bpm<90?x.bpm*2:x.bpm;if(b>=90&&b<=140){bpm=b;break}}
+    const spb=60/bpm;
+    let bestOff=0,bestSc=-1;
+    for(let k=0;k<128;k++){
+      const off=spb*4*k/128;let sc=0;
+      for(let bi=0;bi<Math.floor(40/spb);bi++){
+        const i=Math.floor((off+bi*spb)*sr/hop);if(i>=n)break;
+        sc+=on[i]*((bi%4===0||bi%4===2)?1.4:0.5);
+      }
+      if(sc>bestSc){bestSc=sc;bestOff=off}
+    }
+    return{bpm:Math.round(bpm*100)/100,t0:bestOff};
+  }
+
+  // style: normal | rock | samcha | slow — always on beat grid (opt.t0 = first downbeat)
+  function makeClickWav(durSec,bpm,sr,opt){
+    opt=opt||{};sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
+    const style=opt.style||'normal',flourish=!!opt.flourish,t0=Math.max(0,+opt.t0||0);
     const n=Math.max(1,Math.ceil((durSec||1)*sr));
     const L=new Float32Array(n),R=new Float32Array(n);
-    const spb=60/bpm,clickN=Math.floor(0.012*sr);
-    for(let beat=0;beat*spb<durSec+1e-6;beat++){
-      const at=Math.floor(beat*spb*sr);if(at>=n)break;
-      const accent=(beat%4)===0,freq=accent?2000:1200,amp=accent?0.55:0.32;
-      for(let i=0;i<clickN&&at+i<n;i++){
-        const env=1-i/clickN,v=Math.sin(2*Math.PI*freq*i/sr)*env*amp;
-        L[at+i]=v;R[at+i]=v;
+    const spb=60/bpm;
+    const bars=Math.ceil(Math.max(0,(durSec||1)-t0)/(spb*4))+1;
+    for(let beat=0;;beat++){
+      const t=t0+beat*spb;if(t>=durSec+1e-6)break;
+      const at=Math.floor(t*sr);if(at>=n)break;
+      const b4=beat%4;
+      if(style==='rock'){
+        if(b4===0)hitAt(L,R,at,sr,1800,0.62,14);
+        else if(b4===2)hitAt(L,R,at,sr,1600,0.4,12);
+        if(b4===1||b4===3)hitAt(L,R,at,sr,900,0.48,10); // backbeat
+      }else if(style==='samcha'){
+        // สามช่า: เน้น 1 · cha-cha บน 2& และ 3&
+        if(b4===0)hitAt(L,R,at,sr,2000,0.58,14);
+        else if(b4===1){hitAt(L,R,at,sr,1400,0.28,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1500,0.38,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1500,0.38,9)}
+        else if(b4===2){hitAt(L,R,at,sr,1300,0.26,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1450,0.36,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1450,0.36,9)}
+        else hitAt(L,R,at,sr,1200,0.3,10);
+      }else if(style==='slow'){
+        // half-time accents on same grid (does not stretch the song)
+        if(b4===0)hitAt(L,R,at,sr,1500,0.45,16);
+        else if(b4===2)hitAt(L,R,at,sr,1100,0.22,12);
+      }else{
+        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.55:0.32,12);
+      }
+    }
+    if(flourish){
+      for(let bar=7;bar<bars;bar+=8){
+        const tf=t0+(bar*4+3)*spb; // ท้ายห้องที่ 8 on grid
+        for(let k=0;k<6;k++){
+          const at=Math.floor((tf+k*(spb/6))*sr);if(at<0||at>=n)break;
+          hitAt(L,R,at,sr,2200-k*120,0.35+k*0.04,8);
+        }
       }
     }
     const buf=ac().createBuffer(2,n,sr);buf.copyToChannel(L,0);buf.copyToChannel(R,1);
-    return bufToWavBlob(buf);
+    // Click below stem peak so music stays full; soft limit inside encoder
+    return bufToWavBlob(buf,{targetPeak:0.72,maxGain:1});
+  }
+  // แทร็กลูกเล่นแยก (percussion accents) — ส่งเป็น stem ชื่อลูกเล่น
+  function makeFlourishWav(durSec,bpm,sr,style,t0){
+    sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));t0=Math.max(0,+t0||0);
+    const n=Math.max(1,Math.ceil((durSec||1)*sr));
+    const L=new Float32Array(n),R=new Float32Array(n);
+    const spb=60/bpm;
+    for(let beat=0;;beat++){
+      const t=t0+beat*spb;if(t>=durSec+1e-6)break;
+      const at=Math.floor(t*sr);if(at>=n)break;
+      const b4=beat%4;
+      if(style==='rock'&&(b4===1||b4===3))hitAt(L,R,at,sr,700,0.22,18);
+      if(style==='samcha'&&(b4===1||b4===2)){
+        hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,600,0.18,14);
+        hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,650,0.18,14);
+      }
+      if(style==='slow'&&b4===0)hitAt(L,R,at,sr,500,0.12,24);
+    }
+    const buf=ac().createBuffer(2,n,sr);buf.copyToChannel(L,0);buf.copyToChannel(R,1);
+    return bufToWavBlob(buf,{targetPeak:0.55,maxGain:1});
+  }
+
+  function floatToBuf(L,R,sr){
+    const n=L.length,buf=ac().createBuffer(2,n,sr||nativeSr());
+    buf.copyToChannel(L instanceof Float32Array?L:Float32Array.from(L),0);
+    buf.copyToChannel(R instanceof Float32Array?R:Float32Array.from(R),1);
+    return buf;
+  }
+  // Loud 1–2–3–4 count-in for ci bars (before music). Returns AudioBuffer.
+  function makeCountInBuf(bars,bpm,sr){
+    bars=Math.max(0,Math.min(4,+bars||0));sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
+    if(!bars)return null;
+    const spb=60/bpm,sec=bars*4*spb,n=Math.max(1,Math.ceil(sec*sr));
+    const L=new Float32Array(n),R=new Float32Array(n);
+    for(let bi=0;bi<bars*4;bi++){
+      const at=Math.floor(bi*spb*sr),b4=bi%4;
+      if(b4===0)hitAt(L,R,at,sr,2100,0.9,18);
+      else hitAt(L,R,at,sr,1550,0.55,12);
+    }
+    return floatToBuf(L,R,sr);
+  }
+  // Build click AudioBuffer on beat grid (same rules as makeClickWav)
+  function makeClickBuf(durSec,bpm,sr,opt){
+    opt=opt||{};sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
+    const style=opt.style||'normal',flourish=!!opt.flourish,t0=Math.max(0,+opt.t0||0);
+    const n=Math.max(1,Math.ceil((durSec||1)*sr));
+    const L=new Float32Array(n),R=new Float32Array(n);
+    const spb=60/bpm,bars=Math.ceil(Math.max(0,(durSec||1)-t0)/(spb*4))+1;
+    for(let beat=0;;beat++){
+      const t=t0+beat*spb;if(t>=durSec+1e-6)break;
+      const at=Math.floor(t*sr);if(at>=n)break;
+      const b4=beat%4;
+      if(style==='rock'){
+        if(b4===0)hitAt(L,R,at,sr,1800,0.62,14);
+        else if(b4===2)hitAt(L,R,at,sr,1600,0.4,12);
+        if(b4===1||b4===3)hitAt(L,R,at,sr,900,0.48,10);
+      }else if(style==='samcha'){
+        if(b4===0)hitAt(L,R,at,sr,2000,0.58,14);
+        else if(b4===1){hitAt(L,R,at,sr,1400,0.28,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1500,0.38,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1500,0.38,9)}
+        else if(b4===2){hitAt(L,R,at,sr,1300,0.26,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1450,0.36,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1450,0.36,9)}
+        else hitAt(L,R,at,sr,1200,0.3,10);
+      }else if(style==='slow'){
+        if(b4===0)hitAt(L,R,at,sr,1500,0.5,16);
+        else if(b4===2)hitAt(L,R,at,sr,1100,0.25,12);
+      }else{
+        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.55:0.32,12);
+      }
+    }
+    if(flourish){
+      for(let bar=7;bar<bars;bar+=8){
+        const tf=t0+(bar*4+3)*spb;
+        for(let k=0;k<6;k++){
+          const at=Math.floor((tf+k*(spb/6))*sr);if(at<0||at>=n)break;
+          hitAt(L,R,at,sr,2200-k*120,0.35+k*0.04,8);
+        }
+      }
+    }
+    return floatToBuf(L,R,sr);
+  }
+
+  /**
+   * Rebuild visible เมโทรนอม/นอม + นับเข้า tracks (waveform + audible on Play).
+   * opts: {bpm,t0,ci,feel,flourish,metroOn}
+   * Music stems shift to start after count-in so you hear 1-2-3-4 then the song.
+   */
+  function syncGuideTracks(opts){
+    opts=opts||{};
+    const bpm=Math.max(40,Math.min(240,+(opts.bpm!=null?opts.bpm:state.bpm)||120));
+    const t0=Math.max(0,+(opts.t0!=null?opts.t0:state.t0)||0);
+    const ci=Math.max(0,Math.min(4,+(opts.ci!=null?opts.ci:0)|0));
+    const feel=opts.feel||'normal',flourish=!!opts.flourish;
+    const metroOn=opts.metroOn!=null?!!opts.metroOn:!!state.metro;
+    state.bpm=bpm;state.t0=t0;
+    const sr=nativeSr();
+    const spb=60/bpm,ciSec=ci*4*spb;
+
+    // Drop previous guide tracks (and free their buffers loosely)
+    state.tracks=state.tracks.filter(t=>t.stem!=='click'&&t.stem!=='countin');
+
+    // Music stems: place after count-in so audition matches karaoke feel
+    for(const tr of state.tracks){
+      if(tr.type!=='audio'||!tr.stem)continue;
+      for(const c of tr.clips)c.start=ciSec;
+    }
+
+    const musicDur=Math.max(1,dur()-ciSec);
+    // Count-in track
+    if(ci>0){
+      const cib=makeCountInBuf(ci,bpm,sr);
+      if(cib){
+        const id=putBuf(cib);
+        const t=addAudioTrack('นับเข้า', '#ffd60a');t.stem='countin';t.vol=110;
+        t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:cib.duration,gain:1,peaks:peaksOf(cib),name:'countin'});
+      }
+    }
+    // Metronome / nom track — starts with music (after count-in), locked to t0
+    const click=makeClickBuf(musicDur,bpm,sr,{style:feel,flourish,t0});
+    const cid=putBuf(click);
+    const ct=addAudioTrack('เมโทรนอม / นอม', '#45c4d4');ct.stem='click';ct.vol=90;ct.mute=!metroOn;
+    ct.clips.push({id:uid(),buf:cid,start:ciSec,offset:0,dur:click.duration,gain:1,peaks:peaksOf(click),name:'click'});
+
+    renderAll();
+    return{bpm,t0,ci,ciSec,feel};
   }
 
   function syncToolsInit(){syncTools()}
@@ -814,7 +1046,8 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
-    applyStemMutes,renderTrackWav,makeClickWav,bufToWavBlob,
+    applyStemMutes,renderTrackWav,makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
+    syncGuideTracks,makeCountInBuf,makeClickBuf,
     async boot(){bind();
       // scroll sync: track headers follow the lane vertical scroll
       try{const wrap=$('lanesWrap'),heads=$('trackHeads');
