@@ -1,5 +1,5 @@
 {
-  "ver": "1.0.7",
-  "notes": "แยก 6 ส่วน (กีตาร์≠อื่นๆ + ร้องแยก) · แทร็กเมโทรนอม/นับเข้ามีกราฟและเสียงใน Data",
+  "ver": "1.0.8",
+  "notes": "แก้ลำดับกีตาร์/คีย์ (Demucs 6s) · นับเข้าพูด one–two–three–four · นอมล็อกบีดจาก onset",
   "url": "https://paithoonbeer.github.io/data.html"
 }

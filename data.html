@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.7">
+<meta name="bp-data" content="1.0.8">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -298,15 +298,16 @@ async function startAi(){
     studio.state.title=title;
     // Keep source sampleRate (worker returns same-length PCM as input L/R)
     studio.loadStemChannels({title,src:d.src,channels:d.src.map((_,k)=>({L:d.out[k][0],R:d.out[k][1]})),sampleRate:buf.sampleRate||44100});
-    // ล็อก BPM/จุดบีดจากกลอง + สร้างแทร็กนอม/นับเข้าให้เห็นและได้ยิน
+    // ล็อก BPM/จุดบีดจากกลอง + สร้างแทร็กนอม/นับเข้า (พูด one–two–three–four)
     try{
+      await studio.loadCiVoices();
       const g=studio.detectBeatGrid('drums');
       studio.state.bpm=g.bpm;studio.state.t0=g.t0;
       const bpmEl=document.getElementById('bpm');if(bpmEl)bpmEl.value=String(Math.round(g.bpm));
       document.getElementById('chkMetro').checked=true;studio.state.metro=true;
       refreshGuides();
       applyRecipeMutes();
-      toast(`ได้แทร็ก 6 ส่วน · ${g.bpm} BPM · มีนอม+นับเข้าบนไทม์ไลน์แล้ว`);
+      toast(`ได้แทร็ก 6 ส่วน · ${g.bpm} BPM · นับเข้าพูด + นอมล็อกบีด`);
       $('sRecipe').textContent=`พร้อม · ${title} · ${g.bpm} BPM · กีตาร์/ร้องแยก`;
     }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — เลือกสูตรแล้วกดส่ง');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
     if($('rAuto')&&$('rAuto').checked)setTimeout(()=>$('btnMakeData').click(),400);
@@ -409,6 +410,7 @@ async function makeDataNow(){
     const sr=studio.nativeSr();
     const out=[];
     const musicDur=Math.max(1,...music.map(tr=>tr.clips.reduce((m,c)=>Math.max(m,(c.dur||0)),0)));
+    try{await studio.loadCiVoices()}catch(e){}
     const clickBlob=studio.makeClickWav(musicDur,bpm,sr,{style:feel,flourish,t0});
     out.push(new File([clickBlob],`${title} (คลิก นอม).wav`,{type:'audio/wav'}));
     if(ci>0){
@@ -428,7 +430,7 @@ async function makeDataNow(){
       out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
     }
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
-    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.7'};
+    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.8'};
     if(ci===0)meta.cia=0;
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;

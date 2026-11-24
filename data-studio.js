@@ -91,10 +91,18 @@ export function createStudio(ui){
     return {L,R};
   }
   // Fixed band layout: กลอง · เบส · กีตาร์ · คีย์ · อื่นๆ · ร้อง  (+ นอม/นับเข้า ทีหลัง)
-  // AI (htdemucs 6s) → drums/bass/other/vocals/guitar/piano — ไม่ปนกีตาร์กับอื่นๆ และไม่ปนร้อง
+  // AI (htdemucs 6s) → drums/bass/other/vocals/piano/guitar (Meta order)
   function loadStemChannels({title,src,channels,sampleRate}){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
+    // Safety: if labels were ever swapped, put the louder mid-band lane on กีตาร์
+    try{
+      const g=by.guitar,p=by.piano;
+      if(g&&p&&g.L&&p.L){
+        const rms=ch=>{let s=0,n=ch.L.length,step=Math.max(1,(n/8000)|0);for(let i=0;i<n;i+=step){const v=(ch.L[i]+(ch.R[i]||0))*0.5;s+=v*v}return s};
+        if(rms(g)<rms(p)*0.35){const tmp=by.guitar;by.guitar=by.piano;by.piano=tmp}
+      }
+    }catch(e){}
     const sr=sampleRate||44100;
     const layout=[
       {key:'drums',name:'กลอง',ch:by.drums,color:COLS[0]},
@@ -836,41 +844,87 @@ export function createStudio(ui){
       L[at+i]+=v;R[at+i]+=v;
     }
   }
-  // Beat grid from drums (or loudest audio): {bpm, t0} — t0 = first downbeat (sec)
+  // Beat grid from drums (prefer) / bass mix: {bpm, t0} — t0 = first downbeat (sec).
+  // Onset-interval method (same idea as live app detectBpm) — more stable than autocorr for rock.
   function detectBeatGrid(preferStem){
-    let buf=null;
-    if(preferStem){const tr=state.tracks.find(t=>t.stem===preferStem&&t.clips[0]);if(tr)buf=state.buffers.get(tr.clips[0].buf)}
-    if(!buf){for(const tr of state.tracks){if(tr.type!=='audio'||!tr.clips[0])continue;const b=state.buffers.get(tr.clips[0].buf);if(b&&(!buf||b.length>buf.length))buf=b}}
+    const pick=stem=>{const tr=state.tracks.find(t=>t.stem===stem&&t.clips[0]);return tr?state.buffers.get(tr.clips[0].buf):null};
+    let buf=preferStem?pick(preferStem):null;
+    if(!buf)buf=pick('drums')||pick('bass');
+    if(!buf){for(const tr of state.tracks){if(tr.type!=='audio'||!tr.clips[0]||tr.stem==='click'||tr.stem==='countin')continue;const b=state.buffers.get(tr.clips[0].buf);if(b&&(!buf||b.length>buf.length))buf=b}}
     if(!buf)return{bpm:state.bpm||120,t0:0};
     const sr=buf.sampleRate,ch0=buf.getChannelData(0),ch1=buf.numberOfChannels>1?buf.getChannelData(1):ch0;
-    const hop=256,n=Math.floor(ch0.length/hop);if(n<200)return{bpm:state.bpm||120,t0:0};
-    const env=new Float32Array(n);
-    for(let i=0;i<n;i++){let s=0,a=i*hop,z=a+hop;for(let j=a;j<z;j++){const v=(ch0[j]+ch1[j])*0.5;s+=v<0?-v:v}env[i]=s/hop}
-    const on=new Float32Array(n);for(let i=1;i<n;i++)on[i]=Math.max(0,env[i]-env[i-1]);
-    let omax=0;for(let i=0;i<n;i++)if(on[i]>omax)omax=on[i];if(omax>0)for(let i=0;i<n;i++)on[i]/=omax;
-    const a0=Math.min(n-10,Math.floor(20*sr/hop)),a1=Math.min(n,Math.floor(100*sr/hop));
-    let mean=0,len=Math.max(1,a1-a0);for(let i=a0;i<a1;i++)mean+=on[i];mean/=len;
-    const scores=[];
-    for(let bpm=80;bpm<=160;bpm+=0.25){
-      const lag=Math.round(60/bpm*sr/hop);if(lag<2||lag>=(a1-a0)/3)continue;
-      let s=0;for(let i=a0;i<a1-lag;i++)s+=(on[i]-mean)*(on[i+lag]-mean);
-      scores.push({s,bpm});
-    }
-    scores.sort((a,b)=>b.s-a.s);
-    let bpm=scores[0]?scores[0].bpm:120;
-    // prefer 90–140; fold double/half
-    for(const x of scores.slice(0,30)){const b=x.bpm>140?x.bpm/2:x.bpm<90?x.bpm*2:x.bpm;if(b>=90&&b<=140){bpm=b;break}}
-    const spb=60/bpm;
-    let bestOff=0,bestSc=-1;
-    for(let k=0;k<128;k++){
-      const off=spb*4*k/128;let sc=0;
-      for(let bi=0;bi<Math.floor(40/spb);bi++){
-        const i=Math.floor((off+bi*spb)*sr/hop);if(i>=n)break;
-        sc+=on[i]*((bi%4===0||bi%4===2)?1.4:0.5);
+    // Mix drums+bass when available for stronger kick pulse
+    let mixL=ch0,mixR=ch1;
+    try{
+      const other=preferStem==='drums'?pick('bass'):(preferStem==='bass'?pick('drums'):pick('drums'));
+      if(other&&other.sampleRate===sr&&other.length===buf.length){
+        const o0=other.getChannelData(0),o1=other.numberOfChannels>1?other.getChannelData(1):o0;
+        mixL=new Float32Array(ch0.length);mixR=new Float32Array(ch0.length);
+        for(let i=0;i<ch0.length;i++){mixL[i]=ch0[i]+o0[i]*0.85;mixR[i]=ch1[i]+o1[i]*0.85}
       }
-      if(sc>bestSc){bestSc=sc;bestOff=off}
+    }catch(e){}
+    const hopSec=0.005,fr=Math.max(1,Math.round(sr*hopSec)),n=Math.floor(mixL.length/fr);
+    if(n<200)return{bpm:state.bpm||120,t0:0};
+    const env=new Float32Array(n);
+    for(let i=0;i<n;i++){
+      let m=0,a=i*fr,z=Math.min(mixL.length,(i+1)*fr);
+      for(let j=a;j<z;j+=2){const v=((mixL[j]+mixR[j])*0.5);const a=v<0?-v:v;if(a>m)m=a}
+      env[i]=m;
     }
-    return{bpm:Math.round(bpm*100)/100,t0:bestOff};
+    const srt=Float32Array.from(env).sort(),hi=srt[Math.floor(n*0.995)]||0;
+    if(hi<0.015)return{bpm:state.bpm||120,t0:0};
+    const thr=hi*0.28,minGap=Math.round(0.18/hopSec);
+    const onsets=[];let last=-1e9;
+    for(let i=1;i<n;i++){if(env[i]>=thr&&env[i-1]<thr&&i-last>=minGap){onsets.push(i*hopSec);last=i}}
+    let bpm=state.bpm||120,t0=0;
+    if(onsets.length>=8){
+      const iv=[];for(let i=1;i<onsets.length;i++)iv.push(onsets[i]-onsets[i-1]);
+      const sv=[...iv].sort((a,b)=>a-b),med=sv[Math.floor(sv.length/2)]||0.5;
+      const tFirst=onsets[0];let sx=0,sy=0,sxx=0,sxy=0,k=0;
+      for(const t of onsets){const idx=Math.round((t-tFirst)/med);if(Math.abs((t-tFirst)-idx*med)<med*0.2){sx+=idx;sy+=t;sxx+=idx*idx;sxy+=idx*t;k++}}
+      let per=med;if(k>8&&(k*sxx-sx*sx)>0)per=(k*sxy-sx*sy)/(k*sxx-sx*sx);
+      bpm=60/Math.max(1e-4,per);
+      while(bpm<70)bpm*=2;while(bpm>180)bpm/=2;
+      if(bpm>140)bpm/=2;if(bpm<85)bpm*=2;
+      bpm=Math.round(bpm*10)/10;
+      // Phase: absolute time of first strong downbeat (prefer kick on 1 & 3)
+      const spb=60/bpm;
+      const flux=new Float32Array(n);for(let i=1;i<n;i++)flux[i]=Math.max(0,env[i]-env[i-1]);
+      let fmax=0;for(let i=0;i<n;i++)if(flux[i]>fmax)fmax=flux[i];
+      if(fmax>0)for(let i=0;i<n;i++)flux[i]/=fmax;
+      let bestOff=onsets[0],bestSc=-1;
+      const searchN=256,win=Math.min(48,Math.floor((n*hopSec-spb)/spb));
+      for(let k=0;k<searchN;k++){
+        const off=spb*4*k/searchN;let sc=0;
+        for(let bi=0;bi<win;bi++){
+          const i=Math.floor((off+bi*spb)/hopSec);if(i>=n)break;
+          const b4=bi%4;sc+=flux[i]*(b4===0?1.6:b4===2?1.2:0.45);
+        }
+        if(sc>bestSc){bestSc=sc;bestOff=off}
+      }
+      // Snap phase near first strong onset within ±½ beat
+      let snap=bestOff;let snapSc=-1;
+      for(const o of onsets.slice(0,40)){
+        const cand=o-Math.round((o-bestOff)/spb)*spb;
+        const d=Math.abs(cand-bestOff);if(d>spb*0.55)continue;
+        const i=Math.floor(o/hopSec);const sc=(flux[i]||0)+1/(1+d*8);
+        if(sc>snapSc){snapSc=sc;snap=Math.max(0,cand)}
+      }
+      t0=Math.round(Math.max(0,snap)*1000)/1000;
+    }else{
+      // Fallback autocorr if few onsets
+      const hop=256,nn=Math.floor(mixL.length/hop);
+      const on=new Float32Array(nn);
+      for(let i=0;i<nn;i++){let s=0,a=i*hop,z=a+hop;for(let j=a;j<z&&j<mixL.length;j++){const v=(mixL[j]+mixR[j])*0.5;s+=v<0?-v:v}on[i]=s/hop}
+      for(let i=nn-1;i>0;i--)on[i]=Math.max(0,on[i]-on[i-1]);on[0]=0;
+      let omax=0;for(let i=0;i<nn;i++)if(on[i]>omax)omax=on[i];if(omax>0)for(let i=0;i<nn;i++)on[i]/=omax;
+      const a0=Math.min(nn-10,Math.floor(8*sr/hop)),a1=Math.min(nn,Math.floor(90*sr/hop));
+      let best=120,bestS=-1;
+      for(let b=80;b<=160;b+=0.5){const lag=Math.round(60/b*sr/hop);if(lag<2)continue;let s=0;for(let i=a0;i<a1-lag;i++)s+=on[i]*on[i+lag];if(s>bestS){bestS=s;best=b}}
+      bpm=best>140?best/2:best<90?best*2:best;bpm=Math.round(bpm*10)/10;
+      t0=0;
+    }
+    return{bpm,t0};
   }
 
   // style: normal | rock | samcha | slow — always on beat grid (opt.t0 = first downbeat)
@@ -943,16 +997,54 @@ export function createStudio(ui){
     buf.copyToChannel(R instanceof Float32Array?R:Float32Array.from(R),1);
     return buf;
   }
-  // Loud 1–2–3–4 count-in for ci bars (before music). Returns AudioBuffer.
+  // Spoken one–two–three–four (same sfx as live SetSod). Lead-in so attack lands on the beat.
+  const CI_WORDS=['one','two','three','four'];
+  const CI_VOICE={};const CI_LEAD=0.012;let CI_LOAD=null;
+  function loadCiVoices(){
+    if(CI_LOAD)return CI_LOAD;
+    CI_LOAD=(async()=>{
+      try{
+        const a=ac();
+        await Promise.all(CI_WORDS.map(async w=>{
+          try{
+            const r=await fetch('sfx/ci-'+w+'.mp3');if(!r.ok)return;
+            CI_VOICE[w]=await a.decodeAudioData((await r.arrayBuffer()).slice(0));
+          }catch(e){}
+        }));
+      }catch(e){}
+      return CI_VOICE;
+    })();
+    return CI_LOAD;
+  }
+  function mixVoiceAt(L,R,at,word,sr,amp){
+    const src=CI_VOICE[word];if(!src)return false;
+    const s0=src.getChannelData(0),s1=src.numberOfChannels>1?src.getChannelData(1):s0;
+    const lead=Math.floor(CI_LEAD*sr);
+    const start=Math.max(0,at-lead);
+    const gain=amp==null?1:amp;
+    const ratio=src.sampleRate/sr;
+    const outLen=Math.ceil(s0.length/ratio);
+    for(let i=0;i<outLen&&start+i<L.length;i++){
+      const x=i*ratio,i0=x|0,f=x-i0,i1=Math.min(i0+1,s0.length-1);
+      L[start+i]+=(s0[i0]*(1-f)+s0[i1]*f)*gain;
+      R[start+i]+=(s1[i0]*(1-f)+s1[i1]*f)*gain;
+    }
+    return true;
+  }
+  // Loud spoken 1–2–3–4 count-in for ci bars (before music). Returns AudioBuffer.
   function makeCountInBuf(bars,bpm,sr){
     bars=Math.max(0,Math.min(4,+bars||0));sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
     if(!bars)return null;
     const spb=60/bpm,sec=bars*4*spb,n=Math.max(1,Math.ceil(sec*sr));
     const L=new Float32Array(n),R=new Float32Array(n);
+    const hasVoice=CI_WORDS.some(w=>CI_VOICE[w]);
     for(let bi=0;bi<bars*4;bi++){
-      const at=Math.floor(bi*spb*sr),b4=bi%4;
-      if(b4===0)hitAt(L,R,at,sr,2100,0.9,18);
-      else hitAt(L,R,at,sr,1550,0.55,12);
+      const at=Math.floor(bi*spb*sr),b4=bi%4,word=CI_WORDS[b4];
+      let spoke=false;
+      if(hasVoice)spoke=mixVoiceAt(L,R,at,word,sr,b4===0?1.05:0.95);
+      // Soft click under the word (or alone if samples missing) so the beat stays clear
+      if(b4===0)hitAt(L,R,at,sr,2100,spoke?0.22:0.9,16);
+      else hitAt(L,R,at,sr,1550,spoke?0.12:0.55,11);
     }
     return floatToBuf(L,R,sr);
   }
@@ -1047,8 +1139,10 @@ export function createStudio(ui){
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,renderAll,toggleRecord,getDur:dur,fmt,
     applyStemMutes,renderTrackWav,makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
-    syncGuideTracks,makeCountInBuf,makeClickBuf,
+    syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,
     async boot(){bind();
+      // Preload spoken one–two–three–four for Data count-in
+      try{loadCiVoices()}catch(e){}
       // scroll sync: track headers follow the lane vertical scroll
       try{const wrap=$('lanesWrap'),heads=$('trackHeads');
         if(wrap&&heads)wrap.addEventListener('scroll',()=>{heads.scrollTop=wrap.scrollTop},{passive:true})}catch(e){}

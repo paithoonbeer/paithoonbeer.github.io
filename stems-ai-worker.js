@@ -1,11 +1,13 @@
 // SetSod — AI stem splitter worker. htdemucs 6s (MIT) via onnxruntime-web.
-// Stems: drums · bass · other · vocals · guitar · piano
+// Demucs v4 htdemucs_6s output order (Meta release notes):
+//   drums · bass · other · vocals · piano · guitar
+// (piano BEFORE guitar — swapping these dumps electric guitar into the wrong lane)
 const ORT='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/';
 const MODEL='https://huggingface.co/alfajgjK/stemstudio-htdemucs-onnx/resolve/main/htdemucs_6s.opt.fp16.istft.s2s.onnx';
-const N=343980,OV=N>>2,ST=N-OV,SRC=['drums','bass','other','vocals','guitar','piano'];
+const N=343980,OV=N>>2,ST=N-OV,SRC=['drums','bass','other','vocals','piano','guitar'];
 const NS=SRC.length;
 let ort,sess,ep;
-async function model(url){const c=await caches.open('bp-ai-models-v2');let r=await c.match(url);
+async function model(url){const c=await caches.open('bp-ai-models-v3');let r=await c.match(url);
   if(!r){const n=await fetch(url);if(!n.ok)throw Error('model '+n.status);const len=+n.headers.get('content-length')||142604923;
     const rd=n.body.getReader(),parts=[];let got=0;for(;;){const{done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;postMessage({t:'dl',p:got/len})}
     const b=new Blob(parts);await c.put(url,new Response(b));return new Uint8Array(await b.arrayBuffer())}

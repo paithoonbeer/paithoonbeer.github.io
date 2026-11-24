@@ -2,8 +2,9 @@
  * Bump DATAV here (and meta bp-data in data.html) when shipping Data-only changes.
  * Do NOT bump public/app.js APPV / sw cache / APK for Data-only work.
  */
-export const DATAV='1.0.7';
+export const DATAV='1.0.8';
 export const DATACHG={
+  '1.0.8':'แก้ลำดับกีตาร์/คีย์ (Demucs 6s) · นับเข้าพูด one–two–three–four · นอมล็อกบีดจาก onset',
   '1.0.7':'แยก 6 ส่วน (กีตาร์≠อื่นๆ + ร้องแยก) · แทร็กเมโทรนอม/นับเข้ามีกราฟและเสียงใน Data',
   '1.0.6':'โปรไฟล์สูตร · จังหวะ/ลูกเล่น · แยกแล้วส่งเลย · นอมล็อกบีดเพลง · WAV คุณภาพ',
   '1.0.5':'สูตรดาต้า: ลากเพลง→แยก AI→เลือกเอาเครื่องออก + นอม + นับเข้า → ส่งเข้า SetSod อัตโนมัติ',
