@@ -1,4 +1,5 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
+import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.30';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -17,7 +18,9 @@ export function createStudio(ui){
     playing:false,recording:false,t0:0,offset:0,loop:false,loopA:0,loopB:8,
     metro:false,snap:true,
     ac:null,nodes:[],fx:[],rec:{stream:null,proc:null,chunks:[],start:0},
-    undo:[],redo:[],dirty:false,clipBoard:null
+    undo:[],redo:[],dirty:false,clipBoard:null,
+    // Data 1.0.30: section markers {id,t(song s),name,kind:'section'|'end',src:'manual'|'auto'} + per-song recipe
+    markers:[],recipe:null,nomOpt:null
   };
 
   function ac(){if(!state.ac)state.ac=new (window.AudioContext||window.webkitAudioContext)();return state.ac}
@@ -32,8 +35,8 @@ export function createStudio(ui){
   function beatSec(){return 60/state.bpm}
   function snapT(t){if(!state.snap)return t;const g=beatSec()/4;return Math.round(t/g)*g}
   function mark(){state.undo.push(snapshot());if(state.undo.length>40)state.undo.shift();state.redo.length=0;state.dirty=true}
-  function snapshot(){return JSON.stringify({title:state.title,bpm:state.bpm,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:undefined})),notes:t.notes.map(n=>({...n}))}))})}
-  function restore(j){const o=JSON.parse(j);state.title=o.title;state.bpm=o.bpm;state.tracks=o.tracks;renderAll()}
+  function snapshot(){return JSON.stringify({title:state.title,bpm:state.bpm,markers:state.markers,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:undefined})),notes:t.notes.map(n=>({...n}))}))})}
+  function restore(j){const o=JSON.parse(j);state.title=o.title;state.bpm=o.bpm;state.tracks=o.tracks;state.markers=o.markers||[];renderAll()}
   function undo(){if(!state.undo.length)return;state.redo.push(snapshot());restore(state.undo.pop())}
   function redo(){if(!state.redo.length)return;state.undo.push(snapshot());restore(state.redo.pop())}
 
@@ -272,7 +275,7 @@ export function createStudio(ui){
     if(state._guidesDirty){
       state._guidesDirty=false;
       try{
-        const ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
+        const ci=preCi();
         const feel=(typeof document!=='undefined'&&document.getElementById('rFeel')?.value)||'normal';
         const flourish=!!(typeof document!=='undefined'&&document.getElementById('rFlourish')?.checked);
         syncGuideTracks({bpm:state.bpm,t0:state.t0||0,ci,feel,flourish,metroOn:!!state.metro,preview:true});
@@ -850,6 +853,48 @@ export function createStudio(ui){
     renderAll();
   }
 
+  /* ---------- section markers (Data 1.0.30) ---------- */
+  // t = song time (s, from music start) so pre-roll count-in shifts never move them.
+  function musicStart(){
+    for(const tr of state.tracks){
+      if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||!tr.clips.length)continue;
+      return tr.clips[0].start||0;
+    }
+    return 0;
+  }
+  function sortMarkers(){state.markers.sort((a,b)=>a.t-b.t)}
+  function addMarker(kind,t,name){
+    mark();
+    const at=Math.max(0,(t!=null?t:playheadT()-musicStart()));
+    if(kind==='end')state.markers=state.markers.filter(m=>m.kind!=='end');
+    const n=state.markers.filter(m=>m.kind!=='end').length+1;
+    const m={id:uid(),t:Math.round(snapT(at)*1000)/1000,name:name||(kind==='end'?'จบนอม':'ท่อน '+n),kind:kind==='end'?'end':'section',src:'manual'};
+    state.markers.push(m);sortMarkers();state.dirty=true;renderArrange();renderMasterWave();ui.onMarkers?.(state.markers);
+    return m;
+  }
+  function moveMarker(id,t){const m=state.markers.find(x=>x.id===id);if(!m)return;m.t=Math.max(0,Math.round(snapT(t)*1000)/1000);m.src='manual';sortMarkers();state.dirty=true;renderArrange();renderMasterWave();ui.onMarkers?.(state.markers)}
+  function renameMarker(id,name){const m=state.markers.find(x=>x.id===id);if(!m)return;mark();m.name=String(name).slice(0,24);renderArrange();ui.onMarkers?.(state.markers)}
+  function deleteMarker(id){mark();state.markers=state.markers.filter(x=>x.id!==id);renderArrange();renderMasterWave();ui.onMarkers?.(state.markers)}
+  function setMarkers(list){state.markers=(list||[]).map(m=>({id:m.id||uid(),t:+m.t||0,name:m.name||'',kind:m.kind==='end'?'end':'section',src:m.src||'manual'}));sortMarkers();renderArrange();renderMasterWave()}
+  function markerX(m){return (musicStart()+m.t)*state.pxPerSec}
+  function drawMarkers(g){
+    g.font='bold 10px NotoThai,sans-serif';
+    for(const m of state.markers){
+      const x=markerX(m),end=m.kind==='end',col=end?'#ff5d5d':'#ffd60a';
+      g.fillStyle=col;g.fillRect(x,0,2,28);
+      const lab=(end?'🏁 ':'📍 ')+(m.name||'');const w=Math.min(110,g.measureText(lab).width+8);
+      g.fillStyle=end?'rgba(255,93,93,.85)':'rgba(255,214,10,.9)';g.fillRect(x+2,0,w,13);
+      g.fillStyle='#111';g.fillText(lab,x+5,10);
+    }
+  }
+  function markerAtClientX(clientX){
+    const rw=document.querySelector('.ruler-wrap');if(!rw)return null;
+    const r=rw.getBoundingClientRect(),x=clientX-r.left+rw.scrollLeft;
+    let best=null,bd=1e9;
+    for(const m of state.markers){const d=x-markerX(m);if(d>=-10&&d<=90){const sc=d<0?-d:d*0.2;if(sc<bd){bd=sc;best=m}}}
+    return best;
+  }
+
   /* ---------- render UI ---------- */
   function renderAll(){renderTracks();renderArrange();renderMixer();renderPiano();ui.onProject?.(state)}
 
@@ -903,6 +948,7 @@ export function createStudio(ui){
       }
       // loop region
       if(state.loop){g.fillStyle='rgba(61,186,138,.12)';g.fillRect(state.loopA*state.pxPerSec,0,(state.loopB-state.loopA)*state.pxPerSec,28)}
+      drawMarkers(g);
     }
     const phKeep=$('playhead');
     lanes.innerHTML='';
@@ -971,6 +1017,7 @@ export function createStudio(ui){
     g.closePath();
     g.fillStyle='rgba(61,186,138,.45)';g.fill();
     g.strokeStyle='#3dba8a';g.lineWidth=1;g.stroke();
+    for(const m of state.markers){g.fillStyle=m.kind==='end'?'rgba(255,93,93,.8)':'rgba(255,214,10,.75)';g.fillRect(markerX(m),0,1.5,h)}
     // playhead mark on master
     const t=playheadT();
     g.fillStyle='var(--play,#ff6b3d)';g.fillStyle='#ff6b3d';
@@ -1299,6 +1346,16 @@ export function createStudio(ui){
       rulerWrap.style.cursor='ew-resize';
       rulerWrap.addEventListener('pointerdown',e=>{
         if(e.button!=null&&e.button!==0)return;
+        const m=markerAtClientX(e.clientX);
+        if(m){
+          e.preventDefault();e.stopPropagation();
+          const x0=e.clientX,t0m=m.t;let moved=false;mark();
+          const mv=ev=>{const dx=ev.clientX-x0;if(Math.abs(dx)>4)moved=true;if(moved)moveMarker(m.id,t0m+dx/state.pxPerSec)};
+          const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);
+            if(!moved){state.undo.pop();ui.onMarkerTap?ui.onMarkerTap(m):(()=>{const nm=prompt('ชื่อหมุด (ลบข้อความทั้งหมด = ลบหมุด)',m.name);if(nm===null)return;if(!nm.trim())deleteMarker(m.id);else renameMarker(m.id,nm.trim())})()}};
+          addEventListener('pointermove',mv);addEventListener('pointerup',up);
+          return;
+        }
         startPhDrag(e);
       });
     }
@@ -1467,7 +1524,7 @@ export function createStudio(ui){
   }
 
   function newProject(){
-    stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;
+    stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;state.markers=[];
     state.undo.length=0;state.redo.length=0;
     [['กลอง',COLS[0],'drums'],['เบส',COLS[1],'bass'],['กีตาร์',COLS[5],'guitar'],['คีย์บอร์ด',COLS[7],'keys'],['ดนตรีอื่นๆ',COLS[2],'other'],['ร้อง',COLS[3],'vocals']]
       .forEach(([n,c,k])=>{const t=addAudioTrack(n,c);t.stem=k});
@@ -1479,7 +1536,7 @@ export function createStudio(ui){
   async function saveProject(){
     const bufs={};
     for(const [id,buf] of state.buffers){bufs[id]=await bufToWavArray(buf)}
-    const proj={v:1,title:state.title,bpm:state.bpm,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
+    const proj={v:1,title:state.title,bpm:state.bpm,t0:state.t0||0,markers:state.markers||[],recipe:state.recipe||null,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
     const db=await idb();
     await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(proj,'current');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});
     // also download .ssd.json sidecar without audio for safety + full blob download
@@ -1492,7 +1549,7 @@ export function createStudio(ui){
     try{
       const proj=JSON.parse(await file.text());
       if(!proj||typeof proj!=='object')throw new Error('ไฟล์ไม่ใช่โปรเจกต์ SetSod Data');
-      stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;
+      stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
       const a=ac();
       for(const id of Object.keys(proj.bufs||{})){
         const raw=proj.bufs[id];
@@ -1501,7 +1558,7 @@ export function createStudio(ui){
         state.buffers.set(id,buf);
       }
       for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
-      state.dirty=false;renderAll();ui.toast?.('โหลดโปรเจกต์แล้ว');
+      state.dirty=false;renderAll();ui.onProjectLoaded?.(proj);ui.toast?.('โหลดโปรเจกต์แล้ว');
     }catch(e){ui.toast?.('เปิดโปรเจกต์ไม่ได้: '+(e.message||e))}
   }
   // Project/export sample rate: keep source SR (usually 44.1/48k) — never silently drop to a fixed 44.1
@@ -1712,15 +1769,18 @@ export function createStudio(ui){
    */
   function makeExportClickBuf(musicDur,bpm,sr,opt){
     opt=opt||{};sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
+    const ciMode=opt.ciMode==='over'?'over':'pre';
     const ci=Math.max(0,Math.min(4,+(opt.ci||0)|0));
     const style=opt.style||'normal',flourish=!!opt.flourish,t0=Math.max(0,+opt.t0||0);
-    const spb=60/bpm,ciSec=ci*4*spb,total=ciSec+Math.max(0.5,+musicDur||1);
+    const rate=opt.rate===2?2:1,accent=opt.accent!==false;
+    const spb=60/bpm,ciSec=ciMode==='pre'?ci*4*spb:0,total=ciSec+Math.max(0.5,+musicDur||1);
+    const endT=Math.min(+musicDur||1,opt.endT!=null&&isFinite(opt.endT)?+opt.endT:Infinity); // song-time click stop
     const n=Math.max(1,Math.ceil(total*sr));
     const L=new Float32Array(n),R=new Float32Array(n);
     const hasVoice=CI_WORDS.some(w=>CI_VOICE[w]);
-    // —— count-in (baked) ——
+    // —— count-in (baked, pre-roll — old เด๋อ mode) ——
     // 2 bars: bar1 "one … two …" (beats 1+3), bar2 "one two three four" — like reference เด๋อ
-    for(let bi=0;bi<ci*4;bi++){
+    if(ciMode==='pre')for(let bi=0;bi<ci*4;bi++){
       const at=Math.floor(bi*spb*sr),b4=bi%4,bar=Math.floor(bi/4);
       const word=CI_WORDS[b4];
       let speak=true;
@@ -1733,10 +1793,22 @@ export function createStudio(ui){
         else if(speak)hitAt(L,R,at,sr,1650,spoke?0.38:0.95,12);
       }
     }
-    // —— song clicks (after count-in), grid locked to music t0 ——
+    // —— song clicks (after any pre-roll), grid locked to music t0 ——
     const songBars=Math.ceil(Math.max(0,musicDur-t0)/(spb*4))+1;
-    for(let beat=0;;beat++){
-      const t=ciSec+t0+beat*spb;if(t>=total-1e-6)break;
+    if(style==='ref'||style==='normal'){
+      // Data 1.0.30: generic grid — rate (every beat / every 2 beats) · accent on/off · spoken cues
+      const grid=clickGrid(t0,bpm,rate,endT);
+      const words=cueWords(grid,opt.markers,t0,bpm,rate,{cues:!!opt.cues,ciMode,ci});
+      grid.forEach((t,k)=>{
+        const at=Math.floor((ciSec+t)*sr);if(at>=n)return;
+        const acc=accent&&k%4===0,w=words.get(k);
+        let spoke=false;if(w&&hasVoice)spoke=mixVoiceAt(L,R,at,w,sr,1.1);
+        const amp=spoke?0.35:1;
+        if(style==='ref')beepAt(L,R,at,sr,amp*(acc?1:0.9),acc);
+        else hitAt(L,R,at,sr,acc?2100:1300,(acc?1.2:0.78)*amp,13);
+      });
+    }else for(let beat=0;;beat++){
+      const t=ciSec+t0+beat*spb;if(t>=total-1e-6||t-ciSec>=endT)break;
       const at=Math.floor(t*sr);if(at>=n)break;
       const b4=beat%4;
       if(style==='rock'){
@@ -1751,13 +1823,11 @@ export function createStudio(ui){
       }else if(style==='slow'){
         if(b4===0)hitAt(L,R,at,sr,1600,0.95,18);
         else if(b4===2)hitAt(L,R,at,sr,1150,0.48,13);
-      }else{
-        const accent=b4===0;hitAt(L,R,at,sr,accent?2100:1300,accent?1.2:0.78,13);
       }
     }
-    if(flourish){
+    if(flourish&&style!=='ref'){
       for(let bar=7;bar<songBars;bar+=8){
-        const tf=ciSec+t0+(bar*4+3)*spb;
+        const tf=ciSec+t0+(bar*4+3)*spb;if(tf-ciSec>=endT)break;
         for(let k=0;k<6;k++){
           const at=Math.floor((tf+k*(spb/6))*sr);if(at<0||at>=n)break;
           hitAt(L,R,at,sr,2200-k*120,0.42+k*0.04,8);
@@ -1766,6 +1836,46 @@ export function createStudio(ui){
     }
     const buf=floatToBuf(L,R,sr);
     return{buf,ciSec,totalDur:total,sr};
+  }
+  /** Studio preview opts from the recipe (Data 1.0.30) — same generator as export, no pre-roll shift unless 'pre'. */
+  // pre-roll count-in bars that shift the music (0 when counting over the intro)
+  function preCi(){const v=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;return state.nomOpt&&state.nomOpt.ciMode==='over'?0:v}
+  function previewNomOpt(){
+    const o=state.nomOpt||{};
+    return{style:o.style==='ref'?'ref':'normal',rate:o.rate===2?2:1,accent:o.accent!==false,ciMode:o.ciMode==='pre'?'pre':'over',
+      ci:o.ciMode==='over'?(o.ci|0):0,cues:!!o.cues,markers:state.markers,endT:o.endT};
+  }
+  /** Mono sum of chosen stems (for the quiet guide bed on the nom side), regardless of mute. */
+  async function renderStemsMono(keys,sr,padLead,totalDur){
+    const set=new Set(keys||[]);
+    const trs=state.tracks.filter(t=>t.type==='audio'&&t.stem&&set.has(t.stem)&&t.clips.length);
+    if(!trs.length)return null;
+    const length=Math.max(1,Math.ceil((totalDur||dur())*sr));
+    const off=new OfflineAudioContext(1,length,sr);
+    for(const tr of trs)for(const c of tr.clips){
+      const buf=state.buffers.get(c.buf);if(!buf)continue;
+      const src=off.createBufferSource();src.buffer=buf;src.connect(off.destination);
+      try{src.start(Math.max(0,+padLead||0),clamp(c.offset||0,0,Math.max(0,buf.duration-1e-4)))}catch(e){}
+    }
+    return await off.startRendering();
+  }
+  /** Mastered dual-mono like the reference: music −11 LUFS (TP-safe limit), nom peaks −0.5 dBFS, optional guide bed. */
+  function makeRefDualBlob(musicMonoBuf,nomBuf,side,opt){
+    opt=opt||{};const sr=nomBuf.sampleRate;
+    const mono=b=>{if(!b)return null;if(b.numberOfChannels<2)return b.getChannelData(0);const a=b.getChannelData(0),c=b.getChannelData(1),o=new Float32Array(b.length);for(let i=0;i<o.length;i++)o[i]=0.5*(a[i]+c[i]);return o};
+    const n=Math.max(musicMonoBuf.length,nomBuf.length);
+    const pad=x=>{if(!x)return null;if(x.length===n)return x;const o=new Float32Array(n);o.set(x.subarray(0,Math.min(n,x.length)));return o};
+    const music=pad(mono(musicMonoBuf)),nom=pad(mono(nomBuf)),guide=opt.guideBuf?pad(mono(opt.guideBuf)):null;
+    const mm=opt.loud!==false?masterMusic(music,sr,opt.lufs!=null?opt.lufs:-11,opt.tpDb!=null?opt.tpDb:-1):{y:music,grDb:0,lufs:null};
+    const nm=masterNom(nom,sr,opt.clickPeakDb!=null?opt.clickPeakDb:-0.5,guide,opt.guideDb!=null?opt.guideDb:-28);
+    const chans=side==='L'?[nm,mm.y]:[mm.y,nm];
+    const blob=new Blob([wav16(chans,sr)],{type:'audio/wav'});
+    return{blob,report:{lufs:mm.lufs,grDb:mm.grDb,musicPeak:peakAbs(mm.y),nomPeak:peakAbs(nm),sr}};
+  }
+  /** Auto end marker time (song s) from the rendered music. */
+  function autoEndT(musicMonoBuf,t0,bpm,rate,lead){
+    const x=musicMonoBuf.getChannelData(0),sr=musicMonoBuf.sampleRate,skip=Math.floor((lead||0)*sr);
+    return autoEnd(skip?x.subarray(skip):x,sr,t0,bpm,rate);
   }
 
   function bufToWavBlob(buf,opt){
@@ -1787,7 +1897,7 @@ export function createStudio(ui){
     state.t0=Math.max(0,Math.round(((+state.t0||0)+(+deltaSec||0))*1000)/1000);
     try{
       const bpm=state.bpm||120;
-      const ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
+      const ci=preCi();
       const sr=nativeSr();
       const spb=60/bpm,ciSec=ci*4*spb;
       let musicDur=1;
@@ -1798,7 +1908,7 @@ export function createStudio(ui){
           musicDur=Math.max(musicDur,b?b.duration:c.dur||0);
         }
       }
-      const click=makeClickBuf(musicDur,bpm,sr,{style:'normal',flourish:false,t0:state.t0});
+      const click=state.nomOpt?makeExportClickBuf(musicDur,bpm,sr,{...previewNomOpt(),t0:state.t0}).buf:makeClickBuf(musicDur,bpm,sr,{style:'normal',flourish:false,t0:state.t0});
       const cid=putBuf(click);
       let ct=state.tracks.find(t=>t.stem==='click');
       if(!ct){
@@ -1820,7 +1930,7 @@ export function createStudio(ui){
     try{
       const bpmEl=typeof document!=='undefined'&&document.getElementById('bpm');
       if(bpmEl)bpmEl.value=String(Math.round(g.bpm));
-      const ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
+      const ci=preCi();
       syncGuideTracks({bpm:g.bpm,t0:g.t0,ci,metroOn:true,preview:true});
       state.metro=true;
       const m=typeof document!=='undefined'&&document.getElementById('chkMetro');if(m)m.checked=true;
@@ -2165,7 +2275,7 @@ export function createStudio(ui){
     // Audition nom: plain 1-2-3-4 quarter clicks only (export still uses feel/flourish)
     const clickStyle=preview?'normal':feel;
     const clickFlour=preview?false:flourish;
-    const click=makeClickBuf(musicDur,bpm,sr,{style:clickStyle,flourish:clickFlour,t0});
+    const click=state.nomOpt?makeExportClickBuf(musicDur,bpm,sr,{...previewNomOpt(),t0}).buf:makeClickBuf(musicDur,bpm,sr,{style:clickStyle,flourish:clickFlour,t0});
     const cid=putBuf(click);
     const nomV=state.nomVol!=null?state.nomVol:140;
     const ct=addAudioTrack('เมโทรนอม / นอม', '#45c4d4');ct.stem='click';ct.vol=nomV;ct.mute=!metroOn;
@@ -2190,6 +2300,7 @@ export function createStudio(ui){
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
+    addMarker,moveMarker,renameMarker,deleteMarker,setMarkers,musicStart,renderStemsMono,makeRefDualBlob,autoEndT,
     async boot(){bind();
       // Preload spoken one–two–three–four for Data count-in
       try{loadCiVoices()}catch(e){}
@@ -2208,7 +2319,7 @@ export function createStudio(ui){
         const db=await idb();
         const proj=await new Promise((ok,no)=>{const tx=db.transaction('projects','readonly');const g=tx.objectStore('projects').get('current');g.onsuccess=()=>ok(g.result);g.onerror=()=>no(g.error)});
         if(proj&&proj.tracks&&proj.bufs){
-          stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;
+          stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
           const a=ac();
           for(const id of Object.keys(proj.bufs||{})){
             const raw=proj.bufs[id];const u8=raw instanceof Uint8Array?raw:new Uint8Array(raw);
@@ -2216,7 +2327,7 @@ export function createStudio(ui){
             state.buffers.set(id,buf);
           }
           for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
-          state.dirty=false;restored=true;renderAll();
+          state.dirty=false;restored=true;renderAll();ui.onProjectLoaded?.(proj);
           ui.toast?.('โหลดโปรเจกต์ล่าสุด: '+(state.title||'Untitled'));
         }
       }catch(e){}
