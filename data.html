@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.11">
+<meta name="bp-data" content="1.0.12">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -44,10 +44,8 @@ button,input{font:inherit;color:inherit}
 .status{color:var(--mut);font-family:JetMono,ui-monospace,monospace;font-size:11px}
 .recipe{display:flex;gap:10px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line);background:#10151b;flex-wrap:wrap}
 .recipe b{font-size:12px;color:var(--acc)}
-.recipe .rp{display:flex;gap:4px;flex-wrap:wrap}
-.recipe .rp .btn{min-height:26px;font-size:11px;padding:2px 8px}
-.recipe .rp .btn.on{border-color:var(--acc);color:var(--acc)}
-.recipe .rmutes{display:flex;gap:8px;flex-wrap:wrap;color:var(--mut);font-size:11px}
+.recipe .rmutes{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mut);font-size:11px}
+.recipe .rmutes .btn{min-height:26px;font-size:11px;padding:2px 8px}
 .recipe select{background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:var(--tx)}
 .main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 1fr auto;min-height:0}
 .corner{background:#0a0c0f;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
@@ -154,15 +152,8 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     </label>
     <button type="button" class="btn" id="btnProfSave" title="บันทึกสูตรปัจจุบันเป็นโปรไฟล์">บันทึกโปรไฟล์</button>
     <button type="button" class="btn" id="btnProfDel" title="ลบโปรไฟล์ที่เลือก">ลบ</button>
-    <div class="rp" id="rPresets">
-      <button type="button" class="btn" data-pre="none">เปิดทุกแทร็ก</button>
-      <button type="button" class="btn" data-pre="drums">เอาแค่กลองออก</button>
-      <button type="button" class="btn" data-pre="bass">เอาแค่เบสออก</button>
-      <button type="button" class="btn" data-pre="guitar">เอาแค่กีตาร์ออก</button>
-      <button type="button" class="btn" data-pre="keys">เอาแค่คีย์ออก</button>
-      <button type="button" class="btn" data-pre="vocals">เอาแค่ร้องออก</button>
-    </div>
     <div class="rmutes" id="rMutes">
+      <button type="button" class="btn" id="btnMuteClear" title="เปิดเสียงทุกเครื่อง">เปิดทุกแทร็ก</button>
       <label class="chk"><input type="checkbox" data-mute="drums"> ปิดกลอง</label>
       <label class="chk"><input type="checkbox" data-mute="bass"> ปิดเบส</label>
       <label class="chk"><input type="checkbox" data-mute="guitar"> ปิดกีตาร์</label>
@@ -348,7 +339,6 @@ async function startAi(){
 $('goAi').onclick=startAi;
 
 /* ---- สูตรดาต้าครบ (โปรไฟล์ · จังหวะ · ลูกเล่น · ส่งอัตโนมัติ) ---- */
-const PRE={none:[],drums:['drums'],bass:['bass'],guitar:['guitar'],keys:['keys'],vocals:['vocals']};
 const DEF_PROFS=[
   {id:'drummer',name:'มือกลอง',mute:['drums'],nom:'R',ci:1,feel:'rock',flourish:1},
   {id:'bassist',name:'มือเบส',mute:['bass'],nom:'R',ci:1,feel:'normal',flourish:0},
@@ -372,13 +362,8 @@ function applyRecipeMutes(){
 }
 function recipeState(){return{mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value,feel:$('rFeel').value||'normal',flourish:!!$('rFlourish').checked,auto:!!$('rAuto').checked}}
 function applyRecipeState(o){if(!o)return;if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;if('auto' in o)$('rAuto').checked=!!o.auto;applyRecipeMutes();refreshGuides()}
-function setPreset(name){
-  const keys=PRE[name]||[];setMuteUI(keys);
-  $('rPresets').querySelectorAll('[data-pre]').forEach(b=>b.classList.toggle('on',b.dataset.pre===name));
-  applyRecipeMutes();saveRecipe();
-}
-$('rPresets').onclick=e=>{const b=e.target.closest('[data-pre]');if(b)setPreset(b.dataset.pre)};
-$('rMutes').onchange=()=>{$('rPresets').querySelectorAll('[data-pre]').forEach(b=>b.classList.remove('on'));applyRecipeMutes();saveRecipe()};
+$('btnMuteClear').onclick=()=>{setMuteUI([]);applyRecipeMutes();saveRecipe()};
+$('rMutes').onchange=()=>{applyRecipeMutes();saveRecipe()};
 
 function refreshGuides(){
   const hasMusic=studio.state.tracks.some(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.clips.length);
@@ -462,7 +447,7 @@ async function makeDataNow(){
       out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
     }
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
-    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.11'};
+    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.12'};
     if(ci===0)meta.cia=0;
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
