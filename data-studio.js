@@ -32,7 +32,7 @@ export function createStudio(ui){
   function beatSec(){return 60/state.bpm}
   function snapT(t){if(!state.snap)return t;const g=beatSec()/4;return Math.round(t/g)*g}
   function mark(){state.undo.push(snapshot());if(state.undo.length>40)state.undo.shift();state.redo.length=0;state.dirty=true}
-  function snapshot(){return JSON.stringify({title:state.title,bpm:state.bpm,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c})),notes:t.notes.map(n=>({...n}))}))})}
+  function snapshot(){return JSON.stringify({title:state.title,bpm:state.bpm,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:undefined})),notes:t.notes.map(n=>({...n}))}))})}
   function restore(j){const o=JSON.parse(j);state.title=o.title;state.bpm=o.bpm;state.tracks=o.tracks;renderAll()}
   function undo(){if(!state.undo.length)return;state.redo.push(snapshot());restore(state.undo.pop())}
   function redo(){if(!state.redo.length)return;state.undo.push(snapshot());restore(state.redo.pop())}
@@ -85,35 +85,45 @@ export function createStudio(ui){
     return await ac().decodeAudioData(ab.slice(0));
   }
   function putBuf(buf){const id=uid();state.buffers.set(id,buf);return id}
-  // min/max + RMS peaks. Mild global normalize only — never per-window boost
-  // (that turned demucs near-silence into solid filled blocks).
-  // Bins below ~2.5% of peak = true silence → stay flat.
-  function peaksOf(buf,bins){
+  // Raw min/max peaks at a FIXED time resolution (PEAK_BPS bins per second ≥ max zoom px/s).
+  // Data 1.0.29: no gain, no floor-zeroing, no 12000-bin cap — the old cap made long songs
+  // blocky when zoomed and the 2.5% floor erased real (quiet) sound. Non-finite samples → 0.
+  const PEAK_BPS=200;
+  function peaksOf(buf){
     const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
-    const n=L.length;
-    const nb=Math.max(1200,Math.min(bins||Math.ceil(buf.duration*400),12000));
-    const step=Math.max(1,Math.floor(n/nb)),out=new Float32Array(Math.ceil(n/step)*2);
-    let peak=0;
-    for(let i=0,o=0;i<n;i+=step,o+=2){
-      let mn=1,mx=-1,ss=0,cnt=0;const e=Math.min(n,i+step);
-      for(let j=i;j<e;j+=2){
-        const v=(L[j]+(R[j]||L[j]))*0.5;
-        if(v<mn)mn=v;if(v>mx)mx=v;ss+=v*v;cnt++;
+    const n=L.length,sr=buf.sampleRate||44100;
+    const step=Math.max(1,Math.round(sr/PEAK_BPS)),nb=Math.max(1,Math.ceil(n/step));
+    const out=new Float32Array(nb*2);
+    for(let b=0,i=0;b<nb;b++,i+=step){
+      let mn=0,mx=0;const e=Math.min(n,i+step);
+      for(let j=i;j<e;j++){
+        const v=(L[j]+R[j])*0.5;
+        if(v<mn)mn=v;else if(v>mx)mx=v; // NaN fails both → ignored
       }
-      if(mn>mx){mn=0;mx=0}
-      const rms=cnt?Math.sqrt(ss/cnt):0;
-      const span=Math.max(Math.abs(mn),Math.abs(mx),rms*1.4);
-      out[o]=-span;out[o+1]=span;
-      if(span>peak)peak=span;
-    }
-    const floor=peak*0.025;
-    const g=(peak>1e-4&&peak<0.35)?Math.min(0.75/peak,3.5):1;
-    for(let i=0;i<out.length;i+=2){
-      const s=Math.max(Math.abs(out[i]),Math.abs(out[i+1]));
-      if(s<floor){out[i]=0;out[i+1]=0;continue}
-      if(g!==1){out[i]=clamp(out[i]*g,-1,1);out[i+1]=clamp(out[i+1]*g,-1,1)}
+      out[b*2]=mn;out[b*2+1]=mx;
     }
     return out;
+  }
+  // Canvas backing-store guard: Safari blanks canvases > ~16.7M px, Chrome > 32767 px wide.
+  function safeDpr(w,h){
+    const d=devicePixelRatio||1;
+    return Math.max(0.25,Math.min(d,32000/Math.max(1,w),Math.sqrt(16e6/Math.max(1,w*h))));
+  }
+  const WAVE_FLOOR=0.001; // −60 dB below the lane's own peak = true silence (flat)
+  function peakAbsMax(pk){let p=0;for(let i=0;i<pk.length;i++){const v=pk[i]<0?-pk[i]:pk[i];if(v>p)p=v}return p}
+  /** Per-pixel envelope (0..1): max |amp| over ALL bins under the pixel (no aliasing),
+   *  sqrt-scaled vs the lane peak (−20 dB → 32%, −40 dB → 10%) so quiet-but-real sound
+   *  stays visible; only true silence (< −60 dB) is flat. */
+  function waveEnvelope(pk,u0,u1,w){
+    const bins=pk.length>>1,env=new Float32Array(w);
+    const ref=peakAbsMax(pk);if(!(ref>1e-6)||!bins)return {env,ref};
+    for(let x=0;x<w;x++){
+      let b0=Math.floor((u0+(u1-u0)*(x/w))*bins),b1=Math.floor((u0+(u1-u0)*((x+1)/w))*bins);
+      b0=clamp(b0,0,bins-1);b1=clamp(Math.max(b1,b0+1),1,bins);
+      let m=0;for(let b=b0;b<b1;b++){const a=-pk[b*2],c=pk[b*2+1];if(a>m)m=a;if(c>m)m=c}
+      const r=m/ref;env[x]=r<WAVE_FLOOR?0:Math.sqrt(r)
+    }
+    return {env,ref};
   }
   // Mild peak-norm only when the WHOLE stem is quiet (not mid-song gaps)
   function peakNormLR(ch,target){
@@ -178,76 +188,12 @@ export function createStudio(ui){
       by.bass={L,R};
     }catch(e){}
   }
-  /**
-   * Rebuild EVERY named stem so graphs/audio are continuous for ทำดาต้า.
-   * Named stem K = soft blend of demucs[K] with (mix − other named stems).
-   * Excludes "other" from the subtract so energy Demucs dumped there comes back.
-   * Then other = mix − Σnamed so the set still sums ≈ mix.
-   */
-  function rebuildStemsComplete(by,mix){
-    try{
-      if(!mix||!mix.L||!by)return;
-      const named=['drums','bass','guitar','piano','vocals'];
-      const n=mix.L.length;
-      const mR=mix.R&&mix.R.length===n?mix.R:mix.L;
-      const src={};
-      for(const k of [...named,'other']){
-        if(!by[k]||!by[k].L||by[k].L.length!==n)continue;
-        src[k]={L:by[k].L,R:(by[k].R&&by[k].R.length===n)?by[k].R:by[k].L};
-      }
-      if(Object.keys(src).length<2)return;
-      let mixPeak=0;const step=Math.max(1,(n/200000)|0);
-      for(let i=0;i<n;i+=step){
-        const a=mix.L[i]<0?-mix.L[i]:mix.L[i],b=mR[i]<0?-mR[i]:mR[i];
-        if(a>mixPeak)mixPeak=a;if(b>mixPeak)mixPeak=b;
-      }
-      if(mixPeak<1e-4)return;
-      const thr=mixPeak*0.035;
-      for(const k of named){
-        if(!src[k])continue;
-        const L=src[k].L,R=src[k].R;
-        const oL=new Float32Array(n),oR=new Float32Array(n);
-        let env=0;const atk=0.12,rel=0.008;
-        for(let i=0;i<n;i++){
-          let aL=mix.L[i],aR=mR[i];
-          for(const j of named){
-            if(j===k||!src[j])continue;
-            aL-=src[j].L[i];aR-=src[j].R[i];
-          }
-          const sL=L[i],sR=R[i];
-          const sMag=Math.max(sL<0?-sL:sL,sR<0?-sR:sR);
-          const aMag=Math.max(aL<0?-aL:aL,aR<0?-aR:aR);
-          env+=(sMag>env?atk:rel)*(sMag-env);
-          // Demucs loud → keep it; Demucs quiet → take complement (continuous graph)
-          let keep=1;
-          if(env<thr)keep=Math.max(0.05,env/thr)*0.35;
-          else if(env<thr*2.5)keep=0.35+(env-thr)/(thr*1.5)*0.65;
-          else keep=1;
-          if(aMag<thr*0.3)keep=1; // nothing useful in complement
-          const g=1-keep;
-          oL[i]=clamp(sL*keep+aL*g,-1,1);
-          oR[i]=clamp(sR*keep+aR*g,-1,1);
-        }
-        by[k]={L:oL,R:oR};
-      }
-      // other = residual so Σ ≈ mix
-      const oL=new Float32Array(n),oR=new Float32Array(n);
-      for(let i=0;i<n;i++){
-        let aL=mix.L[i],aR=mR[i];
-        for(const j of named){
-          if(!by[j])continue;
-          aL-=by[j].L[i];aR-=by[j].R[i];
-        }
-        oL[i]=clamp(aL,-1,1);oR[i]=clamp(aR,-1,1);
-      }
-      by.other={L:oL,R:oR};
-    }catch(e){}
-  }
   function loadStemChannels({title,src,channels,sampleRate,mix}){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
     fillQuietBass(by,mix);
-    rebuildStemsComplete(by,mix); // every named lane gets continuous audio+graph for ทำดาต้า
+    // Data 1.0.29: no mix-complement gap-fill — it pasted the whole mix into every lane
+    // (graphs looked like the mix, mix−stem data was wrong). Lanes now = real AI output.
     // Mild boost only when a stem is quiet end-to-end
     for(const k of Object.keys(by))by[k]=peakNormLR(by[k],0.75);
     const sr=sampleRate||44100;
@@ -1007,33 +953,21 @@ export function createStudio(ui){
       }
     }
     const W=Math.max(1200,Math.ceil((dur()+4)*state.pxPerSec));
-    const dpr=devicePixelRatio||1,h=wrap.clientHeight||72;
+    const h=wrap.clientHeight||72,dpr=safeDpr(W,h);
     cv.style.width=W+'px';cv.width=Math.round(W*dpr);cv.height=Math.round(h*dpr);
     const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
     g.fillStyle='#0a0e14';g.fillRect(0,0,W,h);
     if(!buf){g.fillStyle='#445';g.font='12px NotoThai,sans-serif';g.fillText('ยังไม่มีเพลง — ลากไฟล์แยก AI หรือนำเข้าช่องจากไฟล์',12,h/2+4);return}
     let pk=state._mixPeaks;
-    if(!pk||state._mixPeaksFor!==buf){pk=peaksOf(buf);state._mixPeaks=pk;state._mixPeaksFor=buf}
-    const pairs=pk.length>=4&&pk.length%2===0;const bins=pairs?pk.length/2:pk.length;
+    if(!pk||state._mixPeaksFor!==buf||pk.length<2){pk=peaksOf(buf);state._mixPeaks=pk;state._mixPeaksFor=buf}
     const mid=h/2,pad=3;
-    let loc=0;
-    for(let x=0;x<W;x+=Math.max(1,(W/600)|0)){
-      const u=x/(W-1||1);const bi=Math.min(bins-1,Math.floor(u*bins));
-      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      if(mx>loc)loc=mx;
-    }
-    const amp=(mid-pad)*(loc>0.02&&loc<0.45?Math.min(0.75/loc,2.5):1);
+    // master spans the whole timeline (dur()+4 s) — map pixels to the buffer's own seconds
+    const wBuf=Math.max(1,Math.min(W,Math.round(buf.duration*state.pxPerSec)));
+    const {env}=waveEnvelope(pk,0,1,wBuf);
+    const amp=mid-pad;
     g.beginPath();g.moveTo(0,mid);
-    for(let x=0;x<W;x++){
-      const u=x/(W-1||1);const bi=Math.min(bins-1,Math.floor(u*bins));
-      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      g.lineTo(x,mid-mx*amp);
-    }
-    for(let x=W-1;x>=0;x--){
-      const u=x/(W-1||1);const bi=Math.min(bins-1,Math.floor(u*bins));
-      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      g.lineTo(x,mid+mx*amp);
-    }
+    for(let x=0;x<wBuf;x++)g.lineTo(x,mid-env[x]*amp);
+    for(let x=wBuf-1;x>=0;x--)g.lineTo(x,mid+env[x]*amp);
     g.closePath();
     g.fillStyle='rgba(61,186,138,.45)';g.fill();
     g.strokeStyle='#3dba8a';g.lineWidth=1;g.stroke();
@@ -1045,54 +979,40 @@ export function createStudio(ui){
 
   function drawClipWave(cv,clip,color,waveZoom){
     const parent=cv.parentElement;if(!parent)return;
-    const dpr=devicePixelRatio||1,w=parent.clientWidth||Math.round(clip.dur*state.pxPerSec),h=parent.clientHeight||100;
-    if(w<2)return;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.width=w+'px';cv.style.height=h+'px';
+    const w=parent.clientWidth||Math.round(clip.dur*state.pxPerSec),h=parent.clientHeight||100;
+    if(w<2)return;const dpr=safeDpr(w,h);
+    cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.width=w+'px';cv.style.height=h+'px';
     const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
     g.clearRect(0,0,w,h);
     let pk=clip.peaks;
-    if(!pk||!pk.length){
+    if(!pk||!(pk.length>=2)){
       const buf0=state.buffers.get(clip.buf);
       if(buf0){pk=peaksOf(buf0);clip.peaks=pk}
     }
-    if(!pk||!pk.length)return;
+    if(!pk||!(pk.length>=2))return;
     const z=clamp(+(waveZoom||1),0.5,8);
     const mid=h/2,pad=2;
     const buf=state.buffers.get(clip.buf);const total=buf?buf.duration:clip.dur;
     const a0=clip.offset/total,a1=(clip.offset+clip.dur)/total;
-    const pairs=pk.length>=4&&pk.length%2===0;
-    const bins=pairs?pk.length/2:pk.length;
-    // One amp for the visible clip — quiet mid gaps stay thin (real demucs silence)
-    let loc=0;
-    for(let x=0;x<w;x+=Math.max(1,(w/500)|0)){
-      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      if(mx>loc)loc=mx;
+    const {env,ref}=waveEnvelope(pk,a0,a1,w);
+    const amp=(mid-pad)*z;
+    // centre line always visible so a silent stretch reads as "no sound", not "broken"
+    g.globalAlpha=.5;g.fillStyle=color;g.fillRect(0,mid-0.5,w,1);
+    if(!(ref>1e-3)){ // whole clip below −60 dBFS
+      g.globalAlpha=.75;g.fillStyle='#9aa4b0';g.font='11px NotoThai,sans-serif';
+      g.fillText('AI ไม่พบเสียงเครื่องนี้ในช่วงนี้',8,mid-6);
+      if(!(ref>1e-6)){g.globalAlpha=1;return}
     }
-    const amp=(mid-pad)*z*(loc>0.02&&loc<0.4?Math.min(0.7/loc,2.8):1);
-    const floor=loc*0.03;
+    const y=x=>Math.min(mid-pad,env[x]*amp);
     g.beginPath();g.moveTo(0,mid);
-    for(let x=0;x<w;x++){
-      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      let mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      if(mx<floor)mx=0;
-      g.lineTo(x,mid-Math.max(mx>1e-5?1:0,mx*amp));
-    }
-    for(let x=w-1;x>=0;x--){
-      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      let mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      if(mx<floor)mx=0;
-      g.lineTo(x,mid+Math.max(mx>1e-5?1:0,mx*amp));
-    }
+    for(let x=0;x<w;x++)g.lineTo(x,mid-y(x));
+    for(let x=w-1;x>=0;x--)g.lineTo(x,mid+y(x));
     g.closePath();
     g.globalAlpha=.55;g.fillStyle=color;g.fill();
     g.beginPath();
-    for(let x=0;x<w;x++){
-      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      let mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      if(mx<floor)mx=0;
-      const y=mid-mx*amp;if(x)g.lineTo(x,y);else g.moveTo(x,y);
-    }
+    for(let x=0;x<w;x++){const yy=mid-y(x);if(x)g.lineTo(x,yy);else g.moveTo(x,yy)}
     g.globalAlpha=.95;g.strokeStyle=color;g.lineWidth=1;g.stroke();
+    g.globalAlpha=1;
   }
 
   function renderPlayhead(t){
@@ -1559,7 +1479,7 @@ export function createStudio(ui){
   async function saveProject(){
     const bufs={};
     for(const [id,buf] of state.buffers){bufs[id]=await bufToWavArray(buf)}
-    const proj={v:1,title:state.title,bpm:state.bpm,tracks:state.tracks,bufs,savedAt:Date.now()};
+    const proj={v:1,title:state.title,bpm:state.bpm,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
     const db=await idb();
     await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(proj,'current');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});
     // also download .ssd.json sidecar without audio for safety + full blob download

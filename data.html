@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.28">
+<meta name="bp-data" content="1.0.29">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -172,7 +172,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 
   <div class="import">
     <div class="drop" id="dropAi"><b>ลากเพลงมาวาง = แยก AI เป็นแทร็ก</b>
-      <span class="status" style="display:block;margin-top:4px">ได้ 6 เลน + <b>ต้นฉบับเต็มเพลง</b> · ถ้าเลนไหนช่วงกลางว่าง ให้เปิด「ต้นฉบับ」หรือใช้ gap-fill อัตโนมัติ</span>
+      <span class="status" style="display:block;margin-top:4px">ได้ 6 เลน + <b>ต้นฉบับเต็มเพลง</b> · เลนที่ว่าง = ช่วงนั้น AI ไม่พบเสียงเครื่องนั้นจริง (ฟังเต็มได้ที่「ต้นฉบับ」)</span>
       · หรือ
       <label class="btn" style="margin-left:6px">เลือกไฟล์<input id="fAi" type="file" accept="audio/*" hidden></label>
       <button class="btn pri" id="goAi" disabled>แยกด้วย AI</button>
@@ -349,10 +349,20 @@ async function startAi(){
   if(!aiFile||aiBusy||!desk){if(!desk)$('sAi').textContent='❌ ใช้พีซีเท่านั้น';return}
   aiBusy=true;$('goAi').disabled=true;$('sAi').textContent='⏳ ถอดรหัส…';
   try{
-    // Decode on a realtime context (more reliable for long songs than Offline stub)
-    const decCtx=new (window.AudioContext||window.webkitAudioContext)();
-    const buf=await decCtx.decodeAudioData(await aiFile.arrayBuffer());
+    // Data 1.0.29: htdemucs is trained at 44.1 kHz with a fixed 343980-sample window.
+    // A default AudioContext decodes at the device rate (often 48 kHz on PCs) and the model
+    // then hears the song ~9% slowed/pitched-down → guitar/keys lanes come out mostly empty.
+    // Always decode/resample to 44.1 kHz before separating.
+    const AC=window.AudioContext||window.webkitAudioContext;
+    let decCtx;try{decCtx=new AC({sampleRate:44100})}catch(e){decCtx=new AC()}
+    let buf=await decCtx.decodeAudioData(await aiFile.arrayBuffer());
     try{decCtx.close()}catch(e){}
+    if(buf.sampleRate!==44100){
+      const OAC=window.OfflineAudioContext||window.webkitOfflineAudioContext;
+      const off=new OAC(buf.numberOfChannels,Math.ceil(buf.duration*44100),44100);
+      const sn=off.createBufferSource();sn.buffer=buf;sn.connect(off.destination);sn.start(0);
+      buf=await off.startRendering();
+    }
     // Copy channels — worker transfers detach the originals
     const L=Float32Array.from(buf.getChannelData(0));
     const R=buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):L.slice();
@@ -545,7 +555,7 @@ async function makeDataNow(){
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.28',ciBaked:ci||0};
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.29',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);
