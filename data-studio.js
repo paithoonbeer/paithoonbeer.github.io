@@ -1,5 +1,6 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
-import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.30';
+import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.31';
+import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.31';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -33,7 +34,7 @@ export function createStudio(ui){
     return d;
   }
   function beatSec(){return 60/state.bpm}
-  function snapT(t){if(!state.snap)return t;const g=beatSec()/4;return Math.round(t/g)*g}
+  function snapT(t){if(!state.snap)return t;const g=beatSec()/4,o=((musicStart()+(+state.t0||0))%g+g)%g;return o+Math.round((t-o)/g)*g}
   function mark(){state.undo.push(snapshot());if(state.undo.length>40)state.undo.shift();state.redo.length=0;state.dirty=true}
   function snapshot(){return JSON.stringify({title:state.title,bpm:state.bpm,markers:state.markers,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:undefined})),notes:t.notes.map(n=>({...n}))}))})}
   function restore(j){const o=JSON.parse(j);state.title=o.title;state.bpm=o.bpm;state.tracks=o.tracks;state.markers=o.markers||[];renderAll()}
@@ -208,13 +209,7 @@ export function createStudio(ui){
         state.mixBuf=bufFromLR(mix.L,R,sr);
       }
     }catch(e){state.mixBuf=null}
-    // Always show full-song reference (unmuted optional) — not forced through demucs gaps
-    if(state.mixBuf){
-      const t=addAudioTrack('ต้นฉบับ (เต็มเพลง)','#85909b');
-      t.stem='mix';t.mute=true;t.vol=100;
-      const id=uid();state.buffers.set(id,state.mixBuf);
-      t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:state.mixBuf.duration,gain:1,peaks:peaksOf(state.mixBuf),name:'mix'});
-    }
+    // 1.0.31: the original mix is kept internally only (beat detection, mix−minus bed, export) — no 'เพลงเต็ม' track row
     const layout=[
       {key:'drums',name:'กลอง',ch:by.drums,color:COLS[0]},
       {key:'bass',name:'เบส',ch:by.bass,color:COLS[1]},
@@ -853,8 +848,8 @@ export function createStudio(ui){
     renderAll();
   }
 
-  /* ---------- section markers (Data 1.0.30) ---------- */
-  // t = song time (s, from music start) so pre-roll count-in shifts never move them.
+  /* ---------- counts (Data 1.0.31) — replace 1.0.30 section/end pins ----------
+     state.markers = [{id,kind:'count',t(song s, on a nom click),n:8|4,src:'manual'}]  (legacy 'section' still read by export) */
   function musicStart(){
     for(const tr of state.tracks){
       if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||!tr.clips.length)continue;
@@ -862,38 +857,59 @@ export function createStudio(ui){
     }
     return 0;
   }
+  function clickStep(){const r=state.nomOpt&&state.nomOpt.rate===2?2:1;return 60/(state.bpm||120)*r}
+  function snapClick(t){const st=clickStep(),t0=+state.t0||0;const k=Math.max(0,Math.round((t-t0)/st));return Math.round((t0+k*st)*10000)/10000}
+  function countLen(m){return (+m.n===4?4:8)*clickStep()}
   function sortMarkers(){state.markers.sort((a,b)=>a.t-b.t)}
-  function addMarker(kind,t,name){
-    mark();
-    const at=Math.max(0,(t!=null?t:playheadT()-musicStart()));
-    if(kind==='end')state.markers=state.markers.filter(m=>m.kind!=='end');
-    const n=state.markers.filter(m=>m.kind!=='end').length+1;
-    const m={id:uid(),t:Math.round(snapT(at)*1000)/1000,name:name||(kind==='end'?'จบนอม':'ท่อน '+n),kind:kind==='end'?'end':'section',src:'manual'};
-    state.markers.push(m);sortMarkers();state.dirty=true;renderArrange();renderMasterWave();ui.onMarkers?.(state.markers);
-    return m;
+  function countAt(t){return state.markers.find(m=>m.kind==='count'&&t>=m.t-clickStep()*0.5&&t<m.t+countLen(m)-clickStep()*0.5)||null}
+  function changed(){state.dirty=true;sortMarkers();renderArrange();ui.onMarkers?.(state.markers)}
+  /** Tap on the timeline (song time): remove the count under it, else add one starting on the nearest nom click. */
+  function toggleCountAt(t,n){
+    const hit=countAt(t);mark();
+    if(hit){state.markers=state.markers.filter(m=>m!==hit);changed();return null}
+    const m={id:uid(),kind:'count',t:snapClick(t),n:+n===4?4:8,src:'manual'};
+    state.markers=state.markers.filter(x=>!(x.kind==='count'&&Math.abs(x.t-m.t)<1e-3));
+    state.markers.push(m);changed();return m;
   }
-  function moveMarker(id,t){const m=state.markers.find(x=>x.id===id);if(!m)return;m.t=Math.max(0,Math.round(snapT(t)*1000)/1000);m.src='manual';sortMarkers();state.dirty=true;renderArrange();renderMasterWave();ui.onMarkers?.(state.markers)}
-  function renameMarker(id,name){const m=state.markers.find(x=>x.id===id);if(!m)return;mark();m.name=String(name).slice(0,24);renderArrange();ui.onMarkers?.(state.markers)}
-  function deleteMarker(id){mark();state.markers=state.markers.filter(x=>x.id!==id);renderArrange();renderMasterWave();ui.onMarkers?.(state.markers)}
-  function setMarkers(list){state.markers=(list||[]).map(m=>({id:m.id||uid(),t:+m.t||0,name:m.name||'',kind:m.kind==='end'?'end':'section',src:m.src||'manual'}));sortMarkers();renderArrange();renderMasterWave()}
-  function markerX(m){return (musicStart()+m.t)*state.pxPerSec}
+  function addCount(t,n){const m={id:uid(),kind:'count',t:snapClick(t!=null?t:playheadT()-musicStart()),n:+n===4?4:8,src:'manual'};mark();state.markers.push(m);changed();return m}
+  function moveCount(id,t){const m=state.markers.find(x=>x.id===id);if(!m)return;m.t=snapClick(t);changed()}
+  function deleteCount(id){mark();state.markers=state.markers.filter(x=>x.id!==id);changed()}
+  function setMarkers(list){
+    state.markers=(list||[]).filter(m=>m&&m.kind!=='end'&&isFinite(+m.t)).map(m=>m.kind==='count'
+      ?{id:m.id||uid(),kind:'count',t:+m.t,n:+m.n===4?4:8,src:m.src||'manual'}
+      :{id:m.id||uid(),kind:'section',t:+m.t,src:m.src||'manual'}); // legacy 1.0.30 pin → 8-click count before it
+    sortMarkers();renderArrange();
+  }
+  /** count spans in song time (legacy 'section' = 8 clicks before its t) */
+  function countSpans(){const st=clickStep();return state.markers.filter(m=>m.kind==='count'||m.kind==='section').map(m=>{
+    const start=m.kind==='count'?m.t:Math.max(0,m.t-8*st);return{m,start,end:start+(m.kind==='count'?countLen(m):8*st),n:m.kind==='count'?(+m.n===4?4:8):8}})}
   function drawMarkers(g){
-    g.font='bold 10px NotoThai,sans-serif';
-    for(const m of state.markers){
-      const x=markerX(m),end=m.kind==='end',col=end?'#ff5d5d':'#ffd60a';
-      g.fillStyle=col;g.fillRect(x,0,2,28);
-      const lab=(end?'🏁 ':'📍 ')+(m.name||'');const w=Math.min(110,g.measureText(lab).width+8);
-      g.fillStyle=end?'rgba(255,93,93,.85)':'rgba(255,214,10,.9)';g.fillRect(x+2,0,w,13);
-      g.fillStyle='#111';g.fillText(lab,x+5,10);
+    g.font='bold 10px NotoThai,sans-serif';const ms=musicStart();
+    for(const c of countSpans()){
+      const x=(ms+c.start)*state.pxPerSec,w=Math.max(6,(c.end-c.start)*state.pxPerSec);
+      g.fillStyle='rgba(255,214,10,.22)';g.fillRect(x,0,w,28);g.fillStyle='#ffd60a';g.fillRect(x,0,2,28);
+      g.fillStyle='#ffd60a';g.fillText(c.n===4?'🗣 1234':'🗣 1·2·1234',x+5,24);
     }
   }
-  function markerAtClientX(clientX){
-    const rw=document.querySelector('.ruler-wrap');if(!rw)return null;
-    const r=rw.getBoundingClientRect(),x=clientX-r.left+rw.scrollLeft;
-    let best=null,bd=1e9;
-    for(const m of state.markers){const d=x-markerX(m);if(d>=-10&&d<=90){const sc=d<0?-d:d*0.2;if(sc<bd){bd=sc;best=m}}}
-    return best;
+  function markerAtClientX(){return null}
+  /* tap-to-align: a tap on beat 1 sets the nom phase (snapped to the nearest attack in the song ±80 ms) */
+  function attackNear(tSong){
+    const buf=state.mixBuf||(()=>{for(const tr of state.tracks){if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||!tr.clips[0])continue;const b=state.buffers.get(tr.clips[0].buf);if(b)return b}return null})();
+    if(!buf)return tSong;
+    const sr=buf.sampleRate,d=buf.getChannelData(0),h=Math.round(0.002*sr),w=Math.round(0.01*sr);
+    const a=Math.max(0,Math.round((tSong-0.1)*sr)),z=Math.min(d.length-w,Math.round((tSong+0.1)*sr));
+    let best=tSong,bv=0,prev=-1;
+    for(let i=a;i<z;i+=h){let q=0;for(let j=i;j<i+w;j+=2)q+=d[j]*d[j];q=Math.sqrt(q/(w/2));if(prev>=0){const r=q-prev;const dist=Math.abs(i/sr-tSong);const sc=r*(1-dist/0.12);if(sc>bv){bv=sc;best=i/sr}}prev=q}
+    return Math.abs(best-tSong)<=0.08?best:tSong;
   }
+  function tapDownbeat(tSong){
+    const t=attackNear(tSong),spb=60/(state.bpm||120);
+    let ms=0;try{ms=state.mixBuf?nomMusicStart(state.mixBuf.getChannelData(0),state.mixBuf.sampleRate):0}catch(e){}
+    let t0=t;while(t0-2*spb>=ms-spb*0.5)t0-=2*spb;if(t0<0)t0+=2*spb;
+    state.t0=Math.round(t0*10000)/10000;nudgeNom(0);renderArrange();return{t0:state.t0,tap:t};
+  }
+  /** keyboard/button tap while playing: playhead minus what the ear hears late (output latency + mixer block) */
+  function tapNow(){const a=ac();const lat=(a.baseLatency||0)+(a.outputLatency||0)+2048/a.sampleRate;return tapDownbeat(Math.max(0,playheadT()-lat-musicStart()))}
 
   /* ---------- render UI ---------- */
   function renderAll(){renderTracks();renderArrange();renderMixer();renderPiano();ui.onProject?.(state)}
@@ -906,13 +922,8 @@ export function createStudio(ui){
       el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b>
           <button type="button" class="tb del" data-deltr="${i}" title="ลบแทร็กนี้">✕</button></div>
         <div class="tops">
-          <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="ปิดเสียง">M</button>
+          <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="${tr.stem==='click'?'ปิด/เปิดเสียงนอมตอนฟัง':'ปิดเครื่องนี้ (มีผลกับไฟล์ดาต้าด้วย)'}">M</button>
           <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
-          <span class="wz" title="ซูมกราฟแทร็กนี้">
-            <button type="button" class="tb" data-wz="${i}" data-d="-1" aria-label="ซูมออก">−</button>
-            <b>${wz>=1?wz.toFixed(1):wz.toFixed(2)}×</b>
-            <button type="button" class="tb" data-wz="${i}" data-d="1" aria-label="ซูมเข้า">+</button>
-          </span>
         </div>`;
       box.appendChild(el);
     });
@@ -940,14 +951,13 @@ export function createStudio(ui){
       const g=ruler.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
       g.fillStyle='#0a0c0f';g.fillRect(0,0,W,28);
       g.font='11px JetMono,monospace';g.fillStyle='#7a8490';
-      const bs=beatSec();
-      for(let b=0;b*bs<=dur()+4;b++){
-        const x=b*bs*state.pxPerSec;const bar=b%4===0;
+      // beat ticks follow the nom grid (t0), bar 1 = first nom downbeat
+      const bs=beatSec(),o=musicStart()+(+state.t0||0),b0=-Math.floor(o/bs);
+      for(let b=b0;(o+b*bs)<=dur()+4;b++){
+        const x=(o+b*bs)*state.pxPerSec;if(x<0)continue;const bar=((b%4)+4)%4===0;
         g.fillStyle=bar?'#9aa3ad':'#3a4450';g.fillRect(x,bar?10:16,1,bar?18:12);
-        if(bar){g.fillStyle='#8a949e';g.fillText(String(1+b/4|0),x+4,12)}
+        if(bar&&b>=0){g.fillStyle='#8a949e';g.fillText(String(1+b/4|0),x+4,12)}
       }
-      // loop region
-      if(state.loop){g.fillStyle='rgba(61,186,138,.12)';g.fillRect(state.loopA*state.pxPerSec,0,(state.loopB-state.loopA)*state.pxPerSec,28)}
       drawMarkers(g);
     }
     const phKeep=$('playhead');
@@ -968,7 +978,7 @@ export function createStudio(ui){
           const hL=document.createElement('i');hL.className='hndl L';clip.appendChild(hL);
           const hR=document.createElement('i');hR.className='hndl R';clip.appendChild(hR);
           lane.appendChild(clip);
-          requestAnimationFrame(()=>drawClipWave(cv,c,tr.color,tr.waveZoom));
+          requestAnimationFrame(()=>drawClipWave(cv,c,tr.color,1));
         });
       }else{
         // MIDI blocks overview
@@ -978,6 +988,20 @@ export function createStudio(ui){
           const note=document.createElement('div');note.className='mblock';note.style.cssText=`left:${x}px;width:${w}px;top:${y}px;background:${tr.color}`;
           lane.appendChild(note);
         });
+      }
+      if(tr.stem==='click'){
+        const ms=musicStart(),no=state.nomOpt||{};
+        if(no.ciMode==='over'&&(+no.ci||0)>0){ // automatic intro count (setting นับเข้า) — shown, not editable here
+          const b=document.createElement('div');b.className='cblock intro';const st=clickStep(),t0=+state.t0||0;
+          b.style.left=((ms+t0)*state.pxPerSec)+'px';b.style.width=Math.max(8,8*(+no.ci)*st*state.pxPerSec)+'px';
+          b.innerHTML=`<b>🗣 นับเข้า ×${+no.ci}</b>`;b.title='นับเข้าอัตโนมัติ — เปลี่ยนที่ "นับเข้า"';lane.appendChild(b);
+        }
+        for(const c of countSpans()){
+          const b=document.createElement('div');b.className='cblock';b.dataset.mid=c.m.id;
+          b.style.left=((ms+c.start)*state.pxPerSec)+'px';b.style.width=Math.max(8,(c.end-c.start)*state.pxPerSec)+'px';
+          b.innerHTML=`<b>🗣 ${c.n===4?'one two three four':'one · two · one two three four'}</b>`;b.title='แตะ = ลบ · ลาก = ย้าย';
+          lane.appendChild(b);
+        }
       }
       lanes.appendChild(lane);
     });
@@ -1017,7 +1041,6 @@ export function createStudio(ui){
     g.closePath();
     g.fillStyle='rgba(61,186,138,.45)';g.fill();
     g.strokeStyle='#3dba8a';g.lineWidth=1;g.stroke();
-    for(const m of state.markers){g.fillStyle=m.kind==='end'?'rgba(255,93,93,.8)':'rgba(255,214,10,.75)';g.fillRect(markerX(m),0,1.5,h)}
     // playhead mark on master
     const t=playheadT();
     g.fillStyle='var(--play,#ff6b3d)';g.fillStyle='#ff6b3d';
@@ -1076,17 +1099,8 @@ export function createStudio(ui){
       const labBg=tr.color||'#85909b';
       el.classList.toggle('muted',!!tr.mute);
       el.innerHTML=`<div class="lab" style="background:${labBg}" title="${escAttr(tr.name)}">${tr.name}</div>
-        <div class="eqcol">
-          <label class="eqrow"><span>Lo</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.lo}" data-eq="lo" data-i="${i}"><b data-eqv="lo">${eqLabel(tr.eq.lo)}</b></label>
-          <label class="eqrow"><span>Mid</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.mid}" data-eq="mid" data-i="${i}"><b data-eqv="mid">${eqLabel(tr.eq.mid)}</b></label>
-          <label class="eqrow"><span>Hi</span><input type="range" min="-12" max="12" step="1" value="${tr.eq.hi}" data-eq="hi" data-i="${i}"><b data-eqv="hi">${eqLabel(tr.eq.hi)}</b></label>
-          <label class="eqrow"><span>Rv</span><input type="range" min="0" max="100" step="1" value="${(tr.rev||0)*100|0}" data-rev="${i}"><b data-eqv="rv">${(tr.rev||0)*100|0}</b></label>
-        </div>
-        <div class="fader-wrap"><input class="fader" type="range" min="0" max="200" value="${tr.vol}" data-vol="${i}" title="ระดับ ${tr.name}${tr.mute?' (มิวต์ — ค่าจะใช้ตอนเปิด M)':''}"></div>
-        <span class="fader-val">${tr.vol}${tr.mute?' ·M':''}</span>
-        <div class="ms">
-        <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}">M</button>
-        <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}">S</button></div>`;
+        <div class="fader-wrap"><input class="fader" type="range" min="0" max="200" value="${tr.vol}" data-vol="${i}" title="ระดับฟัง ${escAttr(tr.name)} — ไม่มีผลกับไฟล์ดาต้า"></div>
+        <span class="fader-val">${tr.vol}${tr.mute?' ·ปิด':''}</span>`;
       box.appendChild(el);
     });
   }
@@ -1148,7 +1162,7 @@ export function createStudio(ui){
     // Collapsible mixer — more room for tall waveforms
     const foldMix=$('btnMixerFold'), mixWrap=$('mixerWrap');
     if(foldMix&&mixWrap){
-      try{if(localStorage.getItem('ssd-mixfold')==='1'){mixWrap.classList.add('folded');foldMix.setAttribute('aria-expanded','false');const c=$('mixerChev');if(c)c.textContent='▸'}}catch(e){}
+      try{if(localStorage.getItem('ssd-mixfold')!=='0'){mixWrap.classList.add('folded');foldMix.setAttribute('aria-expanded','false');const c=$('mixerChev');if(c)c.textContent='▸'}}catch(e){}
       foldMix.onclick=()=>{
         const on=mixWrap.classList.toggle('folded');
         foldMix.setAttribute('aria-expanded',on?'false':'true');
@@ -1189,9 +1203,9 @@ export function createStudio(ui){
       state.metro=!!e.target.checked;
       setNomAudible(state.metro);
     };
-    $('chkLoop').onchange=e=>{state.loop=e.target.checked;renderArrange()};
-    $('chkSnap').onchange=e=>state.snap=e.target.checked;
-    $('bpm').onchange=e=>{mark();state.bpm=clamp(+e.target.value||120,40,240);renderArrange()};
+    
+    {const sn=$('chkSnap');if(sn)sn.onchange=e=>state.snap=e.target.checked;}
+    $('bpm').onchange=e=>{mark();state.bpm=Math.round(clamp(+e.target.value||120,40,240)*1000)/1000;renderArrange()};
     $('zoom').oninput=e=>{
       state.pxPerSec=+e.target.value;
       if(state.playing){renderMasterWave();renderPlayhead(playheadT());return}
@@ -1222,15 +1236,19 @@ export function createStudio(ui){
     };
     $('btnDel').onclick=deleteSelected;
     $('btnSave').onclick=()=>saveProject();
+    {const ex=$('btnExportProj');if(ex)ex.onclick=()=>exportProjectFile();}
     $('btnLoad').onclick=()=>$('fileProj').click();
     $('fileProj').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(f)await loadProjectFile(f)};
     $('btnMixdown').onclick=()=>mixdown();
     $('btnNew').onclick=()=>{if(!state.dirty||confirm('เริ่มโปรเจกต์ใหม่?'))newProject()};
 
     $('trackHeads').onclick=e=>{
-      const del=e.target.closest('[data-deltr]');if(del){deleteTrack(+del.dataset.deltr);return}
+      const del=e.target.closest('[data-deltr]');if(del){const tr=state.tracks[+del.dataset.deltr];if(tr&&confirm('ลบแทร็ก「'+tr.name+'」?'))deleteTrack(+del.dataset.deltr);return}
       const wz=e.target.closest('[data-wz]');if(wz){setTrackWaveZoom(+wz.dataset.wz,+wz.dataset.d);return}
-      const m=e.target.closest('[data-m]');if(m){mark();const i=+m.dataset.m;state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+      const m=e.target.closest('[data-m]');if(m){const i=+m.dataset.m,trm=state.tracks[i];
+        if(trm&&ui.onStemMute&&trm.stem&&!['click','countin','mix'].includes(trm.stem)){ui.onStemMute(trm.stem,!trm.mute);return}
+        if(trm&&trm.stem==='click'&&ui.onNomMute){ui.onNomMute(!trm.mute);return}
+        mark();state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){
         state.sel.track=+th.dataset.i;
@@ -1297,7 +1315,7 @@ export function createStudio(ui){
     const timeFromClientX=(clientX)=>{
       const lanes=$('lanes');if(!lanes)return 0;
       const rect=lanes.getBoundingClientRect();
-      return clamp((clientX-rect.left+wrap.scrollLeft)/state.pxPerSec,0,dur());
+      return clamp((clientX-rect.left)/state.pxPerSec,0,dur()); // rect already moves with the scroll (1.0.31: was counted twice when scrolled)
     };
     let phDrag=null;
     const nearPlayhead=(clientX)=>{
@@ -1336,6 +1354,7 @@ export function createStudio(ui){
     };
     wrap.addEventListener('pointerdown',e=>{
       if(e.button!=null&&e.button!==0)return;
+      if(ui.countArmed?.()||ui.tapArmed?.())return;
       if(e.target&&(e.target.id==='playhead'||e.target.closest?.('#playhead'))){startPhDrag(e);return}
       // Click near the red line → scrub, never move the clip under it
       if(nearPlayhead(e.clientX)&&!e.target.closest('.hndl')){startPhDrag(e);return}
@@ -1346,16 +1365,8 @@ export function createStudio(ui){
       rulerWrap.style.cursor='ew-resize';
       rulerWrap.addEventListener('pointerdown',e=>{
         if(e.button!=null&&e.button!==0)return;
-        const m=markerAtClientX(e.clientX);
-        if(m){
-          e.preventDefault();e.stopPropagation();
-          const x0=e.clientX,t0m=m.t;let moved=false;mark();
-          const mv=ev=>{const dx=ev.clientX-x0;if(Math.abs(dx)>4)moved=true;if(moved)moveMarker(m.id,t0m+dx/state.pxPerSec)};
-          const up=()=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);
-            if(!moved){state.undo.pop();ui.onMarkerTap?ui.onMarkerTap(m):(()=>{const nm=prompt('ชื่อหมุด (ลบข้อความทั้งหมด = ลบหมุด)',m.name);if(nm===null)return;if(!nm.trim())deleteMarker(m.id);else renameMarker(m.id,nm.trim())})()}};
-          addEventListener('pointermove',mv);addEventListener('pointerup',up);
-          return;
-        }
+        if(ui.countArmed?.()){e.preventDefault();e.stopPropagation();const t=timeFromClientX(e.clientX)-musicStart();toggleCountAt(t,ui.countN?.()||8);return}
+        if(ui.tapArmed?.()){e.preventDefault();e.stopPropagation();ui.onTapAt?.(tapDownbeat(timeFromClientX(e.clientX)-musicStart()));return}
         startPhDrag(e);
       });
     }
@@ -1367,8 +1378,25 @@ export function createStudio(ui){
         startPhDrag(e);
       });
     }
+    // count blocks on the nom lane: tap = remove · drag = move (snaps to nom clicks)
+    wrap.addEventListener('pointerdown',e=>{
+      const cb=e.target.closest&&e.target.closest('.cblock');if(!cb||(e.button!=null&&e.button!==0))return;
+      e.preventDefault();e.stopPropagation();
+      const m=state.markers.find(x=>x.id===cb.dataset.mid);if(!m)return;
+      const x0=e.clientX,t0m=m.kind==='count'?m.t:Math.max(0,m.t-8*clickStep());let moved=false;
+      const mv=ev=>{const dx=ev.clientX-x0;if(Math.abs(dx)>5)moved=true;if(moved){cb.style.transform=`translateX(${dx}px)`}};
+      const up=ev=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);
+        if(!moved){deleteCount(m.id);return}
+        const nt=t0m+(ev.clientX-x0)/state.pxPerSec;
+        if(m.kind!=='count'){m.kind='count';m.n=8}
+        moveCount(m.id,nt)};
+      addEventListener('pointermove',mv);addEventListener('pointerup',up);
+    },true);
     wrap.addEventListener('click',e=>{
       if(phDrag)return;
+      if(e.target.closest('.cblock'))return;
+      if(ui.countArmed?.()){toggleCountAt(timeFromClientX(e.clientX)-musicStart(),ui.countN?.()||8);return}
+      if(ui.tapArmed?.()){ui.onTapAt?.(tapDownbeat(timeFromClientX(e.clientX)-musicStart()));return}
       if(e.target.closest('.clip,.hndl,.mblock,#playhead'))return;
       const t=timeFromClientX(e.clientX);
       if(state.tool==='split'){state.sel.track=+e.target.closest('.lane')?.dataset.ti||state.sel.track;splitAt(snapT(t));return}
@@ -1381,7 +1409,7 @@ export function createStudio(ui){
       if(tr&&tr.type==='midi'){renderAll();return} // MIDI lanes: select only
       const input=document.createElement('input');input.type='file';input.accept='audio/*';
       input.onchange=async()=>{const f=input.files[0];if(!f)return;const rect=$('lanes').getBoundingClientRect();
-        const at=(e.clientX-rect.left+wrap.scrollLeft)/state.pxPerSec;
+        const at=(e.clientX-rect.left)/state.pxPerSec;
         try{await importAudioToTrack(ti,f,snapT(at))}catch(_){}};
       input.click();
     });
@@ -1392,6 +1420,7 @@ export function createStudio(ui){
       if(phDrag)return;
       if(e.button!=null&&e.button!==0)return;
       if(e.target&&(e.target.id==='playhead'||e.target.closest?.('#playhead')))return;
+      if(ui.countArmed?.()||ui.tapArmed?.())return;
       if(nearPlayhead(e.clientX)&&!e.target.closest('.hndl'))return;
       const h=e.target.closest('.hndl');const clipEl=e.target.closest('.clip');
       if(!clipEl)return;
@@ -1443,12 +1472,12 @@ export function createStudio(ui){
       // only Draw tool creates notes — Select just clears selection / seeks
       if(state.tool!=='draw'){
         if(state.tool==='select'){state.sel.notes=[];const rect=grid.getBoundingClientRect();
-          seek(snapT((e.clientX-rect.left+grid.parentElement.scrollLeft)/state.pxPerSec));renderPiano()}
+          seek(snapT((e.clientX-rect.left)/state.pxPerSec));renderPiano()}
         return;
       }
       const rect=grid.getBoundingClientRect();
-      const x=e.clientX-rect.left+grid.parentElement.scrollLeft;
-      const y=e.clientY-rect.top+grid.parentElement.scrollTop;
+      const x=e.clientX-rect.left;
+      const y=e.clientY-rect.top;
       const t=snapT(x/state.pxPerSec);
       const keyH=14,midiHi=84;const n=midiHi-1-Math.floor(y/keyH);
       mark();
@@ -1524,7 +1553,7 @@ export function createStudio(ui){
   }
 
   function newProject(){
-    stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;state.markers=[];
+    stopPlay();state.tracks=[];state.buffers.clear();state.mixBuf=null;state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;state.markers=[];
     state.undo.length=0;state.redo.length=0;
     [['กลอง',COLS[0],'drums'],['เบส',COLS[1],'bass'],['กีตาร์',COLS[5],'guitar'],['คีย์บอร์ด',COLS[7],'keys'],['ดนตรีอื่นๆ',COLS[2],'other'],['ร้อง',COLS[3],'vocals']]
       .forEach(([n,c,k])=>{const t=addAudioTrack(n,c);t.stem=k});
@@ -1536,20 +1565,31 @@ export function createStudio(ui){
   async function saveProject(){
     const bufs={};
     for(const [id,buf] of state.buffers){bufs[id]=await bufToWavArray(buf)}
+    if(state.mixBuf)bufs.__mix=await bufToWavArray(state.mixBuf);
     const proj={v:1,title:state.title,bpm:state.bpm,t0:state.t0||0,markers:state.markers||[],recipe:state.recipe||null,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
     const db=await idb();
     await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(proj,'current');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});
-    // also download .ssd.json sidecar without audio for safety + full blob download
+    state.dirty=false;ui.toast?.('บันทึกในเบราว์เซอร์แล้ว');
+    return proj;
+  }
+  /** 📁 → ส่งออกไฟล์โปรเจกต์ (JSON with audio) — separate from บันทึก since 1.0.31 */
+  async function exportProjectFile(){
+    const proj=await saveProject();
     const blob=new Blob([JSON.stringify(proj)],{type:'application/json'});
     const a=document.createElement('a');const url=URL.createObjectURL(blob);a.href=url;a.download=(state.title||'project')+'.setsod-project.json';a.click();
     setTimeout(()=>URL.revokeObjectURL(url),4000);
-    state.dirty=false;ui.toast?.('บันทึกโปรเจกต์แล้ว');
+  }
+  /** restore the hidden original mix: 1.0.31 bufs.__mix · older projects had a muted 'mix' track → adopt it and drop the row */
+  function adoptMix(){
+    if(state.buffers.has('__mix')){state.mixBuf=state.buffers.get('__mix');state.buffers.delete('__mix')}
+    const i=state.tracks.findIndex(t=>t.stem==='mix');
+    if(i>=0){const tr=state.tracks[i];const b=tr.clips[0]&&state.buffers.get(tr.clips[0].buf);if(b&&!state.mixBuf)state.mixBuf=b;for(const c of tr.clips)state.buffers.delete(c.buf);state.tracks.splice(i,1);if(state.sel)state.sel.track=Math.min(state.sel.track||0,Math.max(0,state.tracks.length-1))}
   }
   async function loadProjectFile(file){
     try{
       const proj=JSON.parse(await file.text());
       if(!proj||typeof proj!=='object')throw new Error('ไฟล์ไม่ใช่โปรเจกต์ SetSod Data');
-      stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
+      stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
       const a=ac();
       for(const id of Object.keys(proj.bufs||{})){
         const raw=proj.bufs[id];
@@ -1557,6 +1597,7 @@ export function createStudio(ui){
         const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
         state.buffers.set(id,buf);
       }
+      adoptMix();
       for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
       state.dirty=false;renderAll();ui.onProjectLoaded?.(proj);ui.toast?.('โหลดโปรเจกต์แล้ว');
     }catch(e){ui.toast?.('เปิดโปรเจกต์ไม่ได้: '+(e.message||e))}
@@ -1929,7 +1970,7 @@ export function createStudio(ui){
     state.bpm=g.bpm;state.t0=g.t0;
     try{
       const bpmEl=typeof document!=='undefined'&&document.getElementById('bpm');
-      if(bpmEl)bpmEl.value=String(Math.round(g.bpm));
+      if(bpmEl)bpmEl.value=String(Math.round(g.bpm*100)/100);
       const ci=preCi();
       syncGuideTracks({bpm:g.bpm,t0:g.t0,ci,metroOn:true,preview:true});
       state.metro=true;
@@ -1939,120 +1980,21 @@ export function createStudio(ui){
   }
   // Beat grid: same onset idea as live SetSod detectBpm — prefer full mix (like analyzing the song
   // channel), then drums/bass. Returns {bpm, t0} where t0 = first downbeat (sec).
-  function detectBeatGrid(preferStem){
-    const pick=stem=>{const tr=state.tracks.find(t=>t.stem===stem&&t.clips[0]);return tr?state.buffers.get(tr.clips[0].buf):null};
-    const loudest=()=>{
-      let best=null,bestR=-1;
-      for(const tr of state.tracks){
-        if(tr.type!=='audio'||!tr.clips[0]||tr.stem==='click'||tr.stem==='countin')continue;
-        const b=state.buffers.get(tr.clips[0].buf);if(!b)continue;
-        const d=b.getChannelData(0);let s=0,step=Math.max(1,(d.length/8000)|0);
-        for(let i=0;i<d.length;i+=step){const v=d[i];s+=v*v}
-        if(s>bestR){bestR=s;best=b}
-      }
-      return best;
-    };
-    const rmsOf=b=>{
-      if(!b)return 0;const d=b.getChannelData(0);let s=0,step=Math.max(1,(d.length/8000)|0);
-      for(let i=0;i<d.length;i+=step){const v=d[i];s+=v*v}return s;
-    };
-    // Auto like SetSod web: lock from the whole song first (mix), not a sparse demucs drum lane
+  // Data 1.0.31: whole-song beat grid (data-beat.js) — precise BPM (3 dp) + downbeat phase on beats 1&3.
+  // Source = original mix (always present after AI split), else the loudest music track.
+  function detectBeatGrid(){
     let buf=state.mixBuf||null;
-    if(buf&&rmsOf(buf)<1e-6)buf=null;
-    if(!buf&&preferStem){buf=pick(preferStem);if(buf&&rmsOf(buf)<1e-6)buf=null}
-    if(!buf)buf=pick('drums')||pick('bass')||pick('guitar')||loudest();
-    if(!buf)return{bpm:state.bpm||120,t0:0};
-    const sr=buf.sampleRate,ch0=buf.getChannelData(0),ch1=buf.numberOfChannels>1?buf.getChannelData(1):ch0;
-    // Mix drums+bass when available for stronger kick pulse
-    let mixL=ch0,mixR=ch1;
-    try{
-      const other=preferStem==='drums'?pick('bass'):(preferStem==='bass'?pick('drums'):pick('drums'));
-      if(other&&other.sampleRate===sr&&other.length===buf.length){
-        const o0=other.getChannelData(0),o1=other.numberOfChannels>1?other.getChannelData(1):o0;
-        mixL=new Float32Array(ch0.length);mixR=new Float32Array(ch0.length);
-        for(let i=0;i<ch0.length;i++){mixL[i]=ch0[i]+o0[i]*0.85;mixR[i]=ch1[i]+o1[i]*0.85}
-      }
-    }catch(e){}
-    const hopSec=0.005,fr=Math.max(1,Math.round(sr*hopSec)),n=Math.floor(mixL.length/fr);
-    if(n<200)return{bpm:state.bpm||120,t0:0};
-    const env=new Float32Array(n);
-    for(let i=0;i<n;i++){
-      let m=0,a=i*fr,z=Math.min(mixL.length,(i+1)*fr);
-      for(let j=a;j<z;j+=2){const v=((mixL[j]+mixR[j])*0.5);const a=v<0?-v:v;if(a>m)m=a}
-      env[i]=m;
-    }
-    const srt=Float32Array.from(env).sort(),hi=srt[Math.floor(n*0.995)]||0;
-    if(hi<0.015)return{bpm:state.bpm||120,t0:0};
-    const thr=hi*0.28,minGap=Math.round(0.18/hopSec);
-    const onsets=[];let last=-1e9;
-    for(let i=1;i<n;i++){if(env[i]>=thr&&env[i-1]<thr&&i-last>=minGap){onsets.push(i*hopSec);last=i}}
-    let bpm=state.bpm||120,t0=0;
-    if(onsets.length>=8){
-      const iv=[];for(let i=1;i<onsets.length;i++)iv.push(onsets[i]-onsets[i-1]);
-      const sv=[...iv].sort((a,b)=>a-b),med=sv[Math.floor(sv.length/2)]||0.5;
-      const tFirst=onsets[0];let sx=0,sy=0,sxx=0,sxy=0,k=0;
-      for(const t of onsets){const idx=Math.round((t-tFirst)/med);if(Math.abs((t-tFirst)-idx*med)<med*0.2){sx+=idx;sy+=t;sxx+=idx*idx;sxy+=idx*t;k++}}
-      let per=med;if(k>8&&(k*sxx-sx*sx)>0)per=(k*sxy-sx*sy)/(k*sxx-sx*sx);
-      bpm=60/Math.max(1e-4,per);
-      while(bpm<70)bpm*=2;while(bpm>180)bpm/=2;
-      if(bpm>140)bpm/=2;if(bpm<85)bpm*=2;
-      bpm=Math.round(bpm*10)/10;
-      // Phase: absolute time of first strong downbeat (prefer kick on 1 & 3)
-      const spb=60/bpm;
-      const flux=new Float32Array(n);for(let i=1;i<n;i++)flux[i]=Math.max(0,env[i]-env[i-1]);
-      let fmax=0;for(let i=0;i<n;i++)if(flux[i]>fmax)fmax=flux[i];
-      if(fmax>0)for(let i=0;i<n;i++)flux[i]/=fmax;
-      let bestOff=onsets[0],bestSc=-1;
-      const searchN=256,win=Math.min(48,Math.floor((n*hopSec-spb)/spb));
-      for(let k=0;k<searchN;k++){
-        const off=spb*4*k/searchN;let sc=0;
-        for(let bi=0;bi<win;bi++){
-          const i=Math.floor((off+bi*spb)/hopSec);if(i>=n)break;
-          const b4=bi%4;sc+=flux[i]*(b4===0?1.6:b4===2?1.2:0.45);
-        }
-        if(sc>bestSc){bestSc=sc;bestOff=off}
-      }
-      // Snap phase to strong onsets (prefer early kicks within first ~8 bars)
-      let snap=bestOff;let snapSc=-1;
-      const early=onsets.filter(o=>o<spb*32).slice(0,80);
-      for(const o of (early.length?early:onsets.slice(0,40))){
-        // Candidate: shift bestOff so a grid line lands on this onset
-        const cand=o-Math.round((o-bestOff)/spb)*spb;
-        const d=Math.abs(cand-bestOff);if(d>spb*0.55)continue;
-        const i=Math.floor(o/hopSec);
-        // Prefer downbeats (beat 0) and earlier song position
-        const b4=((Math.round((o-cand)/spb)%4)+4)%4;
-        const sc=(flux[i]||0)*(b4===0?1.8:b4===2?1.15:0.7)+1/(1+d*8)+1/(1+o);
-        if(sc>snapSc){snapSc=sc;snap=Math.max(0,cand)}
-      }
-      // Micro-fit: maximize flux on beat-1 over first 16 bars around snap
-      let fine=snap,fineSc=-1;
-      for(let d=-8;d<=8;d++){
-        const off=snap+d*(spb/64);if(off<0)continue;let sc=0;
-        for(let bi=0;bi<64;bi++){
-          const i=Math.floor((off+bi*spb)/hopSec);if(i>=n)break;
-          const b4=bi%4;sc+=flux[i]*(b4===0?2:b4===2?1.1:0.35);
-        }
-        if(sc>fineSc){fineSc=sc;fine=off}
-      }
-      t0=Math.round(Math.max(0,fine)*1000)/1000;
-    }else{
-      // Fallback autocorr if few onsets
-      const hop=256,nn=Math.floor(mixL.length/hop);
-      const on=new Float32Array(nn);
-      for(let i=0;i<nn;i++){let s=0,a=i*hop,z=a+hop;for(let j=a;j<z&&j<mixL.length;j++){const v=(mixL[j]+mixR[j])*0.5;s+=v<0?-v:v}on[i]=s/hop}
-      for(let i=nn-1;i>0;i--)on[i]=Math.max(0,on[i]-on[i-1]);on[0]=0;
-      let omax=0;for(let i=0;i<nn;i++)if(on[i]>omax)omax=on[i];if(omax>0)for(let i=0;i<nn;i++)on[i]/=omax;
-      const a0=Math.min(nn-10,Math.floor(8*sr/hop)),a1=Math.min(nn,Math.floor(90*sr/hop));
-      let best=120,bestS=-1;
-      for(let b=80;b<=160;b+=0.5){const lag=Math.round(60/b*sr/hop);if(lag<2)continue;let s=0;for(let i=a0;i<a1-lag;i++)s+=on[i]*on[i+lag];if(s>bestS){bestS=s;best=b}}
-      bpm=best>140?best/2:best<90?best*2:best;bpm=Math.round(bpm*10)/10;
-      t0=0;
-    }
-    return{bpm,t0};
+    if(!buf){let best=null,bestR=-1;
+      for(const tr of state.tracks){if(tr.type!=='audio'||!tr.clips[0]||tr.stem==='click'||tr.stem==='countin')continue;
+        const b=state.buffers.get(tr.clips[0].buf);if(!b)continue;const d=b.getChannelData(0);let q=0;for(let i=0;i<d.length;i+=97)q+=d[i]*d[i];if(q>bestR){bestR=q;best=b}}
+      buf=best}
+    if(!buf)return{bpm:state.bpm||120,t0:+state.t0||0,conf:0};
+    const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L,m=new Float32Array(L.length);
+    for(let i=0;i<m.length;i++)m[i]=0.5*(L[i]+R[i]);
+    const r=detectBeat(m,buf.sampleRate);
+    state.beatInfo=r;
+    return{bpm:r.bpm,t0:r.t0,conf:r.conf};
   }
-
-  // style: normal | rock | samcha | slow — always on beat grid (opt.t0 = first downbeat)
   function makeClickWav(durSec,bpm,sr,opt){
     opt=opt||{};sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
     const style=opt.style||'normal',flourish=!!opt.flourish,t0=Math.max(0,+opt.t0||0);
@@ -2124,7 +2066,7 @@ export function createStudio(ui){
   }
   // Spoken one–two–three–four (same sfx as live SetSod). Lead-in so attack lands on the beat.
   const CI_WORDS=['one','two','three','four'];
-  const CI_VOICE={};const CI_LEAD=0.012;let CI_LOAD=null;
+  const CI_VOICE={};const CI_LEAD=0.001;let CI_LOAD=null; // voices are lead-trimmed at load (1 ms kept) — 1.0.31
   function loadCiVoices(){
     if(CI_LOAD)return CI_LOAD;
     CI_LOAD=(async()=>{
@@ -2133,7 +2075,10 @@ export function createStudio(ui){
         await Promise.all(CI_WORDS.map(async w=>{
           try{
             const r=await fetch('sfx/ci-'+w+'.mp3');if(!r.ok)return;
-            CI_VOICE[w]=await a.decodeAudioData((await r.arrayBuffer()).slice(0));
+            const b=await a.decodeAudioData((await r.arrayBuffer()).slice(0));
+            // 1.0.31: trim decoder priming / lead silence so the word attack lands on the nom click (Chromium kept ~13 ms of mp3 delay)
+            const d0=b.getChannelData(0);let k=0;while(k<d0.length&&Math.abs(d0[k])<0.01)k++;k=Math.max(0,k-Math.round(0.001*b.sampleRate));
+            if(k>0&&k<d0.length-64){const nb=a.createBuffer(b.numberOfChannels,b.length-k,b.sampleRate);for(let c=0;c<b.numberOfChannels;c++)nb.getChannelData(c).set(b.getChannelData(c).subarray(k));CI_VOICE[w]=nb}else CI_VOICE[w]=b;
           }catch(e){}
         }));
       }catch(e){}
@@ -2300,7 +2245,7 @@ export function createStudio(ui){
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
-    addMarker,moveMarker,renameMarker,deleteMarker,setMarkers,musicStart,renderStemsMono,makeRefDualBlob,autoEndT,
+    addCount,toggleCountAt,moveCount,deleteCount,setMarkers,countSpans,snapClick,clickStep,tapDownbeat,tapNow,exportProjectFile,musicStart,renderStemsMono,makeRefDualBlob,autoEndT,
     async boot(){bind();
       // Preload spoken one–two–three–four for Data count-in
       try{loadCiVoices()}catch(e){}
@@ -2319,13 +2264,14 @@ export function createStudio(ui){
         const db=await idb();
         const proj=await new Promise((ok,no)=>{const tx=db.transaction('projects','readonly');const g=tx.objectStore('projects').get('current');g.onsuccess=()=>ok(g.result);g.onerror=()=>no(g.error)});
         if(proj&&proj.tracks&&proj.bufs){
-          stopPlay();state.buffers.clear();state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
+          stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
           const a=ac();
           for(const id of Object.keys(proj.bufs||{})){
             const raw=proj.bufs[id];const u8=raw instanceof Uint8Array?raw:new Uint8Array(raw);
             const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
             state.buffers.set(id,buf);
           }
+          adoptMix();
           for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
           state.dirty=false;restored=true;renderAll();ui.onProjectLoaded?.(proj);
           ui.toast?.('โหลดโปรเจกต์ล่าสุด: '+(state.title||'Untitled'));

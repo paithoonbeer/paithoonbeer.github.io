@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.30">
+<meta name="bp-data" content="1.0.31">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -26,7 +26,8 @@ button,input{font:inherit;color:inherit}
 .tb.on{background:#3a2a2a;color:#f88}
 .tb.play{color:var(--acc);font-size:10px}
 .tb.play.on{background:#1a3a2a;color:#6fdfb0;border-color:#2a5a40}
-.shell{display:grid;grid-template-rows:auto auto auto 1fr auto auto;height:100vh;width:100%;max-width:100vw;overflow:hidden}
+.shell{display:grid;grid-template-rows:auto auto 1fr auto auto;flex:1 1 auto;min-height:0;width:100%;max-width:100vw;overflow:hidden}
+body{display:flex;flex-direction:column;height:100vh}
 .top{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;padding:6px 10px;background:linear-gradient(180deg,#171c22,#10141a);border-bottom:1px solid var(--line);min-width:0;max-width:100%}
 .top .btn,.top label,.top select,.top .status{flex:0 0 auto}
 .top .spacer{flex:1 1 40px;min-width:8px}
@@ -35,8 +36,12 @@ button,input{font:inherit;color:inherit}
 .verpill{font-family:JetMono,ui-monospace,monospace;font-size:11px;color:var(--acc);border:1px solid #2a4a3c;background:#12201a;border-radius:999px;padding:4px 10px;white-space:nowrap}
 .verpill b{font-weight:600}
 .spacer{flex:1}
-.wn{display:none;margin:0;padding:8px 12px;background:#14241c;border-bottom:1px solid #2a4a3c;color:#b8e0cc;font-size:12px}
-.wn.on{display:block}
+.wn{display:none;margin:0;padding:3px 10px;background:#14241c;border-bottom:1px solid #2a4a3c;color:#b8e0cc;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 0 auto}
+.wn.on{display:flex;gap:8px;align-items:center}
+.wn .wtxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.wn.full{white-space:normal}
+.wn.full .wtxt{overflow:visible}
+.wn .btn{min-height:22px;padding:0 8px}
 .clock{font-family:JetMono,ui-monospace,monospace;font-size:18px;min-width:7ch}
 .gate{display:none;margin:0;padding:8px 12px;background:#1a1510;color:#e8d2b0;border-bottom:1px solid #5a4030}
 .gate.on{display:block}
@@ -62,7 +67,7 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .recipe .rguide[open]{display:flex;gap:6px;flex-wrap:wrap;align-items:center;flex-basis:100%}
 .recipe .rguide summary{cursor:pointer;color:var(--tx)}
 .recipe .rguide input[type=number]{background:#0c0f14;border:1px solid var(--line);border-radius:6px;color:var(--tx);padding:2px 4px}
-.main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 88px 1fr auto;min-height:0}
+.main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 1fr auto;min-height:0}
 .corner{background:#0a0c0f;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .ruler-wrap{overflow:hidden;background:#0a0c0f;border-bottom:1px solid var(--line);cursor:ew-resize}
 #ruler{display:block;height:28px}
@@ -72,7 +77,7 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .master-wrap{grid-row:2;grid-column:2;position:relative;overflow:hidden;background:#0a0e14;border-bottom:2px solid var(--acc);cursor:ew-resize}
 #masterWave{display:block;height:100%}
 .master-wrap .playhead{z-index:9}
-.heads{grid-row:3;overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
+.heads{grid-row:2;overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
 .thead{height:120px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px;box-sizing:border-box}
 .thead.on{background:#18222c}
 .tn{display:flex;align-items:center;gap:6px;width:100%}
@@ -85,7 +90,7 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .tops .wz b{font:600 10px JetMono,monospace;color:var(--mut);min-width:3.2ch;text-align:center}
 .tb.del{color:#f88;margin-left:auto;min-width:22px}
 .tb.del:hover{background:#3a2222;border-color:#6a3030}
-.lanes-wrap{overflow:auto;position:relative;background:#0d1116;cursor:crosshair;grid-row:3;grid-column:2}
+.lanes-wrap{overflow:auto;position:relative;background:#0d1116;cursor:crosshair;grid-row:2;grid-column:2}
 .lanes{position:relative;min-height:100%}
 .lane{height:120px;border-bottom:1px solid #1a222b;position:relative;box-sizing:border-box}
 .lane.on{background:rgba(61,186,138,.03)}
@@ -133,6 +138,29 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#1c2430;border:1px solid #3a4650;padding:8px 14px;border-radius:8px;z-index:20;display:none}
 .toast.on{display:block}
 label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-size:12px}
+.top .bpmbox input{width:72px;background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px}
+.btn.sm{min-height:26px;min-width:26px;padding:2px 6px}
+.nudge{display:inline-flex;gap:2px}
+.btn.tog.on,.btn.armed{background:#2b3a1c;border-color:#7fbf3f;color:#e8ffd0}
+.zoombox{display:inline-flex;align-items:center;gap:4px}.zoombox input{width:90px}
+.menu{position:relative}.menu>summary{list-style:none}.menu>summary::-webkit-details-marker{display:none}
+.menu .pop{position:absolute;right:0;top:calc(100% + 4px);z-index:30;background:#151b22;border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:260px;box-shadow:0 10px 30px #000a}
+.menu .pop.wide{min-width:520px}
+.menu .pop b{font-size:11px;color:var(--acc);margin-top:4px}
+.menu .pop .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.menu .pop input[type=number]{width:56px;background:#0c0f14;border:1px solid var(--line);border-radius:6px;color:var(--tx);padding:2px 4px}
+.recipe .drop{border:1px dashed #3a4650;border-radius:8px;padding:5px 12px;cursor:pointer;color:var(--mut)}
+.recipe .drop.over{border-color:var(--acc);background:rgba(61,186,138,.08)}
+.recipe .cnt{display:inline-flex;gap:2px;align-items:center}
+.recipe .cnt select{max-width:78px}
+.chip{display:inline-flex;cursor:pointer}.chip input{display:none}
+.chip i{font-style:normal;font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;color:var(--mut)}
+.chip input:checked+i{background:#3a2222;border-color:#a04848;color:#ffb0b0;text-decoration:line-through}
+.cblock{position:absolute;top:0;bottom:0;background:rgba(255,214,10,.14);border-left:2px solid #ffd60a;border-right:1px dashed rgba(255,214,10,.5);z-index:3;cursor:grab;touch-action:none}
+.cblock.intro{pointer-events:none;background:rgba(255,214,10,.07);border-left-style:dashed}
+.cblock b{position:absolute;left:4px;top:2px;font-size:10px;color:#ffd60a;white-space:nowrap;text-shadow:0 1px 2px #000}
+.counting .lanes-wrap,.counting .ruler-wrap,.tapping .lanes-wrap,.tapping .ruler-wrap{cursor:copy}
+
 </style>
 </head>
 <body>
@@ -140,143 +168,100 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 <div class="wn" id="dataWn"></div>
 <div class="shell" id="app">
   <header class="top">
-    <div class="brand">SetSod Data <small>สตูดิโอแต่งเพลง · ตัดต่อ · MIDI · อัดเสียง · แยกจากแอปเล่นสด</small></div>
+    <div class="brand">SetSod Data</div>
     <span class="verpill" id="dataVer" title="เวอร์ชัน SetSod Data (แยกจากแอป SetSod)">Data <b>—</b></span>
-    <button type="button" class="btn icon" id="btnPlay" title="Space">▶</button>
-    <button type="button" class="btn icon" id="btnStop">■</button>
-    <button type="button" class="btn icon" id="btnRec" title="อัดเสียง (เลือกแหล่งด้านขวา)" style="color:#f66">●</button>
-    <select id="recMode" title="แหล่งอัดเสียง" style="background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px 6px;color:var(--tx);max-width:150px">
-      <option value="mic">อัดจากไมค์</option>
-      <option value="bus">จากเครื่องเล่น (ไม่มีไมค์)</option>
-      <option value="blank">สร้างคลิปว่าง</option>
-    </select>
+    <button type="button" class="btn icon" id="btnPlay" title="เล่น/หยุดชั่วคราว (Space)">▶</button>
+    <button type="button" class="btn icon" id="btnStop" title="หยุด กลับต้นเพลง">■</button>
     <div class="clock" id="clock">0:00.0</div>
-    <label>BPM <input id="bpm" type="number" min="40" max="240" value="120" style="width:56px;background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px"></label>
-    <button type="button" class="btn" id="btnLockBeat" title="จับ BPM + จุดลงจังหวะจากกลอง/เบสใหม่">ล็อกจังหวะ</button>
-    <span class="status" title="เลื่อนนอมให้ตรงจังหวะเพลง" style="display:inline-flex;gap:4px;align-items:center">นอม±
-      <button type="button" class="btn" id="btnT0L" style="min-height:26px;padding:2px 7px">−</button>
-      <button type="button" class="btn" id="btnT0R" style="min-height:26px;padding:2px 7px">+</button>
-    </span>
-    <button type="button" class="btn icon" id="btnMark" title="ปักหมุดท่อนที่หัวเล่น (แตะหมุดบนไม้บรรทัด = เปลี่ยนชื่อ/ลบ · ลาก = ย้าย)">📍</button>
-    <button type="button" class="btn icon" id="btnMarkEnd" title="ปักจุดหยุดนอมที่หัวเล่น">🏁</button>
-    <label class="chk"><input type="checkbox" id="chkMetro"> นอม</label>
-    <label title="ความดังนอม">ดังนอม <input id="nomVol" type="range" min="40" max="200" value="140" style="width:72px;accent-color:var(--acc)"></label>
-    <label class="chk" title="เพลงช่องหนึ่ง · นอม/นับเข้าอีกช่อง — เหมือนไฟล์ตัวอย่างเด๋อ"><input type="checkbox" id="chkListenLR"> ฟัง L/R แบบ SetSod</label>
-    <label class="chk"><input type="checkbox" id="chkLoop"> ลูป</label>
-    <label class="chk"><input type="checkbox" id="chkSnap" checked> สแนป</label>
-    <label title="ซูมแกนเวลาทั้งโปรเจกต์ (ซูมกราฟแต่ละแทร็กอยู่ที่หัวแทร็ก − / +)">ซูมเวลา <input id="zoom" type="range" min="40" max="200" value="80"></label>
+    <label class="bpmbox" title="จังหวะนอม (BPM) — จับให้อัตโนมัติหลังแยก AI · พิมพ์แก้เองได้">BPM <input id="bpm" type="number" min="40" max="240" step="0.01" value="120"></label>
+    <button type="button" class="btn icon" id="btnLockBeat" title="จับจังหวะใหม่จากเพลง (BPM + จังหวะ 1)">🎯</button>
+    <button type="button" class="btn icon" id="btnTap" title="แตะจังหวะ 1: กดปุ่มนี้แล้วคลิกบนไทม์ไลน์ตรงจังหวะ 1 — หรือกด T ระหว่างเล่นตรงจังหวะ 1">👆</button>
+    <span class="nudge" title="เลื่อนนอมทีละ 10 ms ถ้ายังไม่ตรง"><button type="button" class="btn icon sm" id="btnT0L">◀</button><button type="button" class="btn icon sm" id="btnT0R">▶</button></span>
+    <label class="btn icon tog" id="btnMetro" title="เปิด/ปิดเสียงนอมตอนฟัง"><input type="checkbox" id="chkMetro" hidden>🔔</label>
+    <label class="zoombox" title="ซูมไทม์ไลน์">🔍 <input id="zoom" type="range" min="40" max="200" value="80"></label>
+    <button type="button" class="btn icon" id="btnUndo" title="ย้อน (Ctrl+Z)">↶</button>
+    <button type="button" class="btn icon" id="btnRedo" title="ทำซ้ำ">↷</button>
     <div class="spacer"></div>
-    <button type="button" class="btn" id="btnSelect">เลือก</button>
-    <button type="button" class="btn" id="btnSplit" title="ผ่าคลิปที่หัวเล่น (S)">ผ่าคลิป</button>
-    <button type="button" class="btn" id="btnCut" title="Ctrl+X">ตัด</button>
-    <button type="button" class="btn" id="btnCopy" title="Ctrl+C">คัดลอก</button>
-    <button type="button" class="btn" id="btnPaste" title="Ctrl+V">วาง</button>
-    <button type="button" class="btn" id="btnDraw">วาดโน้ต</button>
-    <button type="button" class="btn" id="btnUndo">↶</button>
-    <button type="button" class="btn" id="btnRedo">↷</button>
-    <button type="button" class="btn" id="btnDel">ลบ</button>
-    <a class="btn" href="./">SetSod</a>
+    <details class="menu" id="mnuProj"><summary class="btn icon" title="โปรเจกต์">📁</summary><div class="pop">
+      <button type="button" class="btn" id="btnNew">🆕 โปรเจกต์ใหม่</button>
+      <button type="button" class="btn" id="btnSave">💾 บันทึก (ในเบราว์เซอร์)</button>
+      <button type="button" class="btn" id="btnLoad">📂 เปิดไฟล์โปรเจกต์</button>
+      <button type="button" class="btn" id="btnExportProj">⬇ ส่งออกไฟล์โปรเจกต์</button>
+      <input id="fileProj" type="file" accept=".json,application/json" hidden>
+    </div></details>
+    <details class="menu" id="mnuTools"><summary class="btn icon" title="เครื่องมือสตูดิโอ">⋯</summary><div class="pop">
+      <b>แก้คลิป</b>
+      <div class="row"><button type="button" class="btn" id="btnSelect">เลือก</button><button type="button" class="btn" id="btnSplit" title="S">ผ่าคลิป</button><button type="button" class="btn" id="btnCut" title="Ctrl+X">ตัด</button><button type="button" class="btn" id="btnCopy" title="Ctrl+C">คัดลอก</button><button type="button" class="btn" id="btnPaste" title="Ctrl+V">วาง</button><button type="button" class="btn" id="btnDel" title="Delete">ลบคลิป</button></div>
+      <b>อัดเสียง</b>
+      <div class="row"><button type="button" class="btn" id="btnRec" style="color:#f66">● อัด</button><select id="recMode" title="แหล่งอัดเสียง"><option value="mic">จากไมค์</option><option value="bus">จากเครื่องเล่น</option></select></div>
+      <b>แทร็ก</b>
+      <div class="row"><button type="button" class="btn" id="btnAddAud">+ ช่องเสียงว่าง</button><label class="btn" id="btnAddAudFile" title="ไฟล์ที่ไม่ได้แยก AI จะไม่ถูกส่งเป็นดาต้า">+ นำเข้าไฟล์เสียง<input id="fAudNew" type="file" accept="audio/*" hidden></label><button type="button" class="btn" id="btnAddMidi">+ แทร็ก MIDI</button><button type="button" class="btn" id="btnDraw">วาดโน้ต</button></div>
+      <b>ไฟล์</b>
+      <div class="row"><button type="button" class="btn" id="btnMixdown">↓ มิกซ์ดาวน์ WAV</button></div>
+    </div></details>
+    <details class="menu" id="mnuSet"><summary class="btn icon" title="ตั้งค่าดาต้า">⚙</summary><div class="pop wide">
+      <b>นอม</b>
+      <div class="row">
+        <label class="chk">ช่องนอม <select id="rNom"><option value="R">ขวา</option><option value="L">ซ้าย</option></select></label>
+        <label class="chk">เสียง <select id="rFeel"><option value="ref">บี๊บ (แบบตัวอย่าง)</option><option value="normal">ติ๊ก (ปกติ)</option><option value="rock">ร็อค</option><option value="samcha">สามช่า</option><option value="slow">ช้า</option></select></label>
+        <select id="rRate" title="ความถี่นอม"><option value="1">ทุกจังหวะ</option><option value="2" selected>ทุก 2 จังหวะ</option></select>
+        <label class="chk"><input type="checkbox" id="rAccent"> เน้นจังหวะ 1</label>
+        <label class="chk"><input type="checkbox" id="rFlourish"> ลูกเล่น (สไตล์ร็อค/สามช่า/ช้า)</label>
+        <label class="chk"><input type="checkbox" id="rEndAuto" checked> หยุดนอมเมื่อเพลงจบ</label>
+        <label class="chk">ดังนอมตอนฟัง <input id="nomVol" type="range" min="40" max="200" value="140"></label>
+        <label class="chk" title="ฟังเพลงซ้าย นอมขวา เหมือนไฟล์ที่ส่งออก"><input type="checkbox" id="chkListenLR"> ฟังแยก L/R</label>
+      </div>
+      <b>ไฟล์ส่งออก</b>
+      <div class="row">
+        <select id="rSr" title="sample rate"><option value="0">SR ตามไฟล์</option><option value="44100">44.1k</option><option value="48000" selected>48k</option></select>
+        <label class="chk" title="ฝั่งเพลง −11 LUFS กันพีคไม่แตก · นอมพีค −0.5 dBFS"><input type="checkbox" id="rLoud" checked> ดัง −11 LUFS</label>
+      </div>
+      <div class="row rguide" id="rGuideBox">
+        <label class="chk" title="เสียงเพลงเบาๆ ในหูฝั่งนอม"><input type="checkbox" id="rGuide"> ไกด์เบาฝั่งนอม</label>
+        <label class="chk"><input type="checkbox" data-guide="drums"> กลอง</label><label class="chk"><input type="checkbox" data-guide="bass"> เบส</label><label class="chk"><input type="checkbox" data-guide="guitar" checked> กีตาร์</label><label class="chk"><input type="checkbox" data-guide="keys"> คีย์</label><label class="chk"><input type="checkbox" data-guide="other"> อื่นๆ</label><label class="chk"><input type="checkbox" data-guide="vocals" checked> ร้อง</label>
+        <label class="chk">ระดับ <input id="rGuideDb" type="number" min="-48" max="-12" step="1" value="-28"> dBFS</label>
+      </div>
+      <b>โปรไฟล์สูตร</b>
+      <div class="row"><select id="rProf"><option value="">— เลือก —</option></select><button type="button" class="btn" id="btnProfSave">บันทึกเป็นโปรไฟล์</button><button type="button" class="btn" id="btnProfDel">ลบโปรไฟล์</button></div>
+      <b>ไทม์ไลน์</b>
+      <div class="row"><label class="chk"><input type="checkbox" id="chkSnap" checked> สแนปคลิป</label></div>
+      <select id="rCi" hidden><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option></select>
+      <select id="rCiMode" hidden><option value="pre">pre</option><option value="over" selected>over</option></select>
+      <input type="checkbox" id="rCues" checked hidden>
+    </div></details>
+    <a class="btn icon" href="./" title="กลับแอป SetSod">🏠</a>
   </header>
 
-  <div class="import">
-    <div class="drop" id="dropAi"><b>ลากเพลงมาวาง = แยก AI เป็นแทร็ก</b>
-      <span class="status" style="display:block;margin-top:4px">ได้ 6 เลน + <b>ต้นฉบับเต็มเพลง</b> · เลนที่ว่าง = ช่วงนั้น AI ไม่พบเสียงเครื่องนั้นจริง (ฟังเต็มได้ที่「ต้นฉบับ」)</span>
-      · หรือ
-      <label class="btn" style="margin-left:6px">เลือกไฟล์<input id="fAi" type="file" accept="audio/*" hidden></label>
-      <button class="btn pri" id="goAi" disabled>แยกด้วย AI</button>
-    </div>
-    <button class="btn" id="btnAddAud" title="เพิ่มช่องว่าง แล้วดับเบิลคลิกเลนเพื่อใส่ไฟล์">+ เพิ่มช่องเสียง</button>
-    <label class="btn" id="btnAddAudFile" title="นำเข้าไฟล์เต็มเพลงโดยไม่แยก AI — กราฟครบทั้งเพลง">+ ช่องจากไฟล์ (ไม่แยก AI)<input id="fAudNew" type="file" accept="audio/*" hidden></label>
-    <label class="btn" title="ใส่ไฟล์ลงช่องที่เลือกอยู่">นำเข้าเข้าช่องที่เลือก<input id="fAud" type="file" accept="audio/*" hidden></label>
-    <button class="btn" id="btnAddMidi">+ แทร็ก MIDI</button>
-    <button class="btn" id="btnNew">โปรเจกต์ใหม่</button>
-    <button class="btn" id="btnSave">บันทึก</button>
-    <button class="btn" id="btnLoad">เปิดโปรเจกต์</button>
-    <input id="fileProj" type="file" accept=".json,application/json" hidden>
+  <div class="recipe" id="recipe">
+    <div class="drop" id="dropAi" title="ลากไฟล์เพลงมาวาง หรือคลิกเพื่อเลือก — แยก AI อัตโนมัติ">🎵 <b>ลากเพลงมาวาง</b> / คลิกเลือก<input id="fAi" type="file" accept="audio/*" hidden></div>
+    <button class="btn" id="goAi" hidden>↻ ลองแยกใหม่</button>
     <span class="status" id="sAi"></span>
-    <details class="exref" id="exRef">
-      <summary>🎧 ฟังตัวอย่างรูปแบบเด๋อ (dual-mono)</summary>
-      <div class="exref-body">
-        <span class="status">L = ดนตรี · R = นอม+นับเข้า · ไฟล์เต็มอยู่บน Drive / Desktop <code>SetSod_Data_Example</code></span>
-        <label>สเตอริโอ <audio controls preload="none" src="./data-example/01_stereo_first20s.mp3"></audio></label>
-        <label>ซ้าย=เพลง <audio controls preload="none" src="./data-example/02_LEFT_music_only.mp3"></audio></label>
-        <label>ขวา=นอม <audio controls preload="none" src="./data-example/03_RIGHT_nom_countin_only.mp3"></audio></label>
-        <a class="btn" href="https://drive.google.com/drive/folders/1wGZXKgCuWJOBygMtUkz2HexA9MDorW6j" target="_blank" rel="noopener">เปิดโฟลเดอร์ Drive</a>
-      </div>
-    </details>
-  </div>
-
-  <div class="recipe" id="recipe" title="ทำดาต้าครบ: ปิดเครื่อง · นอม · นับเข้า · จังหวะ · ลูกเล่น · โปรไฟล์">
-    <b>สูตรดาต้า</b>
-    <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างให้เหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับทับอินโทร · นับก่อนท่อน · หยุดก่อนเอาท์โทร · 48k · −11 LUFS">⭐ แบบไฟล์ตัวอย่าง</button>
-    <label class="chk">โปรไฟล์
-      <select id="rProf"><option value="">— เลือก —</option></select>
-    </label>
-    <button type="button" class="btn" id="btnProfSave" title="บันทึกสูตรปัจจุบันเป็นโปรไฟล์">บันทึกโปรไฟล์</button>
-    <button type="button" class="btn" id="btnProfDel" title="ลบโปรไฟล์ที่เลือก">ลบ</button>
-    <div class="rmutes" id="rMutes">
-      <button type="button" class="btn" id="btnMuteClear" title="เปิดเสียงทุกเครื่อง">เปิดทุกแทร็ก</button>
-      <label class="chk"><input type="checkbox" data-mute="drums"> ปิดกลอง</label>
-      <label class="chk"><input type="checkbox" data-mute="bass"> ปิดเบส</label>
-      <label class="chk"><input type="checkbox" data-mute="guitar"> ปิดกีตาร์</label>
-      <label class="chk"><input type="checkbox" data-mute="keys"> ปิดคีย์</label>
-      <label class="chk"><input type="checkbox" data-mute="other"> ปิดอื่นๆ</label>
-      <label class="chk"><input type="checkbox" data-mute="vocals"> ปิดร้อง</label>
+    <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างเหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับเข้าตอนต้นเพลง · 48k · −11 LUFS">⭐ แบบไฟล์ตัวอย่าง</button>
+    <span class="cnt"><button type="button" class="btn" id="btnCount" title="เปิดแล้วคลิกบนไทม์ไลน์ตรงไหน = นับตรงนั้น (ตามนอมของเพลง) · คลิกที่ช่องนับ = ลบ · ลาก = ย้าย">🗣 นับ 1-2-3-4</button><select id="rCountN" title="แบบการนับ"><option value="8" title="one · two · one two three four">8 ครั้ง</option><option value="4" title="one two three four">4 ครั้ง</option></select></span>
+    <label class="chk">นับเข้า <select id="rIntro"><option value="0">ไม่นับ</option><option value="over1" selected>ต้นเพลง 1 รอบ</option><option value="over2">ต้นเพลง 2 รอบ</option><option value="pre1">ก่อนเพลง 1 ห้อง</option><option value="pre2">ก่อนเพลง 2 ห้อง</option></select></label>
+    <div class="rmutes" id="rMutes" title="ฝั่งเพลงไม่เอาเครื่องไหน (จำแยกต่อเพลง) — ตรงกับปุ่ม M ที่หัวแทร็ก">
+      <span>ปิด:</span>
+      <label class="chip"><input type="checkbox" data-mute="drums"><i>กลอง</i></label>
+      <label class="chip"><input type="checkbox" data-mute="bass"><i>เบส</i></label>
+      <label class="chip"><input type="checkbox" data-mute="guitar"><i>กีตาร์</i></label>
+      <label class="chip"><input type="checkbox" data-mute="keys"><i>คีย์</i></label>
+      <label class="chip"><input type="checkbox" data-mute="other"><i>อื่นๆ</i></label>
+      <label class="chip"><input type="checkbox" data-mute="vocals"><i>ร้อง</i></label>
+      <button type="button" class="btn icon sm" id="btnMuteClear" title="เปิดทุกเครื่อง">↺</button>
     </div>
-    <label class="chk">นอม
-      <select id="rNom"><option value="R">ขวา</option><option value="L">ซ้าย</option></select>
-    </label>
-    <label class="chk">นับเข้า
-      <select id="rCi"><option value="0">ไม่นับ</option><option value="1" selected>1 ห้อง</option><option value="2">2 ห้อง</option></select>
-    </label>
-    <label class="chk">จังหวะ
-      <select id="rFeel">
-        <option value="normal">ปกติ</option>
-        <option value="ref">บี๊บ (แบบตัวอย่าง)</option>
-        <option value="rock">ร็อค</option>
-        <option value="samcha">สามช่า</option>
-        <option value="slow">ช้า</option>
-      </select>
-    </label>
-    <span class="rnom2" id="rNom2">
-      <select id="rRate" title="ความถี่นอม"><option value="1">♩ ทุกจังหวะ</option><option value="2">𝅗𝅥 ทุก 2 จังหวะ</option></select>
-      <label class="chk" title="เน้นจังหวะ 1 ของห้อง"><input type="checkbox" id="rAccent" checked> เน้น 1</label>
-      <select id="rCiMode" title="ตำแหน่งนับเข้า"><option value="pre">นับก่อนเพลง</option><option value="over">นับทับอินโทร</option></select>
-      <label class="chk" title="พูด one . two . one two three four ใน 8 นอมก่อนหมุด 📍 ทุกหมุด"><input type="checkbox" id="rCues"> 🗣 นับก่อนท่อน</label>
-      <label class="chk" title="ไม่มีหมุด 🏁 → หยุดนอมห้องสุดท้ายก่อนเพลงเงียบ"><input type="checkbox" id="rEndAuto"> 🏁 อัตโนมัติ</label>
-      <select id="rSr" title="sample rate ไฟล์ส่งออก"><option value="0">SR ตามไฟล์</option><option value="44100">44.1k</option><option value="48000">48k</option></select>
-      <label class="chk" title="ฝั่งเพลง −11 LUFS กันพีคไม่แตก · นอมพีค −0.5 dBFS"><input type="checkbox" id="rLoud"> 🔊 −11 LUFS</label>
-      <details class="rguide" id="rGuideBox"><summary title="เสียงเพลงเบาๆ ในหูฝั่งนอม">🎧 ไกด์เบา</summary>
-        <label class="chk"><input type="checkbox" id="rGuide"> เปิด</label>
-        <label class="chk"><input type="checkbox" data-guide="drums"> กลอง</label>
-        <label class="chk"><input type="checkbox" data-guide="bass"> เบส</label>
-        <label class="chk"><input type="checkbox" data-guide="guitar" checked> กีตาร์</label>
-        <label class="chk"><input type="checkbox" data-guide="keys"> คีย์</label>
-        <label class="chk"><input type="checkbox" data-guide="other"> อื่นๆ</label>
-        <label class="chk"><input type="checkbox" data-guide="vocals" checked> ร้อง</label>
-        <label class="chk">ระดับ <input id="rGuideDb" type="number" min="-48" max="-12" step="1" value="-28" style="width:52px"> dBFS</label>
-      </details>
-    </span>
-    <label class="chk"><input type="checkbox" id="rFlourish" checked> ลูกเล่น</label>
-    <label class="chk"><input type="checkbox" id="rAuto"> แยกแล้วส่งเลย</label>
     <button type="button" class="btn pri" id="btnMakeData">ทำดาต้า → ส่ง SetSod</button>
-    <span class="status" id="sRecipe">หลังแยก AI เลือกสูตรแล้วกดส่ง</span>
+    <span class="status" id="sRecipe">ลากเพลงมาวางเพื่อเริ่ม</span>
   </div>
 
   <div class="main">
     <div class="corner"></div>
     <div class="ruler-wrap"><canvas id="ruler" height="28"></canvas></div>
-    <div class="master-lab"><b>เพลงเต็ม</b><span>แบบ MUSE — เวฟต่อเนื่องทั้งเพลง · มิกเซอร์ด้านล่างปิดเครื่อง</span></div>
-    <div class="master-wrap" id="masterWrap">
-      <canvas id="masterWave" height="88"></canvas>
-      <div class="playhead" id="masterPh" title="ลากเพื่อเลื่อนหัวเล่น"></div>
-    </div>
     <div class="heads" id="trackHeads"></div>
     <div class="lanes-wrap" id="lanesWrap">
       <div class="lanes" id="lanes"><div class="playhead" id="playhead"></div></div>
     </div>
-    <div class="mixer-wrap" id="mixerWrap">
-      <button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="true" title="หุบ/กางมิกเซอร์">มิกเซอร์ / EQ · Reverb · ระดับเสียง <span class="chev" id="mixerChev">▾</span></button>
+    <div class="mixer-wrap folded" id="mixerWrap">
+      <button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="false" title="หุบ/กางมิกเซอร์">ระดับฟัง (ไม่มีผลกับไฟล์ดาต้า) <span class="chev" id="mixerChev">▸</span></button>
       <div class="mixer" id="mixer"></div>
     </div>
   </div>
@@ -286,24 +271,17 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <b style="color:var(--tx)">เขียนโน้ต</b>
       <label>เครื่องดนตรี
         <select id="midiInst" title="เลือกเสียงเครื่องสำหรับแทร็ก MIDI นี้">
-          <option value="drums">กลอง</option>
-          <option value="bass">เบส</option>
-          <option value="guitar">กีตาร์</option>
-          <option value="keys" selected>คีย์บอร์ด</option>
-          <option value="pad">แพด</option>
-          <option value="lead">ลีด</option>
-          <option value="synth">ซินธ์</option>
+          <option value="drums">กลอง</option><option value="bass">เบส</option><option value="guitar">กีตาร์</option><option value="keys" selected>คีย์บอร์ด</option><option value="pad">แพด</option><option value="lead">ลีด</option><option value="synth">ซินธ์</option>
         </select>
       </label>
-      <span>เลือกเครื่อง → กด「วาดโน้ต」→ คลิกบนเปียโนโรล · Ctrl+C/X/V = คัดลอก/ตัด/วาง</span>
+      <span>⋯ → วาดโน้ต แล้วคลิกบนเปียโนโรล</span>
     </div>
     <div id="pianoKeys"></div>
     <div id="pianoScroll"><div id="pianoGrid"></div></div>
   </div>
 
   <footer class="foot">
-    <button type="button" class="btn" id="btnMixdown">↓ มิกซ์ดาวน์ WAV</button>
-    <span class="status" id="sOut">Space = เล่น/หยุด · Ctrl+C/X/V = คัดลอก/ตัด/วาง · ● อัดไมค์หรือจากเครื่องเล่น · ส่ง SetSod ใช้สูตรด้านบน</span>
+    <span class="status" id="sOut">Space เล่น/หยุด · T แตะจังหวะ 1 ระหว่างเล่น</span>
   </footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -331,11 +309,9 @@ document.title='SetSod Data '+DATAV;
  if(prev!==DATAV){
    const note=(dataWhatsNew(DATAV)||DATACHG[DATAV]||'').replace(/</g,'');
    const wn=document.getElementById('dataWn');
-   wn.innerHTML=(prev
-     ?`<b>อัปเดต SetSod Data ${DATAV}</b> — ${note||'มีปรับปรุงใหม่'}`
-     :`<b>SetSod Data ${DATAV}</b> — เวอร์ชันแยกจากแอปเล่นสด · ${note}`)+
-     ` <button type="button" class="btn" id="wnOk" style="margin-left:8px;min-height:26px">รับทราบ</button>`;
+   wn.innerHTML=`<span class="wtxt"><b>ใหม่ ${DATAV}</b> — ${note||'มีปรับปรุงใหม่'}</span><button type="button" class="btn" id="wnMore" title="อ่านทั้งหมด">ⓘ</button><button type="button" class="btn" id="wnOk">รับทราบ</button>`;
    wn.classList.add('on');
+   document.getElementById('wnMore').onclick=()=>wn.classList.toggle('full');
    document.getElementById('wnOk').onclick=()=>{wn.classList.remove('on');localStorage.setItem('ssd-ver',DATAV)};
  }
 }
@@ -347,12 +323,18 @@ const studio=createStudio({
     const t=(typeof studio.playheadT==='function')?studio.playheadT():(st.playing?st.ac.currentTime-st.t0+st.offset:st.offset);
     document.getElementById('clock').textContent=studio.fmt(t);
     document.getElementById('btnPlay').textContent=st.playing?'❚❚':'▶';
-    document.getElementById('btnRec').classList.toggle('on',!!st.recording);
+    document.getElementById('btnRec')?.classList.toggle('on',!!st.recording);
     document.getElementById('pianoRoll').classList.toggle('on',!!(st.tracks[st.sel.track]?.type==='midi'));
   },
   onProjectLoaded(proj){if(window.__recipeReady)window.__applyProj?.(proj);else window.__pendProj=proj},
   onMarkers(list){window.__onMarkers?.(list)},
-  onProject(st){document.getElementById('sOut').textContent=`Data ${DATAV} · ${st.title} · ${st.tracks.length} แทร็ก · BPM ${st.bpm}${st.dirty?' · ยังไม่บันทึก':''}`}
+  onStemMute(stem,mute){window.__onStemMute?.(stem,mute)},
+  onNomMute(mute){const c=document.getElementById('chkMetro');if(c){c.checked=!mute;c.dispatchEvent(new Event('change',{bubbles:true}))}},
+  countArmed(){return !!window.__countArmed},
+  countN(){return +(document.getElementById('rCountN')?.value)||8},
+  tapArmed(){return !!window.__tapArmed},
+  onTapAt(r){window.__onTapAt?.(r)},
+  onProject(st){document.getElementById('sOut').textContent=`${st.title} · BPM ${Math.round((st.bpm||0)*100)/100}${st.dirty?' · ยังไม่บันทึก':''} · Space เล่น/หยุด · T แตะจังหวะ 1`}
 });
 await studio.boot();
 window.__ssd=studio;
@@ -371,7 +353,7 @@ function bindDrop(el,fn){let n=0;
 }
 function setAi(f){
   if(!f||!(AUD.test(f.name)||/^audio\//.test(f.type||''))){$('sAi').textContent='❌ เลือกไฟล์เสียง';return}
-  aiFile=f;$('goAi').disabled=false;$('sAi').textContent='✅ '+f.name+' — กดแยก หรือรอเริ่มอัตโนมัติ';startAi();
+  aiFile=f;$('goAi').hidden=true;$('sAi').textContent='✅ '+f.name;startAi();
 }
 $('fAi').onchange=e=>{const f=e.target.files[0];e.target.value='';if(f)setAi(f)};
 bindDrop($('dropAi'),fs=>setAi(fs[0]));
@@ -379,7 +361,7 @@ $('dropAi').addEventListener('click',e=>{if(e.target.closest('button,label,input
 
 async function startAi(){
   if(!aiFile||aiBusy||!desk){if(!desk)$('sAi').textContent='❌ ใช้พีซีเท่านั้น';return}
-  aiBusy=true;$('goAi').disabled=true;$('sAi').textContent='⏳ ถอดรหัส…';
+  aiBusy=true;$('goAi').hidden=true;$('sAi').textContent='⏳ ถอดรหัส…';
   try{
     // Data 1.0.29: htdemucs is trained at 44.1 kHz with a fixed 343980-sample window.
     // A default AudioContext decodes at the device rate (often 48 kHz on PCs) and the model
@@ -443,15 +425,14 @@ async function startAi(){
     try{
       await studio.loadCiVoices();
       const g=studio.relockBeat();
-      const bpmEl=document.getElementById('bpm');if(bpmEl)bpmEl.value=String(Math.round(g.bpm));
-      document.getElementById('chkMetro').checked=true;studio.state.metro=true;
-      applyRecipeMutes();
-      toast(`พร้อมแบบ MUSE · เวฟเพลงเต็ม · มิกเซอร์ปิดเครื่อง · นอม ${Math.round(g.bpm)} BPM`);
-      $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · นอม ${Math.round(g.bpm)} BPM · mix−mute`;
-    }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — เลือกสูตรแล้วกดส่ง');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
-    if($('rAuto')&&$('rAuto').checked)setTimeout(()=>$('btnMakeData').click(),400);
-  }catch(e){$('sAi').textContent='❌ '+(e.message||e)}
-  finally{aiBusy=false;$('goAi').disabled=!aiFile}
+      setBpmField(g.bpm);
+      document.getElementById('chkMetro').checked=true;studio.state.metro=true;syncMetroBtn();
+      applyRecipeMutes();refreshGuides();
+      beatToast(g);
+      $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · นอม ${fmtBpm(g.bpm)} BPM`;
+    }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — กด 🎯 จับจังหวะ หรือพิมพ์ BPM');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
+  }catch(e){$('sAi').textContent='❌ '+(e.message||e);$('goAi').hidden=!aiFile}
+  finally{aiBusy=false}
 }
 $('goAi').onclick=startAi;
 
@@ -478,16 +459,17 @@ function applyRecipeMutes(){
   $('sRecipe').textContent=keys.length?'ปิด: '+keys.join(', '):'เปิดทุกแทร็กเสียง';
 }
 function guideKeysFromUI(){return [...$('rGuideBox').querySelectorAll('input[data-guide]:checked')].map(x=>x.dataset.guide)}
-function recipeState(){return{mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value,feel:$('rFeel').value||'normal',flourish:!!$('rFlourish').checked,auto:!!$('rAuto').checked,
-  rate:+$('rRate').value===2?2:1,accent:!!$('rAccent').checked,ciMode:$('rCiMode').value==='over'?'over':'pre',cues:!!$('rCues').checked,endAuto:!!$('rEndAuto').checked,
+function recipeState(){return{mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value,feel:$('rFeel').value||'normal',flourish:!!$('rFlourish').checked,
+  rate:+$('rRate').value===2?2:1,accent:!!$('rAccent').checked,ciMode:$('rCiMode').value==='over'?'over':'pre',cues:true,endAuto:!!$('rEndAuto').checked,
   sr:+$('rSr').value||0,loud:!!$('rLoud').checked,guide:{on:!!$('rGuide').checked,stems:guideKeysFromUI(),db:Math.max(-48,Math.min(-12,+$('rGuideDb').value||-28))}}}
 function syncNomOpt(){const r=recipeState();studio.state.recipe=r;studio.state.nomOpt={style:r.feel==='ref'?'ref':'normal',rate:r.rate,accent:r.accent,ciMode:r.ciMode,ci:r.ci,cues:r.cues,
-  endT:(studio.state.markers||[]).find(m=>m.kind==='end')?.t};return r}
-function applyRecipeState(o){if(!o)return;if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;if('auto' in o)$('rAuto').checked=!!o.auto;
+  endT:undefined};return r}
+function applyRecipeState(o){if(!o)return;if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;
   if(o.rate)$('rRate').value=String(o.rate===2?2:1);if('accent' in o)$('rAccent').checked=!!o.accent;if(o.ciMode)$('rCiMode').value=o.ciMode==='over'?'over':'pre';if('cues' in o)$('rCues').checked=!!o.cues;if('endAuto' in o)$('rEndAuto').checked=!!o.endAuto;
   if(o.sr!=null)$('rSr').value=String([44100,48000].includes(+o.sr)?+o.sr:0);if('loud' in o)$('rLoud').checked=!!o.loud;
   if(o.guide){$('rGuide').checked=!!o.guide.on;if(Array.isArray(o.guide.stems)){const g=new Set(o.guide.stems);$('rGuideBox').querySelectorAll('input[data-guide]').forEach(i=>i.checked=g.has(i.dataset.guide))}if(o.guide.db!=null)$('rGuideDb').value=String(o.guide.db)}
-  syncNomOpt();applyRecipeMutes();refreshGuides()}
+  syncIntroUI();syncNomOpt();applyRecipeMutes();refreshGuides()}
+function syncIntroUI(){const ci=+$('rCi').value||0,mode=$('rCiMode').value;$('rIntro').value=ci?(mode==='pre'?'pre':'over')+Math.min(2,ci):'0'}
 /* per-song memory (title → recipe + markers) so each song keeps its own มิวต์/นอม/หมุด */
 function songKey(){return (studio.state.title||'').trim().slice(0,120)}
 function loadSongMap(k){try{return JSON.parse(localStorage.getItem(k)||'{}')||{}}catch(e){return{}}}
@@ -501,16 +483,14 @@ function restoreSong(){const t=songKey();if(!t)return false;let hit=false;
   const r=loadSongMap('ssd-recipe-by-title')[t];if(r){applyRecipeState(r);hit=true}
   const m=loadSongMap('ssd-markers-by-title')[t];if(Array.isArray(m)&&m.length){studio.setMarkers(m);hit=true}
   syncNomOpt();return hit}
-function markerStatus(){const ms=studio.state.markers||[];const sec=ms.filter(m=>m.kind!=='end').length,end=ms.find(m=>m.kind==='end');
-  return `📍${sec}${end?' · 🏁 '+studio.fmt(end.t):''}`}
+function markerStatus(){const n=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;return n?`🗣 ${n} จุดนับ`:''}
 $('btnMuteClear').onclick=()=>{setMuteUI([]);applyRecipeMutes();saveRecipe()};
 $('rMutes').onchange=()=>{applyRecipeMutes();saveRecipe()};
 
 function refreshGuides(){
   const hasMusic=studio.state.tracks.some(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
   if(!hasMusic)return;
-  const bpm=+($('bpm')?.value)||studio.state.bpm||120;
-  studio.state.bpm=bpm;
+  const bpm=+studio.state.bpm||+($('bpm')?.value)||120;
   // While playing: defer heavy rebuild (would freeze/stutter ScriptProcessor)
   if(studio.state.playing){
     studio.state._guidesDirty=true;
@@ -548,23 +528,40 @@ $('btnProfDel').onclick=()=>{
   const id=$('rProf').value;if(!id){toast('เลือกโปรไฟล์ก่อน');return}
   if(!confirm('ลบโปรไฟล์นี้?'))return;
   saveProfiles(loadProfiles().filter(p=>p.id!==id));fillProfSelect();toast('ลบแล้ว')};
-['rNom','rAuto','rSr','rLoud','rGuide','rGuideDb'].forEach(id=>{const el=$(id);if(el)el.onchange=saveRecipe});
+['rNom','rSr','rLoud','rGuide','rGuideDb'].forEach(id=>{const el=$(id);if(el)el.onchange=saveRecipe});
 $('rGuideBox').addEventListener('change',saveRecipe);
-['rCi','rFeel','rFlourish','rRate','rAccent','rCiMode','rCues','rEndAuto'].forEach(id=>{const el=$(id);if(el)el.onchange=()=>{saveRecipe();refreshGuides()}});
+['rFeel','rFlourish','rRate','rAccent','rEndAuto'].forEach(id=>{const el=$(id);if(el)el.onchange=()=>{saveRecipe();refreshGuides()}});
+$('rIntro').onchange=()=>{const v=$('rIntro').value;$('rCi').value=v==='0'?'0':v.slice(-1);$('rCiMode').value=v.startsWith('pre')?'pre':'over';saveRecipe();refreshGuides()};
+syncIntroUI();
 /* ⭐ one-tap preset = measured reference file */
 $('btnRefPreset').onclick=()=>{
   const P=REF_PRESET;
   applyRecipeState({feel:P.style,rate:P.rate,accent:P.accent,ciMode:P.ciMode,ci:P.ci,cues:P.cues,endAuto:P.endAuto,sr:P.sr,loud:P.loud,flourish:false,nom:'R',
     guide:{on:P.guide.on,stems:P.guide.stems,db:P.guide.db}});
   saveRecipe();
-  const nm=(studio.state.markers||[]).filter(m=>m.kind!=='end').length;
-  toast('ตั้งแบบไฟล์ตัวอย่างแล้ว · บี๊บทุก 2 จังหวะ · 48k · −11 LUFS'+(nm?'':' · ปัก 📍 ที่ต้นท่อนเพื่อให้มีนับก่อนท่อน'));
-  $('sRecipe').textContent='แบบไฟล์ตัวอย่าง · '+markerStatus();
+  const nm=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
+  toast('ตั้งแบบไฟล์ตัวอย่างแล้ว · บี๊บทุก 2 จังหวะ · 48k · −11 LUFS'+(nm?'':' · กด 🗣 แล้วคลิกตรงที่อยากให้นับ'));
+  $('sRecipe').textContent='แบบไฟล์ตัวอย่าง'+(nm?' · '+markerStatus():'');
 };
-/* 📍 / 🏁 markers */
-$('btnMark').onclick=()=>{const m=studio.addMarker('section');toast('ปักหมุด '+m.name+' @ '+studio.fmt(m.t))};
-$('btnMarkEnd').onclick=()=>{const m=studio.addMarker('end');toast('ปักจุดหยุดนอม @ '+studio.fmt(m.t))};
-window.__onMarkers=()=>{saveRecipe();refreshGuides();$('sRecipe').textContent=markerStatus()};
+/* 🗣 count tool: armed → click the timeline = count there (snaps to the nom click) · click a count = remove · drag = move */
+function setArmed(kind,on){
+  window.__countArmed=kind==='count'?on:false;window.__tapArmed=kind==='tap'?on:false;
+  $('btnCount').classList.toggle('armed',!!window.__countArmed);$('btnTap').classList.toggle('armed',!!window.__tapArmed);
+  $('app').classList.toggle('counting',!!window.__countArmed);$('app').classList.toggle('tapping',!!window.__tapArmed);
+}
+$('btnCount').onclick=()=>{const on=!window.__countArmed;setArmed('count',on);if(on)toast('คลิกบนไทม์ไลน์ตรงที่อยากให้นับ · คลิกช่องสีเหลือง = ลบ')};
+$('btnTap').onclick=()=>{const on=!window.__tapArmed;setArmed('tap',on);if(on)toast('คลิกบนไทม์ไลน์ตรงจังหวะ 1 ของเพลง (หรือกด T ระหว่างเล่น)')};
+window.__onTapAt=r=>{setArmed('tap',false);saveRecipe();toast('ตั้งจังหวะ 1 แล้ว · t0='+r.t0.toFixed(3)+'s');$('sRecipe').textContent=`นอม ${fmtBpm(studio.state.bpm)} BPM · จังหวะ 1 @ ${r.t0.toFixed(2)}s`};
+addEventListener('keydown',e=>{if(e.code!=='KeyT'||e.target.closest?.('input,select,textarea'))return;if(!studio.state.playing)return;e.preventDefault();const r=studio.tapNow();window.__onTapAt(r)});
+addEventListener('keydown',e=>{if(e.key==='Escape')setArmed('',false)});
+window.__onMarkers=()=>{saveRecipe();refreshGuides();$('sRecipe').textContent=markerStatus()||'ไม่มีจุดนับ'};
+window.__onStemMute=(stem,mute)=>{const c=$('rMutes').querySelector(`input[data-mute="${stem}"]`);if(c)c.checked=!!mute;applyRecipeMutes();saveRecipe()};
+function syncMetroBtn(){$('btnMetro').classList.toggle('on',!!$('chkMetro').checked)}
+$('chkMetro').addEventListener('change',syncMetroBtn);syncMetroBtn();
+function fmtBpm(b){return String(Math.round((+b||0)*100)/100)}
+function setBpmField(b){const el=$('bpm');if(el)el.value=fmtBpm(b)}
+function beatToast(g){const low=g.conf!=null&&g.conf<0.9;toast(`นอม ${fmtBpm(g.bpm)} BPM · จังหวะ 1 @ ${(g.t0||0).toFixed(2)}s`+(low?' · ⚠️ จับไม่ค่อยชัด — ฟังแล้วกด 👆 ตรงจังหวะ 1 หรือแก้ BPM':''))}
+document.addEventListener('click',e=>{document.querySelectorAll('details.menu[open]').forEach(d=>{if(!d.contains(e.target))d.open=false})});
 window.__applyProj=proj=>{if(proj&&proj.recipe)applyRecipeState(proj.recipe);syncNomOpt();refreshGuides()};
 window.__recipeReady=true;
 if(window.__pendProj){window.__applyProj(window.__pendProj);window.__pendProj=null}
@@ -572,13 +569,12 @@ syncNomOpt();
 document.getElementById('bpm')?.addEventListener('change',()=>{studio.state.bpm=+$('bpm').value||120;refreshGuides()});
 $('btnLockBeat')?.addEventListener('click',()=>{
   try{
-    const g=studio.relockBeat();
-    toast(`ล็อกจังหวะแล้ว · ${Math.round(g.bpm)} BPM · t0=${(g.t0||0).toFixed(2)}s`);
-    $('sRecipe').textContent=`จังหวะ ${Math.round(g.bpm)} BPM · เลื่อนนอม ± ถ้ายังไม่ตรง`;
+    const g=studio.relockBeat();setBpmField(g.bpm);refreshGuides();beatToast(g);
+    $('sRecipe').textContent=`นอม ${fmtBpm(g.bpm)} BPM · ไม่ตรง → 👆 แตะจังหวะ 1 หรือ ◀ ▶`;
   }catch(e){toast('ล็อกจังหวะไม่ได้')}
 });
-$('btnT0L')?.addEventListener('click',()=>{const t0=studio.nudgeNom(-0.02);toast('เลื่อนนอม −20ms · t0='+t0.toFixed(2)+'s')});
-$('btnT0R')?.addEventListener('click',()=>{const t0=studio.nudgeNom(0.02);toast('เลื่อนนอม +20ms · t0='+t0.toFixed(2)+'s')});
+$('btnT0L')?.addEventListener('click',()=>{const t0=studio.nudgeNom(-0.01);saveRecipe();toast('นอมเร็วขึ้น 10ms · t0='+t0.toFixed(3)+'s')});
+$('btnT0R')?.addEventListener('click',()=>{const t0=studio.nudgeNom(0.01);saveRecipe();toast('นอมช้าลง 10ms · t0='+t0.toFixed(3)+'s')});
 
 async function sendStemsToSetsod(files,meta){
   const bc=new BroadcastChannel('bp-stems');let ok=false;
@@ -594,11 +590,9 @@ async function makeDataNow(){
   if(!music.length){toast('ยังไม่มีแทร็กเสียง — ลากเพลงแยก AI ก่อน หรือเปิดอย่างน้อย 1 แทร็ก');return}
   $('btnMakeData').disabled=true;$('sRecipe').textContent='⏳ เรนเดอร์ดาต้า…';
   try{
-    let grid;try{grid=studio.detectBeatGrid('drums')}catch(e){grid={bpm:studio.state.bpm||120,t0:0}}
-    const bpm=+(document.getElementById('bpm')?.value)||grid.bpm||studio.state.bpm||120;
-    const t0=(studio.state.t0!=null?+studio.state.t0:grid.t0)||0;
-    studio.state.bpm=bpm;studio.state.t0=t0;
-    const bpmEl=document.getElementById('bpm');if(bpmEl)bpmEl.value=String(Math.round(bpm));
+    // 1.0.31: use the exact detected/edited tempo (3 dp) — the old code rounded to a whole BPM here (drift)
+    const bpm=+studio.state.bpm||+(document.getElementById('bpm')?.value)||120;
+    const t0=+studio.state.t0||0;
     const r=recipeState();
     const feel=r.feel||'normal',ci=r.ci||0,ref=feel==='ref';
     const flourish=r.flourish&&!ref;
@@ -611,8 +605,7 @@ async function makeDataNow(){
     const pad=r.ciMode==='pre'?ci*4*60/bpm:0,total=pad+musicDur;
     // music bed first (needed for auto end-of-click)
     const mono=await studio.renderMusicMono(music,sr,pad,total);
-    const endM=(studio.state.markers||[]).find(m=>m.kind==='end');
-    const endT=endM?endM.t:(r.endAuto?studio.autoEndT(mono,t0,bpm,r.rate,pad):undefined);
+    const endT=r.endAuto?studio.autoEndT(mono,t0,bpm,r.rate,pad):undefined;
     const guide=studio.makeExportClickBuf(musicDur,bpm,sr,{ci,style:feel,flourish,t0,rate:r.rate,accent:r.accent,ciMode:r.ciMode,
       cues:r.cues,markers:studio.state.markers,endT});
     const clickBlob=studio.bufToWavBlob(guide.buf,{targetPeak:0.89,maxGain:1.2});
@@ -643,9 +636,9 @@ async function makeDataNow(){
       out.push(dualFile);
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
-    const nCue=r.cues?(studio.state.markers||[]).filter(m=>m.kind!=='end').length:0;
+    const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.30',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.31',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
@@ -658,18 +651,6 @@ async function makeDataNow(){
   finally{$('btnMakeData').disabled=false}
 }
 $('btnMakeData').onclick=makeDataNow;
-
-$('fAud').onchange=async e=>{
-  const f=e.target.files[0];e.target.value='';if(!f)return;
-  try{
-    const i=studio.state.sel.track;
-    // if selected track is MIDI, add/use an audio track
-    const tr=studio.state.tracks[i];
-    const idx=(!tr||tr.type!=='audio')?-1:i;
-    await studio.importAudioToTrack(idx,f,studio.state.offset);
-    toast('นำเข้าเสียงแล้ว');
-  }catch(err){/* toast already shown in studio */}
-};
 
 </script>
 </body>

@@ -34,13 +34,21 @@ export function clickGrid(t0,bpm,rate,endT){
 /** Index of the click a marker lands on (nearest grid point). */
 export function markerClickIdx(t,t0,bpm,rate){const step=60/bpm*(rate===2?2:1);return Math.round((t-t0)/step)}
 /** Which clicks carry a spoken word: Map clickIdx → word. markers: [{t,kind}] song-time. */
+export const COUNT4=['one','two','three','four'];
+/** Which clicks carry a spoken word: Map clickIdx → word.
+    markers (song time): {kind:'count',t,n:8|4} = count STARTS on the click at t (1.0.31 count tool);
+    legacy {kind:'section',t} = 8-click count ENDING right before t (1.0.30 pins); 'end' ignored. */
 export function cueWords(grid,markers,t0,bpm,rate,opt){
   opt=opt||{};const words=new Map();
-  const put=(endIdx)=>{for(let j=0;j<8;j++){const w=CUE_PATTERN[j];const i=endIdx-8+j;if(w&&i>=0&&i<grid.length)words.set(i,w)}};
-  // count over the intro first: ci cycles of 8 clicks starting at the first click
-  if(opt.ciMode==='over')for(let c=0;c<(opt.ci|0);c++)put(8*(c+1));
-  // section cues win where they overlap the intro count
-  if(opt.cues)for(const m of markers||[]){if(m&&m.kind!=='end'&&isFinite(m.t))put(markerClickIdx(m.t,t0,bpm,rate))}
+  const put=(startIdx,pat)=>{for(let j=0;j<pat.length;j++){const w=pat[j];const i=startIdx+j;if(w&&i>=0&&i<grid.length)words.set(i,w)}};
+  // count over the intro first: ci cycles of 8 clicks from the first click
+  if(opt.ciMode==='over')for(let c=0;c<(opt.ci|0);c++)put(8*c,CUE_PATTERN);
+  if(opt.cues!==false)for(const m of markers||[]){
+    if(!m||!isFinite(m.t))continue;
+    const k=markerClickIdx(m.t,t0,bpm,rate);
+    if(m.kind==='count')put(k,(+m.n===4)?COUNT4:CUE_PATTERN);
+    else if(m.kind==='section')put(k-8,CUE_PATTERN);
+  }
   return words;
 }
 /* ---------- loudness (ITU-R BS.1770 K-weighting, gated) ---------- */
