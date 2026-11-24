@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.26">
+<meta name="bp-data" content="1.0.27">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -56,11 +56,17 @@ button,input{font:inherit;color:inherit}
 .recipe .rmutes{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mut);font-size:11px}
 .recipe .rmutes .btn{min-height:26px;font-size:11px;padding:2px 8px}
 .recipe select{background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:var(--tx)}
-.main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 1fr auto;min-height:0}
+.main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 88px 1fr auto;min-height:0}
 .corner{background:#0a0c0f;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .ruler-wrap{overflow:hidden;background:#0a0c0f;border-bottom:1px solid var(--line);cursor:ew-resize}
 #ruler{display:block;height:28px}
-.heads{overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
+.master-lab{grid-row:2;grid-column:1;background:#0f161c;border-right:1px solid var(--line);border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;padding:8px;gap:4px}
+.master-lab b{color:var(--acc);font-size:12px}
+.master-lab span{font-size:10px;color:var(--mut);line-height:1.35}
+.master-wrap{grid-row:2;grid-column:2;position:relative;overflow:hidden;background:#0a0e14;border-bottom:2px solid var(--acc);cursor:ew-resize}
+#masterWave{display:block;height:100%}
+.master-wrap .playhead{z-index:9}
+.heads{grid-row:3;overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
 .thead{height:120px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px;box-sizing:border-box}
 .thead.on{background:#18222c}
 .tn{display:flex;align-items:center;gap:6px;width:100%}
@@ -73,7 +79,7 @@ button,input{font:inherit;color:inherit}
 .tops .wz b{font:600 10px JetMono,monospace;color:var(--mut);min-width:3.2ch;text-align:center}
 .tb.del{color:#f88;margin-left:auto;min-width:22px}
 .tb.del:hover{background:#3a2222;border-color:#6a3030}
-.lanes-wrap{overflow:auto;position:relative;background:#0d1116;cursor:crosshair;grid-row:2;grid-column:2}
+.lanes-wrap{overflow:auto;position:relative;background:#0d1116;cursor:crosshair;grid-row:3;grid-column:2}
 .lanes{position:relative;min-height:100%}
 .lane{height:120px;border-bottom:1px solid #1a222b;position:relative;box-sizing:border-box}
 .lane.on{background:rgba(61,186,138,.03)}
@@ -231,6 +237,11 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
   <div class="main">
     <div class="corner"></div>
     <div class="ruler-wrap"><canvas id="ruler" height="28"></canvas></div>
+    <div class="master-lab"><b>เพลงเต็ม</b><span>แบบ MUSE — เวฟต่อเนื่องทั้งเพลง · มิกเซอร์ด้านล่างปิดเครื่อง</span></div>
+    <div class="master-wrap" id="masterWrap">
+      <canvas id="masterWave" height="88"></canvas>
+      <div class="playhead" id="masterPh" title="ลากเพื่อเลื่อนหัวเล่น"></div>
+    </div>
     <div class="heads" id="trackHeads"></div>
     <div class="lanes-wrap" id="lanesWrap">
       <div class="lanes" id="lanes"><div class="playhead" id="playhead"></div></div>
@@ -391,8 +402,8 @@ async function startAi(){
       const bpmEl=document.getElementById('bpm');if(bpmEl)bpmEl.value=String(Math.round(g.bpm));
       document.getElementById('chkMetro').checked=true;studio.state.metro=true;
       applyRecipeMutes();
-      toast(`ได้แทร็ก 6 ส่วน · เติมช่วงที่ AI เงียบแล้ว · นอม ${Math.round(g.bpm)} BPM`);
-      $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · นอม ${Math.round(g.bpm)} BPM · gap-fill`;
+      toast(`พร้อมแบบ MUSE · เวฟเพลงเต็ม · มิกเซอร์ปิดเครื่อง · นอม ${Math.round(g.bpm)} BPM`);
+      $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · นอม ${Math.round(g.bpm)} BPM · mix−mute`;
     }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — เลือกสูตรแล้วกดส่ง');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
     if($('rAuto')&&$('rAuto').checked)setTimeout(()=>$('btnMakeData').click(),400);
   }catch(e){$('sAi').textContent='❌ '+(e.message||e)}
@@ -534,7 +545,7 @@ async function makeDataNow(){
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.26',ciBaked:ci||0};
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.27',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);

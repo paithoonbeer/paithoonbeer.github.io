@@ -221,8 +221,9 @@ export function createStudio(ui){
         const atk=0.08,rel=0.006;
         for(let i=0;i<n;i++){
           let aL=mix.L[i],aR=mR[i];
+          // Don't subtract "other" — demucs often dumps missing drums/guitar there
           for(const j of present){
-            if(j===k)continue;
+            if(j===k||j==='other')continue;
             aL-=src[j].L[i];aR-=src[j].R[i];
           }
           const sMag=Math.max(L[i]<0?-L[i]:L[i],R[i]<0?-R[i]:R[i]);
@@ -375,9 +376,27 @@ export function createStudio(ui){
     return Math.max(0.001,d);
   }
   function expectedRmsAt(playT){
+    // Mix-minus bed: expect energy from original mix (stems may be quiet mid-song)
+    if(state.mixBuf){
+      let mixStart=0;
+      for(const tr of state.tracks){
+        if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
+        if(tr.clips[0]){mixStart=tr.clips[0].start||0;break}
+      }
+      const local=playT-mixStart;
+      if(local>=0&&local<state.mixBuf.duration){
+        const ch=state.mixBuf.getChannelData(0),sr=state.mixBuf.sampleRate;
+        const i0=Math.floor(local*sr);
+        if(i0>=0&&i0<ch.length){
+          let s=0,cnt=0,n=Math.min(ch.length,i0+2048);
+          for(let i=i0;i<n;i+=8){const v=ch[i];s+=v*v;cnt++}
+          if(cnt)return Math.sqrt(s/cnt);
+        }
+      }
+    }
     let best=0;
     for(const tr of state.tracks){
-      if(tr.type!=='audio'||tr.mute)continue;
+      if(tr.type!=='audio'||tr.mute||tr.stem==='mix')continue;
       for(const c of tr.clips){
         const buf=state.buffers.get(c.buf);if(!buf)continue;
         const local=playT-c.start;
@@ -401,29 +420,65 @@ export function createStudio(ui){
     if(state.playing)return ac().currentTime-state.t0+state.offset;
     return state.offset;
   }
-  // One mixer for all audio clips — ConstantSource keeps ScriptProcessor alive on Chrome.
+  // Sample helper for pull mixer
+  function sampleJobAt(cl,t){
+    const local=t-cl.start;
+    if(local<0||local>=cl.dur)return null;
+    const idx=(cl.offset+local)*cl.sr;
+    const i0=idx|0;
+    if(i0<0||i0>=cl.len)return null;
+    const f=idx-i0;
+    const s0=cl.L[i0],s1=i0+1<cl.len?cl.L[i0+1]:s0;
+    const r0=cl.R[i0],r1=i0+1<cl.len?cl.R[i0+1]:r0;
+    return[(s0+(s1-s0)*f),(r0+(r1-r0)*f)];
+  }
+  // One mixer — when mixBuf exists (after AI), play like MUSE: full mix − muted stems.
+  // Never sum broken demucs lanes (that caused mid-song silence / flat graphs feeling "dead").
   function attachPullMixer(playFrom,masterBus){
     const a=ac();
     const jobs=[];
+    const mixMode=!!state.mixBuf;
+    // Bed: original mix (MUSE-style continuous song)
+    if(mixMode){
+      const buf=state.mixBuf;
+      const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+      // Align with first music clip start (count-in offset)
+      let mixStart=0;
+      for(const tr of state.tracks){
+        if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
+        if(tr.clips[0]){mixStart=tr.clips[0].start||0;break}
+      }
+      jobs.push({
+        tr:{mute:false,solo:false,vol:100,pan:0,stem:'__mixbed'},
+        L,R,sr:buf.sampleRate,start:mixStart,offset:0,dur:buf.duration,
+        gain:1,len:L.length,guide:false,role:'bed'
+      });
+    }
     for(const tr of state.tracks){
       if(tr.type!=='audio')continue;
+      // Skip mix lane (display-only) — bed already uses mixBuf
+      if(tr.stem==='mix')continue;
+      // In mix-minus mode skip unmuted demucs stems as additive sources (they'd double/gap)
+      const isGuide=tr.stem==='click'||tr.stem==='countin';
       for(const c of tr.clips||[]){
         const buf=state.buffers.get(c.buf);if(!buf)continue;
         const clipDur=clipAbsDur(c,buf);
         if(c.start+clipDur<=playFrom+1e-4)continue;
         const L=buf.getChannelData(0);
         const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+        let role='add';
+        if(mixMode&&!isGuide)role='sub'; // subtract when this stem should be silent
+        if(!mixMode)role='add';
         jobs.push({
           tr,L,R,sr:buf.sampleRate,start:c.start,offset:c.offset||0,dur:clipDur,
-          gain:c.gain||1,len:L.length,guide:tr.stem==='click'||tr.stem==='countin'
+          gain:c.gain||1,len:L.length,guide:isGuide,role
         });
       }
     }
     const keep=a.createConstantSource();keep.offset.value=0;
     try{keep.start()}catch(e){}
-    // inputCount=1 is required — (0,2) dies mid-song on Windows Chrome
     const sp=a.createScriptProcessor(2048,1,2);
-    const pull={from:playFrom,frame:0,alive:true,sp,keep};
+    const pull={from:playFrom,frame:0,alive:true,sp,keep,mixMode};
     state._pull=pull;
     const lrOn=()=>!!state.listenLR;
     const nomRight=()=>(state.nomSide||'R')!=='L';
@@ -435,35 +490,45 @@ export function createStudio(ui){
       const ctxSr=a.sampleRate,N=oL.length;
       const anySolo=state.tracks.some(t=>t.solo);
       const split=lrOn();
-      const musicIsL=nomRight(); // nom on R → music L
-      // MUST use pull.from (not closed-over playFrom) so scrubTo retargets audio live
+      const musicIsL=nomRight();
       const base=pull.from;
       for(let i=0;i<N;i++){
         const t=base+(pull.frame+i)/ctxSr;
         let mL=0,mR=0,gL=0,gR=0;
         for(let j=0;j<jobs.length;j++){
           const cl=jobs[j],tr=cl.tr;
+          const sm=sampleJobAt(cl,t);if(!sm)continue;
+          let [sL,sR]=sm;
+          if(cl.role==='bed'){
+            // Always include bed; stem mutes handled via subtract jobs
+            mL+=sL;mR+=sR;
+            continue;
+          }
+          if(cl.guide){
+            const silent=tr.mute||(anySolo&&!tr.solo);
+            if(silent)continue;
+            const vol=Math.max(0,(tr.vol||0)/100)*(cl.gain||1);
+            const pan=clamp(tr.pan||0,-1,1);
+            const pl=Math.cos((pan+1)*Math.PI/4),pr=Math.sin((pan+1)*Math.PI/4);
+            const xL=sL*vol*pl,xR=sR*vol*pr;
+            if(split){gL+=xL;gR+=xR}else{mL+=xL;mR+=xR}
+            continue;
+          }
+          if(cl.role==='sub'){
+            // Subtract stem when it should NOT be heard (mute, or not solo while others solo)
+            const shouldHear=!(tr.mute||(anySolo&&!tr.solo));
+            if(shouldHear)continue; // keep it in the bed
+            const vol=Math.max(0,(tr.vol||100)/100)*(cl.gain||1);
+            mL-=sL*vol;mR-=sR*vol;
+            continue;
+          }
+          // Legacy sum mode (no mixBuf)
           const silent=tr.mute||(anySolo&&!tr.solo);
           if(silent)continue;
-          const local=t-cl.start;
-          if(local<0||local>=cl.dur)continue;
-          const idx=(cl.offset+local)*cl.sr;
-          const i0=idx|0;
-          if(i0<0||i0>=cl.len)continue;
-          const f=idx-i0;
-          const s0=cl.L[i0],s1=i0+1<cl.len?cl.L[i0+1]:s0;
-          const r0=cl.R[i0],r1=i0+1<cl.len?cl.R[i0+1]:r0;
           const vol=Math.max(0,(tr.vol||0)/100)*(cl.gain||1);
           const pan=clamp(tr.pan||0,-1,1);
-          const sampleL=(s0+(s1-s0)*f)*vol;
-          const sampleR=(r0+(r1-r0)*f)*vol;
-          // equal-power pan
           const pl=Math.cos((pan+1)*Math.PI/4),pr=Math.sin((pan+1)*Math.PI/4);
-          const xL=sampleL*pl,xR=sampleR*pr;
-          if(split){
-            if(cl.guide){gL+=xL;gR+=xR}
-            else{mL+=xL;mR+=xR}
-          }else{mL+=xL;mR+=xR}
+          mL+=sL*vol*pl;mR+=sR*vol*pr;
         }
         if(split){
           const music=(mL+mR)*0.707,guide=(gL+gR)*0.707;
@@ -876,13 +941,12 @@ export function createStudio(ui){
 
   function renderArrange(opt){
     opt=opt||{};
-    // While playing, debounce full lane/canvas rebuild — wiping DOM mid-mix = stutter/freeze
+    // While playing: NEVER rebuild lanes/canvases (MUSE-smooth — any DOM wipe = stutter)
     if(state.playing&&!opt.force){
-      clearTimeout(state._arrDeb);
-      state._arrDeb=setTimeout(()=>{state._arrDeb=null;if(state.playing)renderArrange({force:true})},220);
       try{
         const lanes=$('lanes');
         if(lanes)lanes.querySelectorAll('.lane').forEach((el,i)=>el.classList.toggle('on',state.sel.track===i));
+        renderMasterWave();
       }catch(e){}
       return;
     }
@@ -939,6 +1003,55 @@ export function createStudio(ui){
     const totalH=Math.max(LANE_H,state.tracks.length*LANE_H);
     ph.style.height=totalH+'px';
     renderPlayhead(playheadT());
+    renderMasterWave();
+  }
+
+  // MUSE-style: one continuous full-song wave (always from mixBuf / loudest bed)
+  function renderMasterWave(){
+    const cv=$('masterWave');if(!cv)return;
+    const wrap=cv.parentElement;if(!wrap)return;
+    let buf=state.mixBuf;
+    if(!buf){
+      for(const tr of state.tracks){
+        if(tr.type!=='audio'||!tr.clips[0]||tr.stem==='click'||tr.stem==='countin')continue;
+        buf=state.buffers.get(tr.clips[0].buf);if(buf)break;
+      }
+    }
+    const W=Math.max(1200,Math.ceil((dur()+4)*state.pxPerSec));
+    const dpr=devicePixelRatio||1,h=wrap.clientHeight||72;
+    cv.style.width=W+'px';cv.width=Math.round(W*dpr);cv.height=Math.round(h*dpr);
+    const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
+    g.fillStyle='#0a0e14';g.fillRect(0,0,W,h);
+    if(!buf){g.fillStyle='#445';g.font='12px NotoThai,sans-serif';g.fillText('ยังไม่มีเพลง — ลากไฟล์แยก AI หรือนำเข้าช่องจากไฟล์',12,h/2+4);return}
+    let pk=state._mixPeaks;
+    if(!pk||state._mixPeaksFor!==buf){pk=peaksOf(buf);state._mixPeaks=pk;state._mixPeaksFor=buf}
+    const pairs=pk.length>=4&&pk.length%2===0;const bins=pairs?pk.length/2:pk.length;
+    const mid=h/2,pad=3;
+    let loc=0;
+    for(let x=0;x<W;x+=Math.max(1,(W/600)|0)){
+      const u=x/(W-1||1);const bi=Math.min(bins-1,Math.floor(u*bins));
+      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      if(mx>loc)loc=mx;
+    }
+    const amp=(mid-pad)*(loc>0.02&&loc<0.45?Math.min(0.75/loc,2.5):1);
+    g.beginPath();g.moveTo(0,mid);
+    for(let x=0;x<W;x++){
+      const u=x/(W-1||1);const bi=Math.min(bins-1,Math.floor(u*bins));
+      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      g.lineTo(x,mid-mx*amp);
+    }
+    for(let x=W-1;x>=0;x--){
+      const u=x/(W-1||1);const bi=Math.min(bins-1,Math.floor(u*bins));
+      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      g.lineTo(x,mid+mx*amp);
+    }
+    g.closePath();
+    g.fillStyle='rgba(61,186,138,.45)';g.fill();
+    g.strokeStyle='#3dba8a';g.lineWidth=1;g.stroke();
+    // playhead mark on master
+    const t=playheadT();
+    g.fillStyle='var(--play,#ff6b3d)';g.fillStyle='#ff6b3d';
+    g.fillRect(Math.max(0,t)*state.pxPerSec-1,0,2,h);
   }
 
   function drawClipWave(cv,clip,color,waveZoom){
@@ -994,7 +1107,9 @@ export function createStudio(ui){
   }
 
   function renderPlayhead(t){
-    const ph=$('playhead');if(!ph)return;ph.style.left=(Math.max(0,t)*state.pxPerSec)+'px';
+    const x=(Math.max(0,t)*state.pxPerSec)+'px';
+    const ph=$('playhead');if(ph)ph.style.left=x;
+    const mph=$('masterPh');if(mph)mph.style.left=x;
   }
 
   function eqLabel(v){v=+v||0;return (v>0?'+':'')+v}
@@ -1121,7 +1236,11 @@ export function createStudio(ui){
     $('chkLoop').onchange=e=>{state.loop=e.target.checked;renderArrange()};
     $('chkSnap').onchange=e=>state.snap=e.target.checked;
     $('bpm').onchange=e=>{mark();state.bpm=clamp(+e.target.value||120,40,240);renderArrange()};
-    $('zoom').oninput=e=>{state.pxPerSec=+e.target.value;renderArrange();renderPiano()};
+    $('zoom').oninput=e=>{
+      state.pxPerSec=+e.target.value;
+      if(state.playing){renderMasterWave();renderPlayhead(playheadT());return}
+      renderArrange();renderPiano();
+    };
     const nomVolEl=$('nomVol');
     if(nomVolEl){
       try{const nv=+localStorage.getItem('ssd-nomvol');if(nv>0){state.nomVol=nv;nomVolEl.value=String(nv)}}catch(e){}
@@ -1265,12 +1384,20 @@ export function createStudio(ui){
       // Click near the red line → scrub, never move the clip under it
       if(nearPlayhead(e.clientX)&&!e.target.closest('.hndl')){startPhDrag(e);return}
     });
-    // Ruler drag/click seeks (same as scrubbing the red line)
+    // Ruler / master-wave drag/click seeks (MUSE-style main wave)
     const rulerWrap=document.querySelector('.ruler-wrap');
     if(rulerWrap){
       rulerWrap.style.cursor='ew-resize';
       rulerWrap.addEventListener('pointerdown',e=>{
         if(e.button!=null&&e.button!==0)return;
+        startPhDrag(e);
+      });
+    }
+    const masterWrap=$('masterWrap');
+    if(masterWrap){
+      masterWrap.addEventListener('pointerdown',e=>{
+        if(e.button!=null&&e.button!==0)return;
+        if(e.target&&e.target.id==='masterPh'){startPhDrag(e);return}
         startPhDrag(e);
       });
     }
@@ -1772,11 +1899,8 @@ export function createStudio(ui){
       ct.mute=!state.metro;
       ct.clips=[{id:uid(),buf:cid,start:ciSec,offset:0,dur:click.duration,gain:1,peaks:peaksOf(click),name:'click'}];
       renderArrange();renderTracks();renderMixer();
-      // Re-attach mixer once so new click buffer is heard without killing transport
-      if(state.playing){
-        const at=playheadT();
-        softReseed(at);
-      }
+      // Must reseed so new click buffer enters the mixer (once per nudge — not every menu)
+      if(state.playing)softReseed(playheadT());
     }catch(e){}
     return state.t0;
   }
@@ -2161,8 +2285,14 @@ export function createStudio(ui){
       // Preload spoken one–two–three–four for Data count-in
       try{loadCiVoices()}catch(e){}
       // scroll sync: track headers follow the lane vertical scroll
-      try{const wrap=$('lanesWrap'),heads=$('trackHeads');
-        if(wrap&&heads)wrap.addEventListener('scroll',()=>{heads.scrollTop=wrap.scrollTop},{passive:true})}catch(e){}
+      try{
+        const wrap=$('lanesWrap'),heads=$('trackHeads'),mw=$('masterWrap'),rw=document.querySelector('.ruler-wrap');
+        if(wrap&&heads)wrap.addEventListener('scroll',()=>{
+          heads.scrollTop=wrap.scrollTop;
+          if(mw)mw.scrollLeft=wrap.scrollLeft;
+          if(rw)rw.scrollLeft=wrap.scrollLeft;
+        },{passive:true});
+      }catch(e){}
       // restore last saved project from IndexedDB when present; else empty project
       let restored=false;
       try{
