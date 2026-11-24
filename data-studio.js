@@ -193,7 +193,7 @@ export function createStudio(ui){
     cancelAnimationFrame(state._raf);
     if(state._watch){clearInterval(state._watch);state._watch=null}
     if(state.playing)state.offset=clamp(ac().currentTime-state.t0+state.offset,0,dur());
-    for(const n of state.nodes){try{n.onended=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
+    for(const n of state.nodes){try{n.onended=null;n.onaudioprocess=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
     try{state._meter?.disconnect()}catch(e){}
     state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;
@@ -220,35 +220,18 @@ export function createStudio(ui){
     }
   }
 
-  // Playback engine notes (Chromium):
-  // 1) One long BufferSource over a multi-minute buffer can go silent ~60–90s
-  //    while currentTime (playhead) keeps advancing — classic Windows Chrome bug.
-  // 2) Even short slices that still point into a huge AudioBuffer via start(when,offset)
-  //    can fail the same way on some GPUs/drivers. Fix: COPY each slice into a fresh
-  //    short AudioBuffer and start() it with no offset.
-  // 3) Soft-reseed the whole graph every ~45s and on silence detect so a dead audio
-  //    thread never leaves the playhead walking alone.
-  const LOOKAHEAD=8, SLICE=2, RESEED_EVERY=45;
+  // Playback engine (Data only):
+  // Chromium AudioBufferSourceNode on multi-minute buffers goes silent ~60–90s while
+  // currentTime keeps moving. Slice/copy/reseed (1.0.16–1.0.18) still failed on the
+  // user's machine. Fix: never use BufferSource for clips — pull PCM every quantum
+  // via ScriptProcessor (zero-copy from existing AudioBuffers) or AudioWorklet.
+  const RESEED_EVERY=90; // safety net only; pull-engine should not need frequent reseed
   function clipAbsDur(clip,buf){
     if(!buf)return Math.max(0.001,clip.dur||0);
     const d=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
     if((clip.dur||0)<buf.duration-0.05)clip.dur=buf.duration-(clip.offset||0);
     return Math.max(0.001,d);
   }
-  // Copy a short window out of a (possibly huge) buffer so BufferSource never
-  // seeks deep into multi-minute PCM — this is the durable Chromium workaround.
-  function copyAudioSlice(buf,offSec,durSec){
-    const a=ac();
-    const sr=buf.sampleRate||a.sampleRate;
-    const i0=Math.max(0,Math.min(buf.length-1,Math.floor((offSec||0)*sr)));
-    const n=Math.max(1,Math.min(Math.floor(Math.max(0.001,durSec)*sr), buf.length-i0));
-    const out=a.createBuffer(buf.numberOfChannels,n,sr);
-    for(let c=0;c<buf.numberOfChannels;c++){
-      out.getChannelData(c).set(buf.getChannelData(c).subarray(i0,i0+n));
-    }
-    return out;
-  }
-  // Quick RMS at a timeline position — used so silence-watchdog ignores true rests.
   function expectedRmsAt(playT){
     let best=0;
     for(const tr of state.tracks){
@@ -267,71 +250,62 @@ export function createStudio(ui){
     }
     return best;
   }
-  function scheduleAudioClip(tr,clip,chain,when,playFrom){
-    if(!state._sched)state._sched=[];
-    const buf=state.buffers.get(clip.buf);if(!buf)return;
-    const clipDur=clipAbsDur(clip,buf);
-    if(clip.start+clipDur<=playFrom+1e-4)return;
-    state._sched.push({
-      clip,chain,buf,clipDur,playFrom,anchor:when,
-      nextLocal:Math.max(0,playFrom-clip.start)
-    });
-  }
-  function pumpSchedule(){
-    if(!state.playing||!state._sched||!state._sched.length)return;
+  // Per-track continuous PCM pull — reads clip AudioBuffers in place (no BufferSource).
+  function attachPullTrack(tr,chain,playFrom){
     const a=ac();
-    const now=a.currentTime;
-    const playT=now-state.t0+state.offset;
-    const needUntil=playT+LOOKAHEAD;
-    for(const job of state._sched){
-      const {clip,chain,buf,clipDur,anchor,playFrom}=job;
-      while(job.nextLocal<clipDur-1e-4){
-        const local0=job.nextLocal;
-        const absStart=clip.start+local0;
-        if(absStart>=needUntil)break;
-        const step=Math.min(SLICE, clipDur-local0);
-        const maxOff=Math.max(0,buf.duration-1e-4);
-        let off=clamp((clip.offset||0)+local0,0,maxOff);
-        let slice=Math.min(step, buf.duration-off);
-        if(!(slice>0.001)){job.nextLocal=clipDur;break}
-        let tWhen=anchor+(absStart-playFrom);
-        // Late: play remaining of this timeline step from "now" (never skip a hole)
-        if(tWhen<now-0.015){
-          const late=now-tWhen;
-          if(late>=slice-0.001){job.nextLocal=local0+step;continue}
-          off=clamp(off+late,0,maxOff);
-          slice=Math.min(slice-late, buf.duration-off);
-          tWhen=now+0.01;
-          if(!(slice>0.001)){job.nextLocal=local0+step;continue}
-        }
-        // IMPORTANT: play a copied short buffer (offset=0), not the giant source buffer
-        let playBuf;
-        try{playBuf=copyAudioSlice(buf,off,slice)}catch(e){console.warn('slice copy',e);job.nextLocal=clipDur;break}
-        const src=a.createBufferSource();src.buffer=playBuf;
-        const g=a.createGain();g.gain.value=clip.gain||1;
-        src.connect(g);g.connect(chain.input);
-        try{
-          src.start(tWhen);
-          state.nodes.push(src);
-          src.onended=()=>{if(state.playing)try{pumpSchedule()}catch(e){}};
-        }catch(e){console.warn('clip schedule',e);job.nextLocal=clipDur;break}
-        job.nextLocal=local0+step;
-      }
+    const jobs=[];
+    for(const c of tr.clips||[]){
+      const buf=state.buffers.get(c.buf);if(!buf)continue;
+      const clipDur=clipAbsDur(c,buf);
+      if(c.start+clipDur<=playFrom+1e-4)continue;
+      const L=buf.getChannelData(0);
+      const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+      jobs.push({L,R,sr:buf.sampleRate,start:c.start,offset:c.offset||0,dur:clipDur,gain:c.gain||1,len:L.length});
     }
+    if(!jobs.length)return;
+    const sp=a.createScriptProcessor(4096,0,2);
+    let frame=0;
+    sp.onaudioprocess=e=>{
+      if(!state.playing)return;
+      const oL=e.outputBuffer.getChannelData(0);
+      const oR=e.outputBuffer.getChannelData(1);
+      oL.fill(0);oR.fill(0);
+      const ctxSr=a.sampleRate,N=oL.length;
+      for(let i=0;i<N;i++){
+        const t=playFrom+(frame+i)/ctxSr;
+        let sL=0,sR=0;
+        for(let j=0;j<jobs.length;j++){
+          const cl=jobs[j];
+          const local=t-cl.start;
+          if(local<0||local>=cl.dur)continue;
+          const idx=(cl.offset+local)*cl.sr;
+          const i0=idx|0;
+          if(i0<0||i0>=cl.len)continue;
+          const f=idx-i0;
+          const l0=cl.L[i0],l1=i0+1<cl.len?cl.L[i0+1]:l0;
+          const r0=cl.R[i0],r1=i0+1<cl.len?cl.R[i0+1]:r0;
+          const g=cl.gain;
+          sL+=(l0+(l1-l0)*f)*g;
+          sR+=(r0+(r1-r0)*f)*g;
+        }
+        oL[i]=sL;oR[i]=sR;
+      }
+      frame+=N;
+    };
+    sp.connect(chain.input);
+    state.nodes.push(sp);
   }
-  // Rebuild the audio graph from the current playhead without a user-visible stop.
-  // Defeats Chromium audio-thread death that leaves currentTime advancing alone.
   function softReseed(at){
     if(!state.playing||state._reseeding)return;
     state._reseeding=true;
     try{
       cancelAnimationFrame(state._raf);
       if(state._watch){clearInterval(state._watch);state._watch=null}
-      for(const n of state.nodes){try{n.onended=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
+      for(const n of state.nodes){try{n.onended=null;n.stop?.();n.onaudioprocess=null}catch(e){}try{n.disconnect?.()}catch(e){}}
       for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
       state.nodes=[];state.fx=[];state.live=null;
       state._midi=null;state._metroJob=null;state._sched=null;
-      state.playing=false; // so startPlay→stopPlay won't rewrite offset
+      state.playing=false;
       startPlay(at,{reseed:true});
     }finally{state._reseeding=false}
   }
@@ -341,7 +315,6 @@ export function createStudio(ui){
     if(state._reseedGuard && a.currentTime<state._reseedGuard)return;
     const playT=a.currentTime-state.t0+state.offset;
     if(playT<1||playT>=dur()-0.5)return;
-    // Proactive reseed before the typical ~60–90s Chromium death window
     if(playT-(state._lastReseed||0)>=RESEED_EVERY){softReseed(playT);return}
     const an=state._meter;
     if(!an||!state._meterTd)return;
@@ -349,7 +322,6 @@ export function createStudio(ui){
     let peak=0;const td=state._meterTd;
     for(let i=0;i<td.length;i++){const v=td[i]-128;if(v>peak)peak=v;else if(-v>peak)peak=-v}
     if(peak>=3){state._silentMs=0;return}
-    // Output is flat — only recover if the project actually has energy here
     const expect=expectedRmsAt(playT);
     if(expect<0.01){state._silentMs=0;return}
     state._silentMs=(state._silentMs||0)+250;
@@ -414,10 +386,10 @@ export function createStudio(ui){
     }
     state.live=new Map();
     state._midi=[];
-    state._sched=[];
+    state._sched=null;
     state._silentMs=0;
     state._lastReseed=state.offset;
-    state._reseedGuard=a.currentTime+1.2; // ignore silence watchdog while graph primes
+    state._reseedGuard=a.currentTime+1.2;
     const master=a.createGain();master.gain.value=1;
     const merge=a.createGain();
     const revGain=a.createGain();revGain.gain.value=1;
@@ -425,7 +397,6 @@ export function createStudio(ui){
     if(!state._imp){const len=a.sampleRate*1.2,imp=a.createBuffer(2,len,a.sampleRate);for(let c=0;c<2;c++){const d=imp.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.8)}state._imp=imp}
     conv.buffer=state._imp;
     revGain.connect(conv);conv.connect(master);
-    // Dual-mono listen (like เด๋อ): music → one ear, nom/count-in → the other
     const lrOn=!!state.listenLR;
     const nomRight=(state.nomSide||'R')!=='L';
     const musicCh=nomRight?0:1, nomCh=nomRight?1:0;
@@ -436,7 +407,6 @@ export function createStudio(ui){
     }else{
       merge.connect(master);
     }
-    // Meter tap before destination — silence watchdog uses this
     const meter=a.createAnalyser();meter.fftSize=2048;meter.smoothingTimeConstant=0.2;
     master.connect(meter);meter.connect(a.destination);
     state._meter=meter;state._meterTd=new Uint8Array(meter.fftSize);
@@ -446,7 +416,6 @@ export function createStudio(ui){
     state.t0=when;state.playing=true;
     state.tracks.forEach(tr=>{
       const chain=makeTrackChain(tr);
-      // vol lives on muteG (see applyLiveMix); chain input gain stays unity
       try{chain.input.gain.value=1}catch(e){}
       const muteG=a.createGain();
       const silent=tr.mute||(anySolo&&!tr.solo);
@@ -461,7 +430,7 @@ export function createStudio(ui){
       if(chain.conv)chain.conv.connect(revGain);
       state.fx.push(chain);
       state.live.set(tr.id,{muteG,volG:chain.input,lo:chain.lo,mid:chain.mid,hi:chain.hi});
-      if(tr.type==='audio')tr.clips.forEach(c=>scheduleAudioClip(tr,c,chain,when,state.offset));
+      if(tr.type==='audio')attachPullTrack(tr,chain,state.offset);
       else scheduleMidi(tr,chain,when,state.offset);
     });
     if(state.metro){
@@ -473,9 +442,7 @@ export function createStudio(ui){
       }
       else scheduleMetro(when,state.offset);
     }
-    pumpSchedule();
-    // Watchdog: refill slices + health check (silence → soft reseed)
-    state._watch=setInterval(()=>{if(state.playing){try{pumpSchedule();pumpMidi();pumpMetro();watchAudioHealth()}catch(e){}}},250);
+    state._watch=setInterval(()=>{if(state.playing){try{pumpMidi();pumpMetro();watchAudioHealth()}catch(e){}}},250);
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
@@ -524,7 +491,7 @@ export function createStudio(ui){
     let t=ac().currentTime-state.t0+state.offset;
     if(state.loop&&t>=state.loopB){startPlay(state.loopA);return}
     if(t>=dur()+0.05){stopPlay();state.offset=0;ui.onTransport?.(state);renderArrange();return}
-    try{pumpSchedule();pumpMidi();pumpMetro()}catch(e){}
+    try{pumpMidi();pumpMetro()}catch(e){}
     ui.onTransport?.(state);renderPlayhead(t);
     state._raf=requestAnimationFrame(tick);
   }
