@@ -213,11 +213,12 @@ export function createStudio(ui){
           if(a>peak)peak=a;if(b>peak)peak=b;
         }
         // Threshold: relative to this stem's peak, or mix if stem nearly empty
-        const thr=Math.max((peak>1e-4?peak:mixPeak)*0.045,mixPeak*0.012,0.006);
+        // More aggressive than before — catch demucs mid-song dropouts (user screenshots)
+        const thr=Math.max((peak>1e-4?peak:mixPeak)*0.08,mixPeak*0.02,0.01);
         const oL=new Float32Array(n),oR=new Float32Array(n);
         const iL=new Float32Array(n),iR=new Float32Array(n);
         let env=0;
-        const atk=0.05,rel=0.004;
+        const atk=0.08,rel=0.006;
         for(let i=0;i<n;i++){
           let aL=mix.L[i],aR=mR[i];
           for(const j of present){
@@ -228,9 +229,9 @@ export function createStudio(ui){
           const aMag=Math.max(aL<0?-aL:aL,aR<0?-aR:aR);
           env+=(sMag>env?atk:rel)*(sMag-env);
           let g=0;
-          if(env<thr&&aMag>thr*0.7){
-            g=Math.min(1,(thr-env)/Math.max(thr,1e-6))*Math.min(1,aMag/(thr*2.5));
-            if(k==='vocals')g*=0.55;
+          if(env<thr&&aMag>thr*0.45){
+            g=Math.min(1,(thr-env)/Math.max(thr,1e-6))*Math.min(1,aMag/(thr*1.6));
+            if(k==='vocals')g*=0.7;
           }
           const addL=aL*g,addR=aR*g;
           iL[i]=addL;iR[i]=addR;
@@ -268,6 +269,13 @@ export function createStudio(ui){
         state.mixBuf=bufFromLR(mix.L,R,sr);
       }
     }catch(e){state.mixBuf=null}
+    // Always show full-song reference (unmuted optional) — not forced through demucs gaps
+    if(state.mixBuf){
+      const t=addAudioTrack('ต้นฉบับ (เต็มเพลง)','#85909b');
+      t.stem='mix';t.mute=true;t.vol=100;
+      const id=uid();state.buffers.set(id,state.mixBuf);
+      t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:state.mixBuf.duration,gain:1,peaks:peaksOf(state.mixBuf),name:'mix'});
+    }
     const layout=[
       {key:'drums',name:'กลอง',ch:by.drums,color:COLS[0]},
       {key:'bass',name:'เบส',ch:by.bass,color:COLS[1]},
@@ -324,6 +332,16 @@ export function createStudio(ui){
     state._midi=null;state._metroJob=null;state._sched=null;
     state._meter=null;state._meterTd=null;state._silentMs=0;state._master=null;
     ui.onTransport?.(state);
+    // Recipe/BPM changes while playing were deferred — apply now
+    if(state._guidesDirty){
+      state._guidesDirty=false;
+      try{
+        const ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
+        const feel=(typeof document!=='undefined'&&document.getElementById('rFeel')?.value)||'normal';
+        const flourish=!!(typeof document!=='undefined'&&document.getElementById('rFlourish')?.checked);
+        syncGuideTracks({bpm:state.bpm,t0:state.t0||0,ci,feel,flourish,metroOn:!!state.metro,preview:true});
+      }catch(e){}
+    }
   }
   // Live mute/solo/vol — pull mixer reads tr.mute/vol/solo each quantum (no GainNode lag).
   function applyLiveMix(){
@@ -856,7 +874,19 @@ export function createStudio(ui){
   }
   function escAttr(s){return String(s??'').replace(/[&"<>]/g,c=>({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]))}
 
-  function renderArrange(){
+  function renderArrange(opt){
+    opt=opt||{};
+    // While playing, debounce full lane/canvas rebuild — wiping DOM mid-mix = stutter/freeze
+    if(state.playing&&!opt.force){
+      clearTimeout(state._arrDeb);
+      state._arrDeb=setTimeout(()=>{state._arrDeb=null;if(state.playing)renderArrange({force:true})},220);
+      try{
+        const lanes=$('lanes');
+        if(lanes)lanes.querySelectorAll('.lane').forEach((el,i)=>el.classList.toggle('on',state.sel.track===i));
+      }catch(e){}
+      return;
+    }
+    clearTimeout(state._arrDeb);state._arrDeb=null;
     const lanes=$('lanes'),ruler=$('ruler');if(!lanes)return;
     const W=Math.max(1200,Math.ceil((dur()+4)*state.pxPerSec));
     lanes.style.width=W+'px';
@@ -1127,7 +1157,16 @@ export function createStudio(ui){
       const wz=e.target.closest('[data-wz]');if(wz){setTrackWaveZoom(+wz.dataset.wz,+wz.dataset.d);return}
       const m=e.target.closest('[data-m]');if(m){mark();const i=+m.dataset.m;state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
-      const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){state.sel.track=+th.dataset.i;renderAll()}
+      const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){
+        state.sel.track=+th.dataset.i;
+        // Don't renderAll while playing — selection class only
+        renderTracks();
+        try{
+          const lanes=$('lanes');
+          if(lanes)lanes.querySelectorAll('.lane').forEach((el,i)=>el.classList.toggle('on',state.sel.track===i));
+        }catch(e){}
+        renderPiano();
+      }
     };
     const lrEl=$('chkListenLR');
     if(lrEl){
@@ -1138,7 +1177,7 @@ export function createStudio(ui){
         // pick nom side from recipe if present
         const nomSel=document.getElementById('rNom');
         if(nomSel)state.nomSide=nomSel.value==='L'?'L':'R';
-        if(state.playing){const at=playheadT();startPlay(at)}
+        // Mixer reads listenLR live — never restart playback
       };
     }
     const nomSel=document.getElementById('rNom');
@@ -1146,7 +1185,7 @@ export function createStudio(ui){
       state.nomSide=nomSel.value==='L'?'L':'R';
       nomSel.addEventListener('change',()=>{
         state.nomSide=nomSel.value==='L'?'L':'R';
-        if(state.listenLR&&state.playing){const at=playheadT();startPlay(at)}
+        // Live flag only — startPlay here caused freeze on every menu change
       });
     }
     $('trackHeads').onchange=e=>{const rn=e.target.closest('[data-rn]');if(rn){state.tracks[+rn.dataset.rn].name=rn.value;renderMixer()}};
@@ -1521,10 +1560,11 @@ export function createStudio(ui){
     const set=new Set(muteKeys||[]);
     for(const tr of state.tracks){
       if(tr.type!=='audio')continue;
-      if(tr.stem==='click'||tr.stem==='countin')continue;
+      if(tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
       tr.mute=!!(tr.stem&&set.has(tr.stem));
     }
-    applyLiveMix();renderAll();
+    // Light UI only — renderAll during play freezes ScriptProcessor audio
+    applyLiveMix();renderTracks();renderMixer();
   }
 
   async function renderTrackWav(tr,sr,opt){
@@ -1561,7 +1601,7 @@ export function createStudio(ui){
     sr=sr||nativeSr();
     const pad=Math.max(0,+padLead||0);
     const length=Math.max(1,Math.ceil((totalDur||dur())*sr));
-    const mutedMusic=state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.clips.length);
+    const mutedMusic=state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
     const useMixMinus=!!(state.mixBuf&&mutedMusic.length&&mutedMusic.length<6);
     const off=new OfflineAudioContext(1,length,sr);
     const merge=off.createGain();merge.gain.value=1;merge.connect(off.destination);
@@ -1588,7 +1628,7 @@ export function createStudio(ui){
     }else{
       for(const tr of tracks){
         if(!tr||tr.type!=='audio'||tr.mute||!tr.clips.length)continue;
-        if(tr.stem==='click'||tr.stem==='countin')continue;
+        if(tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
         for(const c of tr.clips){
           const buf=state.buffers.get(c.buf);if(!buf)continue;
           const src=off.createBufferSource();src.buffer=buf;
@@ -2033,9 +2073,10 @@ export function createStudio(ui){
   function setNomAudible(on){
     state.metro=!!on;
     let ck=state.tracks.find(t=>t.stem==='click');
-    if(!ck&&on&&state.tracks.some(t=>t.clips&&t.clips.length&&t.stem&&t.stem!=='countin')){
-      try{syncGuideTracks({metroOn:true,ci:0,preview:true})}catch(e){}
-      ck=state.tracks.find(t=>t.stem==='click');
+    if(!ck&&on&&state.tracks.some(t=>t.clips&&t.clips.length&&t.stem&&t.stem!=='countin'&&t.stem!=='mix')){
+      // Build click without ripping the mix while playing
+      if(state.playing){try{nudgeNom(0);ck=state.tracks.find(t=>t.stem==='click')}catch(e){}}
+      else{try{syncGuideTracks({metroOn:true,ci:0,preview:true});ck=state.tracks.find(t=>t.stem==='click')}catch(e){}}
     }
     if(ck){ck.mute=!on;applyLiveMix();renderTracks();renderMixer()}
     const el=typeof document!=='undefined'&&document.getElementById('chkMetro');
