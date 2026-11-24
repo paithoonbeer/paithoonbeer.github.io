@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.22">
+<meta name="bp-data" content="1.0.23">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -84,8 +84,8 @@ button,input{font:inherit;color:inherit}
 .hndl{position:absolute;top:0;bottom:0;width:6px;background:transparent;cursor:ew-resize}
 .hndl.L{left:0}.hndl.R{right:0}
 .mblock{position:absolute;height:8px;border-radius:2px;opacity:.85}
-.playhead{position:absolute;top:0;left:0;width:10px;margin-left:-4px;height:100%;background:transparent;z-index:6;pointer-events:auto;cursor:ew-resize;touch-action:none}
-.playhead::before{content:'';position:absolute;left:4px;top:0;bottom:0;width:2px;background:var(--play);box-shadow:0 0 8px rgba(255,107,61,.5);pointer-events:none}
+.playhead{position:absolute;top:0;left:0;width:24px;margin-left:-11px;height:100%;background:transparent;z-index:8;pointer-events:auto;cursor:ew-resize;touch-action:none}
+.playhead::before{content:'';position:absolute;left:11px;top:0;bottom:0;width:2px;background:var(--play);box-shadow:0 0 8px rgba(255,107,61,.5);pointer-events:none}
 .mixer-wrap{grid-column:1/-1;border-top:1px solid var(--line);background:#101419;display:flex;flex-direction:column;min-height:0}
 .mixer-fold{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:4px 10px;border:0;border-bottom:1px solid var(--line);background:#151a21;color:var(--mut);cursor:pointer;font:650 12px NotoThai,system-ui,sans-serif;text-align:left}
 .mixer-fold:hover{color:var(--tx);background:#1a222c}
@@ -382,17 +382,15 @@ async function startAi(){
       sampleRate:sr,
       mix:{L:Float32Array.from(buf.getChannelData(0)),R:buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):null}
     });
-    // ล็อก BPM จากกลอง หรือสเต็มดังสุดถ้ากลองว่าง + นับเข้าพูด
+    // จับนอมอัตโนมัติเหมือนเว็บ SetSod — ล็อก BPM+t0 จากมิกซ์ทั้งเพลง แล้วเปิดคลิกนอม
     try{
       await studio.loadCiVoices();
-      const g=studio.detectBeatGrid('drums');
-      studio.state.bpm=g.bpm;studio.state.t0=g.t0;
+      const g=studio.relockBeat();
       const bpmEl=document.getElementById('bpm');if(bpmEl)bpmEl.value=String(Math.round(g.bpm));
       document.getElementById('chkMetro').checked=true;studio.state.metro=true;
-      refreshGuides();
       applyRecipeMutes();
-      toast(`ได้แทร็ก 6 ส่วน · ${fmtMmSs(d.outSec||secIn)} · ${g.bpm} BPM · กีตาร์เลนถูกต้อง`);
-      $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · ${g.bpm} BPM`;
+      toast(`ได้แทร็ก 6 ส่วน · ${fmtMmSs(d.outSec||secIn)} · นอมล็อก ${Math.round(g.bpm)} BPM อัตโนมัติ`);
+      $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · นอม ${Math.round(g.bpm)} BPM`;
     }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — เลือกสูตรแล้วกดส่ง');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
     if($('rAuto')&&$('rAuto').checked)setTimeout(()=>$('btnMakeData').click(),400);
   }catch(e){$('sAi').textContent='❌ '+(e.message||e)}
@@ -526,7 +524,7 @@ async function makeDataNow(){
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.22',ciBaked:ci||0};
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.23',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);

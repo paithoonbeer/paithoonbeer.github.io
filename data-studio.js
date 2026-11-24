@@ -85,14 +85,15 @@ export function createStudio(ui){
     return await ac().decodeAudioData(ab.slice(0));
   }
   function putBuf(buf){const id=uid();state.buffers.set(id,buf);return id}
-  // denser min/max + RMS peaks so mid-song quiet sections stay visible (not a flat hairline).
-  // Auto-normalize quiet stems; true digital silence stays flat.
+  // denser min/max + RMS peaks. Per-window local gain so mid-song quiet parts
+  // still draw body (global peak alone made post-AI stems look like a flat hairline).
+  // True digital silence (near-zero window) stays flat.
   function peaksOf(buf,bins){
     const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
     const n=L.length;
-    const nb=Math.max(1200,Math.min(bins||Math.ceil(buf.duration*500),16000));
-    const step=Math.max(1,Math.floor(n/nb)),out=new Float32Array(Math.ceil(n/step)*2);
-    let peak=0;
+    const nb=Math.max(1600,Math.min(bins||Math.ceil(buf.duration*600),20000));
+    const step=Math.max(1,Math.floor(n/nb)),nPairs=Math.ceil(n/step);
+    const out=new Float32Array(nPairs*2);
     for(let i=0,o=0;i<n;i+=step,o+=2){
       let mn=1,mx=-1,ss=0,cnt=0;const e=Math.min(n,i+step);
       for(let j=i;j<e;j+=2){
@@ -100,17 +101,60 @@ export function createStudio(ui){
         if(v<mn)mn=v;if(v>mx)mx=v;ss+=v*v;cnt++;
       }
       if(mn>mx){mn=0;mx=0}
-      // Blend peak with RMS so sustained quiet notes still draw body
       const rms=cnt?Math.sqrt(ss/cnt):0;
-      const span=Math.max(Math.abs(mn),Math.abs(mx),rms*1.6);
+      const span=Math.max(Math.abs(mn),Math.abs(mx),rms*1.8);
       out[o]=-span;out[o+1]=span;
-      if(span>peak)peak=span;
     }
-    if(peak>1e-4&&peak<0.28){
-      const g=Math.min(0.9/peak,14);
-      for(let i=0;i<out.length;i++)out[i]=clamp(out[i]*g,-1,1);
+    // Sliding local normalize (~0.6s windows) — quiet mid sections get their own gain
+    const win=Math.max(4,Math.round(0.6*buf.sampleRate/step));
+    const scaled=new Float32Array(out.length);
+    for(let p=0;p<nPairs;p++){
+      let loc=0;const a=Math.max(0,p-win),b=Math.min(nPairs-1,p+win);
+      for(let k=a;k<=b;k++){
+        const s=Math.max(Math.abs(out[k*2]),Math.abs(out[k*2+1]));
+        if(s>loc)loc=s;
+      }
+      const g=(loc>1e-5&&loc<0.45)?Math.min(0.92/loc,16):1;
+      scaled[p*2]=clamp(out[p*2]*g,-1,1);
+      scaled[p*2+1]=clamp(out[p*2+1]*g,-1,1);
     }
-    return out;
+    return scaled;
+  }
+  // Peak-normalize a stereo LR pair so quiet demucs stems aren't inaudible
+  function peakNormLR(ch,target){
+    if(!ch||!ch.L)return ch;
+    target=target==null?0.85:target;
+    const n=ch.L.length,R=ch.R&&ch.R.length===n?ch.R:ch.L;
+    let peak=0;const step=Math.max(1,(n/250000)|0);
+    for(let i=0;i<n;i+=step){
+      const a=ch.L[i]<0?-ch.L[i]:ch.L[i],b=R[i]<0?-R[i]:R[i];
+      if(a>peak)peak=a;if(b>peak)peak=b;
+    }
+    if(!(peak>1e-5)||peak>=0.55)return ch;
+    const g=Math.min(target/peak,10);
+    const oL=new Float32Array(n),oR=new Float32Array(n);
+    for(let i=0;i<n;i++){oL[i]=clamp(ch.L[i]*g,-1,1);oR[i]=clamp(R[i]*g,-1,1)}
+    return{L:oL,R:oR};
+  }
+  // Fold mix−Σstems residual into "other" so energy demucs dropped mid-song isn't lost
+  function foldResidualIntoOther(by,mix){
+    try{
+      if(!mix||!mix.L||!by)return;
+      const n=mix.L.length;const keys=['drums','bass','other','vocals','guitar','piano'];
+      if(!by.other)by.other={L:new Float32Array(n),R:new Float32Array(n)};
+      const oL=by.other.L,oR=by.other.R&&by.other.R.length===n?by.other.R:oL;
+      const mR=mix.R&&mix.R.length===n?mix.R:mix.L;
+      for(let i=0;i<n;i++){
+        let sL=mix.L[i],sR=mR[i];
+        for(const k of keys){
+          const ch=by[k];if(!ch||!ch.L||ch.L.length!==n)continue;
+          sL-=ch.L[i]||0;sR-=(ch.R&&ch.R[i])||0;
+        }
+        // only add meaningful residual (avoid doubling noise floor)
+        if((sL*sL+sR*sR)>1e-8){oL[i]=clamp(oL[i]+sL,-1,1);if(oR!==oL)oR[i]=clamp(oR[i]+sR,-1,1)}
+      }
+      by.other={L:oL,R:oR===oL?oL:oR};
+    }catch(e){}
   }
 
   function importAudioToTrack(trackIdx,file,atTime){
@@ -163,6 +207,9 @@ export function createStudio(ui){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
     fillQuietBass(by,mix);
+    foldResidualIntoOther(by,mix);
+    // Peak-normalize each stem — demucs often leaves usable but quiet lanes that look/sound empty
+    for(const k of Object.keys(by))by[k]=peakNormLR(by[k],0.88);
     const sr=sampleRate||44100;
     // Keep original mix — mix-minus muted stems beats summing demucs parts for clean beds
     state.mixBuf=null;
@@ -319,8 +366,10 @@ export function createStudio(ui){
       const anySolo=state.tracks.some(t=>t.solo);
       const split=lrOn();
       const musicIsL=nomRight(); // nom on R → music L
+      // MUST use pull.from (not closed-over playFrom) so scrubTo retargets audio live
+      const base=pull.from;
       for(let i=0;i<N;i++){
-        const t=playFrom+(pull.frame+i)/ctxSr;
+        const t=base+(pull.frame+i)/ctxSr;
         let mL=0,mR=0,gL=0,gR=0;
         for(let j=0;j<jobs.length;j++){
           const cl=jobs[j],tr=cl.tr;
@@ -811,44 +860,50 @@ export function createStudio(ui){
   }
 
   function drawClipWave(cv,clip,color,waveZoom){
-    const dpr=devicePixelRatio||1,w=cv.parentElement.clientWidth,h=cv.parentElement.clientHeight||100;
+    const parent=cv.parentElement;if(!parent)return;
+    const dpr=devicePixelRatio||1,w=parent.clientWidth||Math.round(clip.dur*state.pxPerSec),h=parent.clientHeight||100;
     if(w<2)return;cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);cv.style.width=w+'px';cv.style.height=h+'px';
     const g=cv.getContext('2d');g.setTransform(dpr,0,0,dpr,0,0);
     g.clearRect(0,0,w,h);
-    const pk=clip.peaks;if(!pk||!pk.length)return;
+    let pk=clip.peaks;
+    if(!pk||!pk.length){
+      const buf0=state.buffers.get(clip.buf);
+      if(buf0){pk=peaksOf(buf0);clip.peaks=pk}
+    }
+    if(!pk||!pk.length)return;
     const z=clamp(+(waveZoom||1),0.5,8);
     const mid=h/2,pad=2;
     const buf=state.buffers.get(clip.buf);const total=buf?buf.duration:clip.dur;
     const a0=clip.offset/total,a1=(clip.offset+clip.dur)/total;
     const pairs=pk.length>=4&&pk.length%2===0;
     const bins=pairs?pk.length/2:pk.length;
-    // Local gain for THIS clip window so mid-song quiet parts aren't a flat hairline
-    // next to a loud intro peak on the same stem.
-    let loc=0;
-    for(let x=0;x<w;x+=Math.max(1,(w/400)|0)){
-      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
-      if(mx>loc)loc=mx;
-    }
-    const amp=(mid-pad)*z*(loc>1e-4&&loc<0.35?Math.min(0.85/loc,10):1);
-    g.beginPath();g.moveTo(0,mid);
+    // Per-pixel envelope + sliding local amp so quiet middles of a stem still draw
+    const raw=new Float32Array(w);
     for(let x=0;x<w;x++){
       const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      let mx;if(pairs)mx=Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mx=pk[bi]||0;
-      g.lineTo(x,mid-Math.max(mx>1e-5?1:0,mx*amp));
+      raw[x]=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+    }
+    const win=Math.max(12,(w*0.06)|0);
+    const amp=new Float32Array(w);
+    for(let x=0;x<w;x++){
+      let loc=0;const a=Math.max(0,x-win),b=Math.min(w-1,x+win);
+      for(let i=a;i<=b;i++)if(raw[i]>loc)loc=raw[i];
+      amp[x]=(mid-pad)*z*(loc>1e-5&&loc<0.42?Math.min(0.9/loc,14):1);
+    }
+    g.beginPath();g.moveTo(0,mid);
+    for(let x=0;x<w;x++){
+      const mx=raw[x];
+      g.lineTo(x,mid-Math.max(mx>1e-5?1:0,mx*amp[x]));
     }
     for(let x=w-1;x>=0;x--){
-      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      let mn;if(pairs)mn=-Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mn=-(pk[bi]||0);
-      g.lineTo(x,mid-Math.min(mn<-1e-5?-1:0,mn*amp));
+      const mn=-raw[x];
+      g.lineTo(x,mid-Math.min(mn<-1e-5?-1:0,mn*amp[x]));
     }
     g.closePath();
     g.globalAlpha=.55;g.fillStyle=color;g.fill();
     g.beginPath();
     for(let x=0;x<w;x++){
-      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      let mx;if(pairs)mx=Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mx=pk[bi]||0;
-      const y=mid-mx*amp;if(x)g.lineTo(x,y);else g.moveTo(x,y);
+      const y=mid-raw[x]*amp[x];if(x)g.lineTo(x,y);else g.moveTo(x,y);
     }
     g.globalAlpha=.95;g.strokeStyle=color;g.lineWidth=1;g.stroke();
   }
@@ -1076,26 +1131,38 @@ export function createStudio(ui){
       return clamp((clientX-rect.left+wrap.scrollLeft)/state.pxPerSec,0,dur());
     };
     let phDrag=null;
+    const nearPlayhead=(clientX)=>{
+      const t=timeFromClientX(clientX),ph=playheadT();
+      // ~14px hit slop so grabbing the red line doesn't grab the clip under it
+      return Math.abs(t-ph)<=(14/Math.max(1,state.pxPerSec));
+    };
     const phMove=e=>{
       if(!phDrag)return;
-      scrubTo(timeFromClientX(e.clientX),{snap:!!state.snap});
+      e.preventDefault();
+      scrubTo(timeFromClientX(e.clientX),{snap:!!state.snap&&!e.shiftKey});
     };
     const phUp=()=>{
       if(!phDrag)return;
       phDrag=null;
       window.removeEventListener('pointermove',phMove);
       window.removeEventListener('pointerup',phUp);
+      window.removeEventListener('pointercancel',phUp);
       // live scrub already retargeted the mixer — do NOT stop/start (that was the stutter)
     };
     const startPhDrag=(e)=>{
       e.preventDefault();e.stopPropagation();
-      phDrag={wasPlaying:!!state.playing};
+      phDrag={wasPlaying:!!state.playing,pid:e.pointerId};
+      try{(e.target||wrap).setPointerCapture?.(e.pointerId)}catch(_){}
       scrubTo(timeFromClientX(e.clientX),{snap:false});
-      window.addEventListener('pointermove',phMove);
+      window.addEventListener('pointermove',phMove,{passive:false});
       window.addEventListener('pointerup',phUp);
+      window.addEventListener('pointercancel',phUp);
     };
     wrap.addEventListener('pointerdown',e=>{
-      if(e.target&&e.target.id==='playhead'){startPhDrag(e);return}
+      if(e.button!=null&&e.button!==0)return;
+      if(e.target&&(e.target.id==='playhead'||e.target.closest?.('#playhead'))){startPhDrag(e);return}
+      // Click near the red line → scrub, never move the clip under it
+      if(nearPlayhead(e.clientX)&&!e.target.closest('.hndl')){startPhDrag(e);return}
     });
     // Ruler drag/click seeks (same as scrubbing the red line)
     const rulerWrap=document.querySelector('.ruler-wrap');
@@ -1125,9 +1192,13 @@ export function createStudio(ui){
       input.click();
     });
 
-    // drag clips
+    // drag clips — blocked while scrubbing playhead so tracks don't slide with the red line
     let drag=null;
     wrap.addEventListener('pointerdown',e=>{
+      if(phDrag)return;
+      if(e.button!=null&&e.button!==0)return;
+      if(e.target&&(e.target.id==='playhead'||e.target.closest?.('#playhead')))return;
+      if(nearPlayhead(e.clientX)&&!e.target.closest('.hndl'))return;
       const h=e.target.closest('.hndl');const clipEl=e.target.closest('.clip');
       if(!clipEl)return;
       const ti=+clipEl.dataset.ti,cid=clipEl.dataset.cid;
@@ -1139,7 +1210,7 @@ export function createStudio(ui){
       clipEl.setPointerCapture(e.pointerId);
     });
     wrap.addEventListener('pointermove',e=>{
-      if(!drag)return;
+      if(phDrag||!drag)return;
       const dx=(e.clientX-drag.x0)/state.pxPerSec;
       if(Math.abs(dx)<1e-4)return;
       drag.moved=true;
@@ -1160,10 +1231,13 @@ export function createStudio(ui){
     });
     wrap.addEventListener('pointerup',()=>{
       if(!drag)return;
+      const moved=drag.moved;
       // if never moved, drop the empty undo snapshot
-      if(!drag.moved&&state.undo.length)state.undo.pop();
+      if(!moved&&state.undo.length)state.undo.pop();
       else state.dirty=true;
       drag=null;
+      // Clip moved while playing → retarget mixer (jobs captured old start times)
+      if(moved&&state.playing)scrubTo(playheadT(),{snap:false});
     });
 
     // piano roll draw
@@ -1215,12 +1289,13 @@ export function createStudio(ui){
     renderPlayhead(want);
     ui.onTransport?.(state);
     if(!(state.playing&&state._pull&&state._pull.alive))return want;
-    // Retarget pull mixer in place
+    // Retarget pull mixer in place (onaudioprocess reads pull.from — not a closed-over start)
     state._pull.from=want;
     state._pull.frame=0;
     state.t0=ac().currentTime;
     state._lastReseed=want;
-    state._reseedGuard=ac().currentTime+0.35;
+    state._silentMs=0;
+    state._reseedGuard=ac().currentTime+1.2; // don't softReseed mid-scrub
     if(state._midi){
       for(const job of state._midi){
         job.playFrom=want;job.when=ac().currentTime;job.i=0;
@@ -1583,8 +1658,8 @@ export function createStudio(ui){
     }catch(e){}
     return g;
   }
-  // Beat grid from drums (prefer) / bass mix: {bpm, t0} — t0 = first downbeat (sec).
-  // Onset-interval method (same idea as live app detectBpm) — more stable than autocorr for rock.
+  // Beat grid: same onset idea as live SetSod detectBpm — prefer full mix (like analyzing the song
+  // channel), then drums/bass. Returns {bpm, t0} where t0 = first downbeat (sec).
   function detectBeatGrid(preferStem){
     const pick=stem=>{const tr=state.tracks.find(t=>t.stem===stem&&t.clips[0]);return tr?state.buffers.get(tr.clips[0].buf):null};
     const loudest=()=>{
@@ -1598,13 +1673,14 @@ export function createStudio(ui){
       }
       return best;
     };
-    let buf=preferStem?pick(preferStem):null;
-    // If preferred stem is near-silent (common when drums empty on acoustic songs), fall back
-    if(buf){
-      const d=buf.getChannelData(0);let s=0,step=Math.max(1,(d.length/8000)|0);
-      for(let i=0;i<d.length;i+=step){const v=d[i];s+=v*v}
-      if(s<1e-6)buf=null;
-    }
+    const rmsOf=b=>{
+      if(!b)return 0;const d=b.getChannelData(0);let s=0,step=Math.max(1,(d.length/8000)|0);
+      for(let i=0;i<d.length;i+=step){const v=d[i];s+=v*v}return s;
+    };
+    // Auto like SetSod web: lock from the whole song first (mix), not a sparse demucs drum lane
+    let buf=state.mixBuf||null;
+    if(buf&&rmsOf(buf)<1e-6)buf=null;
+    if(!buf&&preferStem){buf=pick(preferStem);if(buf&&rmsOf(buf)<1e-6)buf=null}
     if(!buf)buf=pick('drums')||pick('bass')||pick('guitar')||loudest();
     if(!buf)return{bpm:state.bpm||120,t0:0};
     const sr=buf.sampleRate,ch0=buf.getChannelData(0),ch1=buf.numberOfChannels>1?buf.getChannelData(1):ch0;
