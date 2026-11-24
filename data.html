@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.19">
+<meta name="bp-data" content="1.0.21">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -55,7 +55,7 @@ button,input{font:inherit;color:inherit}
 .recipe select{background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:var(--tx)}
 .main{display:grid;grid-template-columns:160px 1fr;grid-template-rows:28px 1fr auto;min-height:0}
 .corner{background:#0a0c0f;border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
-.ruler-wrap{overflow:hidden;background:#0a0c0f;border-bottom:1px solid var(--line)}
+.ruler-wrap{overflow:hidden;background:#0a0c0f;border-bottom:1px solid var(--line);cursor:ew-resize}
 #ruler{display:block;height:28px}
 .heads{overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
 .thead{height:120px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px;box-sizing:border-box}
@@ -81,7 +81,8 @@ button,input{font:inherit;color:inherit}
 .hndl{position:absolute;top:0;bottom:0;width:6px;background:transparent;cursor:ew-resize}
 .hndl.L{left:0}.hndl.R{right:0}
 .mblock{position:absolute;height:8px;border-radius:2px;opacity:.85}
-.playhead{position:absolute;top:0;left:0;width:2px;height:100%;background:var(--play);z-index:5;pointer-events:none;box-shadow:0 0 8px rgba(255,107,61,.5)}
+.playhead{position:absolute;top:0;left:0;width:10px;margin-left:-4px;height:100%;background:transparent;z-index:6;pointer-events:auto;cursor:ew-resize;touch-action:none}
+.playhead::before{content:'';position:absolute;left:4px;top:0;bottom:0;width:2px;background:var(--play);box-shadow:0 0 8px rgba(255,107,61,.5);pointer-events:none}
 .mixer-wrap{grid-column:1/-1;border-top:1px solid var(--line);background:#101419;display:flex;flex-direction:column;min-height:0}
 .mixer-fold{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:4px 10px;border:0;border-bottom:1px solid var(--line);background:#151a21;color:var(--mut);cursor:pointer;font:650 12px NotoThai,system-ui,sans-serif;text-align:left}
 .mixer-fold:hover{color:var(--tx);background:#1a222c}
@@ -102,8 +103,10 @@ button,input{font:inherit;color:inherit}
 .strip .fader{position:absolute;width:140px;height:36px;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-90deg);transform-origin:center;accent-color:var(--acc);margin:0}
 .strip .fader-val{font:600 11px JetMono,ui-monospace,monospace;color:var(--acc);margin-top:2px}
 .ms{display:flex;gap:3px;justify-content:center;flex-wrap:wrap}
-.piano{display:none;grid-template-columns:56px 1fr;height:180px;border-top:1px solid var(--line);background:#0c0f14}
+.piano{display:none;grid-template-columns:56px 1fr;grid-template-rows:auto 1fr;height:210px;border-top:1px solid var(--line);background:#0c0f14}
 .piano.on{display:grid}
+.piano-bar{grid-column:1/-1;display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:6px 10px;border-bottom:1px solid var(--line);background:#101419;font-size:12px;color:var(--mut)}
+.piano-bar select{background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px 8px;color:var(--tx)}
 #pianoKeys{overflow:hidden;background:#151a20;border-right:1px solid var(--line)}
 .pkey{font-size:9px;padding-left:4px;border-bottom:1px solid #222;display:flex;align-items:center;color:#789}
 .pkey.blk{background:#0a0c10;color:#567}
@@ -126,9 +129,19 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <span class="verpill" id="dataVer" title="เวอร์ชัน SetSod Data (แยกจากแอป SetSod)">Data <b>—</b></span>
     <button type="button" class="btn icon" id="btnPlay" title="Space">▶</button>
     <button type="button" class="btn icon" id="btnStop">■</button>
-    <button type="button" class="btn icon" id="btnRec" title="อัดเสียง" style="color:#f66">●</button>
+    <button type="button" class="btn icon" id="btnRec" title="อัดเสียง (เลือกแหล่งด้านขวา)" style="color:#f66">●</button>
+    <select id="recMode" title="แหล่งอัดเสียง" style="background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px 6px;color:var(--tx);max-width:150px">
+      <option value="mic">อัดจากไมค์</option>
+      <option value="bus">จากเครื่องเล่น (ไม่มีไมค์)</option>
+      <option value="blank">สร้างคลิปว่าง</option>
+    </select>
     <div class="clock" id="clock">0:00.0</div>
     <label>BPM <input id="bpm" type="number" min="40" max="240" value="120" style="width:56px;background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px"></label>
+    <button type="button" class="btn" id="btnLockBeat" title="จับ BPM + จุดลงจังหวะจากกลอง/เบสใหม่">ล็อกจังหวะ</button>
+    <span class="status" title="เลื่อนนอมให้ตรงจังหวะเพลง">เลื่อนนอม
+      <button type="button" class="btn" id="btnT0L" style="min-height:28px;padding:2px 8px">−</button>
+      <button type="button" class="btn" id="btnT0R" style="min-height:28px;padding:2px 8px">+</button>
+    </span>
     <label class="chk"><input type="checkbox" id="chkMetro"> นอม</label>
     <label title="ความดังนอม">ดังนอม <input id="nomVol" type="range" min="40" max="200" value="140" style="width:72px;accent-color:var(--acc)"></label>
     <label class="chk" title="เพลงช่องหนึ่ง · นอม/นับเข้าอีกช่อง — เหมือนไฟล์ตัวอย่างเด๋อ"><input type="checkbox" id="chkListenLR"> ฟัง L/R แบบ SetSod</label>
@@ -137,7 +150,10 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <label title="ซูมแกนเวลาทั้งโปรเจกต์ (ซูมกราฟแต่ละแทร็กอยู่ที่หัวแทร็ก − / +)">ซูมเวลา <input id="zoom" type="range" min="40" max="200" value="80"></label>
     <div class="spacer"></div>
     <button type="button" class="btn" id="btnSelect">เลือก</button>
-    <button type="button" class="btn" id="btnSplit">ตัด (S)</button>
+    <button type="button" class="btn" id="btnSplit" title="ผ่าคลิปที่หัวเล่น (S)">ผ่าคลิป</button>
+    <button type="button" class="btn" id="btnCut" title="Ctrl+X">ตัด</button>
+    <button type="button" class="btn" id="btnCopy" title="Ctrl+C">คัดลอก</button>
+    <button type="button" class="btn" id="btnPaste" title="Ctrl+V">วาง</button>
     <button type="button" class="btn" id="btnDraw">วาดโน้ต</button>
     <button type="button" class="btn" id="btnUndo">↶</button>
     <button type="button" class="btn" id="btnRedo">↷</button>
@@ -221,13 +237,28 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
   </div>
 
   <div class="piano" id="pianoRoll">
+    <div class="piano-bar">
+      <b style="color:var(--tx)">เขียนโน้ต</b>
+      <label>เครื่องดนตรี
+        <select id="midiInst" title="เลือกเสียงเครื่องสำหรับแทร็ก MIDI นี้">
+          <option value="drums">กลอง</option>
+          <option value="bass">เบส</option>
+          <option value="guitar">กีตาร์</option>
+          <option value="keys" selected>คีย์บอร์ด</option>
+          <option value="pad">แพด</option>
+          <option value="lead">ลีด</option>
+          <option value="synth">ซินธ์</option>
+        </select>
+      </label>
+      <span>เลือกเครื่อง → กด「วาดโน้ต」→ คลิกบนเปียโนโรล · Ctrl+C/X/V = คัดลอก/ตัด/วาง</span>
+    </div>
     <div id="pianoKeys"></div>
     <div id="pianoScroll"><div id="pianoGrid"></div></div>
   </div>
 
   <footer class="foot">
     <button type="button" class="btn" id="btnMixdown">↓ มิกซ์ดาวน์ WAV</button>
-    <span class="status" id="sOut">Space = เล่น/หยุด · ส่งเข้า SetSod ใช้ปุ่มสูตรดาต้าด้านบน · ดับเบิลคลิกเลน = ใส่ไฟล์ · หัวแทร็ก −/+ = ซูมกราฟ</span>
+    <span class="status" id="sOut">Space = เล่น/หยุด · Ctrl+C/X/V = คัดลอก/ตัด/วาง · ● อัดไมค์หรือจากเครื่องเล่น · ส่ง SetSod ใช้สูตรด้านบน</span>
   </footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -267,7 +298,7 @@ const studio=createStudio({
   root:document.getElementById('app'),
   toast,
   onTransport(st){
-    const t=st.playing?st.ac.currentTime-st.t0+st.offset:st.offset;
+    const t=(typeof studio.playheadT==='function')?studio.playheadT():(st.playing?st.ac.currentTime-st.t0+st.offset:st.offset);
     document.getElementById('clock').textContent=studio.fmt(t);
     document.getElementById('btnPlay').textContent=st.playing?'❚❚':'▶';
     document.getElementById('btnRec').classList.toggle('on',!!st.recording);
@@ -430,6 +461,15 @@ $('btnProfDel').onclick=()=>{
 ['rNom','rAuto'].forEach(id=>{const el=$(id);if(el)el.onchange=saveRecipe});
 ['rCi','rFeel','rFlourish'].forEach(id=>{const el=$(id);if(el)el.onchange=()=>{saveRecipe();refreshGuides()}});
 document.getElementById('bpm')?.addEventListener('change',()=>{studio.state.bpm=+$('bpm').value||120;refreshGuides()});
+$('btnLockBeat')?.addEventListener('click',()=>{
+  try{
+    const g=studio.relockBeat();
+    toast(`ล็อกจังหวะแล้ว · ${Math.round(g.bpm)} BPM · t0=${(g.t0||0).toFixed(2)}s`);
+    $('sRecipe').textContent=`จังหวะ ${Math.round(g.bpm)} BPM · เลื่อนนอม ± ถ้ายังไม่ตรง`;
+  }catch(e){toast('ล็อกจังหวะไม่ได้')}
+});
+$('btnT0L')?.addEventListener('click',()=>{const t0=studio.nudgeNom(-0.02);toast('เลื่อนนอม −20ms · t0='+t0.toFixed(2)+'s')});
+$('btnT0R')?.addEventListener('click',()=>{const t0=studio.nudgeNom(0.02);toast('เลื่อนนอม +20ms · t0='+t0.toFixed(2)+'s')});
 
 async function sendStemsToSetsod(files,meta){
   const bc=new BroadcastChannel('bp-stems');let ok=false;
@@ -483,7 +523,7 @@ async function makeDataNow(){
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.19',ciBaked:ci||0};
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.21',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);

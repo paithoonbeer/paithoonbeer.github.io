@@ -17,7 +17,7 @@ export function createStudio(ui){
     playing:false,recording:false,t0:0,offset:0,loop:false,loopA:0,loopB:8,
     metro:false,snap:true,
     ac:null,nodes:[],fx:[],rec:{stream:null,proc:null,chunks:[],start:0},
-    undo:[],redo:[],dirty:false
+    undo:[],redo:[],dirty:false,clipBoard:null
   };
 
   function ac(){if(!state.ac)state.ac=new (window.AudioContext||window.webkitAudioContext)();return state.ac}
@@ -37,15 +37,35 @@ export function createStudio(ui){
   function undo(){if(!state.undo.length)return;state.redo.push(snapshot());restore(state.undo.pop())}
   function redo(){if(!state.redo.length)return;state.undo.push(snapshot());restore(state.redo.pop())}
 
+  const MIDI_INST=[
+    {id:'drums',name:'กลอง',color:'#e8a54b'},
+    {id:'bass',name:'เบส',color:'#5b8def'},
+    {id:'guitar',name:'กีตาร์',color:'#c97b5a'},
+    {id:'keys',name:'คีย์บอร์ด',color:'#d4c35a'},
+    {id:'pad',name:'แพด',color:'#9b8af0'},
+    {id:'lead',name:'ลีด',color:'#d67bb8'},
+    {id:'synth',name:'ซินธ์',color:'#45c4d4'}
+  ];
+  function instOf(tr){return MIDI_INST.find(x=>x.id===(tr&&tr.inst))||MIDI_INST[3]}
   function addAudioTrack(name,color){
     const t={id:uid(),type:'audio',name:name||('แทร็ก '+(state.tracks.length+1)),color:color||COLS[state.tracks.length%COLS.length],
       mute:false,solo:false,vol:100,pan:0,eq:{lo:0,mid:0,hi:0},rev:0,waveZoom:1,clips:[],notes:[]};
     state.tracks.push(t);return t;
   }
-  function addMidiTrack(name){
-    const t={id:uid(),type:'midi',name:name||('MIDI '+(state.tracks.length+1)),color:COLS[state.tracks.length%COLS.length],
-      mute:false,solo:false,vol:100,pan:0,eq:{lo:0,mid:0,hi:0},rev:0.15,waveZoom:1,clips:[],notes:[]};
+  function addMidiTrack(name,inst){
+    const meta=MIDI_INST.find(x=>x.id===inst)||MIDI_INST[3];
+    const t={id:uid(),type:'midi',name:name||('MIDI · '+meta.name),color:meta.color||COLS[state.tracks.length%COLS.length],
+      mute:false,solo:false,vol:100,pan:0,eq:{lo:0,mid:0,hi:0},rev:0.15,waveZoom:1,clips:[],notes:[],inst:meta.id};
     state.tracks.push(t);return t;
+  }
+  // Ensure a MIDI track for an instrument exists and is selected (for drawing notes)
+  function ensureMidiInst(instId){
+    const meta=MIDI_INST.find(x=>x.id===instId)||MIDI_INST[3];
+    let i=state.tracks.findIndex(t=>t.type==='midi'&&t.inst===meta.id);
+    if(i<0){const t=addMidiTrack('MIDI · '+meta.name,meta.id);i=state.tracks.length-1;renderAll()}
+    else if(state.tracks[i].inst!==meta.id)state.tracks[i].inst=meta.id;
+    state.sel.track=i;state.tool='draw';syncTools();renderAll();
+    return state.tracks[i];
   }
   function setTrackWaveZoom(i,delta){
     const tr=state.tracks[i];if(!tr)return;
@@ -192,40 +212,41 @@ export function createStudio(ui){
   function stopPlay(){
     cancelAnimationFrame(state._raf);
     if(state._watch){clearInterval(state._watch);state._watch=null}
-    if(state.playing)state.offset=clamp(ac().currentTime-state.t0+state.offset,0,dur());
+    if(state.playing)state.offset=clamp(playheadT(),0,dur());
+    if(state._pull){state._pull.alive=false;state._pull=null}
     for(const n of state.nodes){try{n.onended=null;n.onaudioprocess=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
     try{state._meter?.disconnect()}catch(e){}
     state.nodes=[];state.fx=[];state.live=null;state.playing=false;state.playOnly=null;
     state._midi=null;state._metroJob=null;state._sched=null;
-    state._meter=null;state._meterTd=null;state._silentMs=0;
+    state._meter=null;state._meterTd=null;state._silentMs=0;state._master=null;
     ui.onTransport?.(state);
   }
-  // Live mute/solo/vol — muteG carries effective level (mute × vol) so fader
-  // changes while muted still apply the instant you unmute (no “stuck loud” feel).
+  // Live mute/solo/vol — pull mixer reads tr.mute/vol/solo each quantum (no GainNode lag).
   function applyLiveMix(){
+    // MIDI chains still use muteG if present
     if(!state.playing||!state.live)return;
     const a=ac(),t=a.currentTime;
     const anySolo=state.tracks.some(x=>x.solo);
     for(const tr of state.tracks){
-      const L=state.live.get(tr.id);if(!L)continue;
+      const L=state.live.get(tr.id);if(!L||!L.muteG)continue;
       const silent=tr.mute||(anySolo&&!tr.solo);
       const vol=Math.max(0,(tr.vol||0)/100);
       try{
         L.volG.gain.cancelScheduledValues(t);
-        L.volG.gain.setValueAtTime(1,t); // level lives on muteG
+        L.volG.gain.setValueAtTime(1,t);
         L.muteG.gain.cancelScheduledValues(t);
         L.muteG.gain.setValueAtTime(silent?0:vol,t);
       }catch(e){}
     }
   }
 
-  // Playback engine (Data only):
-  // Chromium AudioBufferSourceNode on multi-minute buffers goes silent ~60–90s while
-  // currentTime keeps moving. Slice/copy/reseed (1.0.16–1.0.18) still failed on the
-  // user's machine. Fix: never use BufferSource for clips — pull PCM every quantum
-  // via ScriptProcessor (zero-copy from existing AudioBuffers) or AudioWorklet.
-  const RESEED_EVERY=90; // safety net only; pull-engine should not need frequent reseed
+  // Playback (Data): never use AudioBufferSourceNode for long clips (Chromium ~60–90s death).
+  // 1.0.19 used ScriptProcessor(…,0,2) — Chrome often STOPS calling onaudioprocess after a few
+  // seconds when inputCount=0 (user saw music die ~0:07 while playhead kept walking).
+  // Fix: one mixer SP with ConstantSource keepalive (inputCount≥1) + playhead driven by
+  // the mixer’s frame count (not ctx.currentTime alone).
+  const RESEED_EVERY=120;
   function clipAbsDur(clip,buf){
     if(!buf)return Math.max(0.001,clip.dur||0);
     const d=Math.max(clip.dur||0, buf.duration-(clip.offset||0));
@@ -250,50 +271,85 @@ export function createStudio(ui){
     }
     return best;
   }
-  // Per-track continuous PCM pull — reads clip AudioBuffers in place (no BufferSource).
-  function attachPullTrack(tr,chain,playFrom){
+  function playheadT(){
+    if(state.playing&&state._pull&&state._pull.alive){
+      return state._pull.from+(state._pull.frame/ac().sampleRate);
+    }
+    if(state.playing)return ac().currentTime-state.t0+state.offset;
+    return state.offset;
+  }
+  // One mixer for all audio clips — ConstantSource keeps ScriptProcessor alive on Chrome.
+  function attachPullMixer(playFrom,masterBus){
     const a=ac();
     const jobs=[];
-    for(const c of tr.clips||[]){
-      const buf=state.buffers.get(c.buf);if(!buf)continue;
-      const clipDur=clipAbsDur(c,buf);
-      if(c.start+clipDur<=playFrom+1e-4)continue;
-      const L=buf.getChannelData(0);
-      const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
-      jobs.push({L,R,sr:buf.sampleRate,start:c.start,offset:c.offset||0,dur:clipDur,gain:c.gain||1,len:L.length});
+    for(const tr of state.tracks){
+      if(tr.type!=='audio')continue;
+      for(const c of tr.clips||[]){
+        const buf=state.buffers.get(c.buf);if(!buf)continue;
+        const clipDur=clipAbsDur(c,buf);
+        if(c.start+clipDur<=playFrom+1e-4)continue;
+        const L=buf.getChannelData(0);
+        const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+        jobs.push({
+          tr,L,R,sr:buf.sampleRate,start:c.start,offset:c.offset||0,dur:clipDur,
+          gain:c.gain||1,len:L.length,guide:tr.stem==='click'||tr.stem==='countin'
+        });
+      }
     }
-    if(!jobs.length)return;
-    const sp=a.createScriptProcessor(4096,0,2);
-    let frame=0;
+    const keep=a.createConstantSource();keep.offset.value=0;
+    try{keep.start()}catch(e){}
+    // inputCount=1 is required — (0,2) dies mid-song on Windows Chrome
+    const sp=a.createScriptProcessor(2048,1,2);
+    const pull={from:playFrom,frame:0,alive:true,sp,keep};
+    state._pull=pull;
+    const lrOn=()=>!!state.listenLR;
+    const nomRight=()=>(state.nomSide||'R')!=='L';
     sp.onaudioprocess=e=>{
-      if(!state.playing)return;
+      if(!state.playing||!pull.alive){pull.alive=false;return}
       const oL=e.outputBuffer.getChannelData(0);
       const oR=e.outputBuffer.getChannelData(1);
       oL.fill(0);oR.fill(0);
       const ctxSr=a.sampleRate,N=oL.length;
+      const anySolo=state.tracks.some(t=>t.solo);
+      const split=lrOn();
+      const musicIsL=nomRight(); // nom on R → music L
       for(let i=0;i<N;i++){
-        const t=playFrom+(frame+i)/ctxSr;
-        let sL=0,sR=0;
+        const t=playFrom+(pull.frame+i)/ctxSr;
+        let mL=0,mR=0,gL=0,gR=0;
         for(let j=0;j<jobs.length;j++){
-          const cl=jobs[j];
+          const cl=jobs[j],tr=cl.tr;
+          const silent=tr.mute||(anySolo&&!tr.solo);
+          if(silent)continue;
           const local=t-cl.start;
           if(local<0||local>=cl.dur)continue;
           const idx=(cl.offset+local)*cl.sr;
           const i0=idx|0;
           if(i0<0||i0>=cl.len)continue;
           const f=idx-i0;
-          const l0=cl.L[i0],l1=i0+1<cl.len?cl.L[i0+1]:l0;
+          const s0=cl.L[i0],s1=i0+1<cl.len?cl.L[i0+1]:s0;
           const r0=cl.R[i0],r1=i0+1<cl.len?cl.R[i0+1]:r0;
-          const g=cl.gain;
-          sL+=(l0+(l1-l0)*f)*g;
-          sR+=(r0+(r1-r0)*f)*g;
+          const vol=Math.max(0,(tr.vol||0)/100)*(cl.gain||1);
+          const pan=clamp(tr.pan||0,-1,1);
+          const sampleL=(s0+(s1-s0)*f)*vol;
+          const sampleR=(r0+(r1-r0)*f)*vol;
+          // equal-power pan
+          const pl=Math.cos((pan+1)*Math.PI/4),pr=Math.sin((pan+1)*Math.PI/4);
+          const xL=sampleL*pl,xR=sampleR*pr;
+          if(split){
+            if(cl.guide){gL+=xL;gR+=xR}
+            else{mL+=xL;mR+=xR}
+          }else{mL+=xL;mR+=xR}
         }
-        oL[i]=sL;oR[i]=sR;
+        if(split){
+          const music=(mL+mR)*0.707,guide=(gL+gR)*0.707;
+          if(musicIsL){oL[i]=music;oR[i]=guide}
+          else{oL[i]=guide;oR[i]=music}
+        }else{oL[i]=mL;oR[i]=mR}
       }
-      frame+=N;
+      pull.frame+=N;
     };
-    sp.connect(chain.input);
-    state.nodes.push(sp);
+    sp.connect(masterBus);
+    state.nodes.push(sp,keep);
   }
   function softReseed(at){
     if(!state.playing||state._reseeding)return;
@@ -301,9 +357,10 @@ export function createStudio(ui){
     try{
       cancelAnimationFrame(state._raf);
       if(state._watch){clearInterval(state._watch);state._watch=null}
+      if(state._pull)state._pull.alive=false;
       for(const n of state.nodes){try{n.onended=null;n.stop?.();n.onaudioprocess=null}catch(e){}try{n.disconnect?.()}catch(e){}}
       for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
-      state.nodes=[];state.fx=[];state.live=null;
+      state.nodes=[];state.fx=[];state.live=null;state._pull=null;
       state._midi=null;state._metroJob=null;state._sched=null;
       state.playing=false;
       startPlay(at,{reseed:true});
@@ -313,8 +370,10 @@ export function createStudio(ui){
     if(!state.playing||state._reseeding)return;
     const a=ac();
     if(state._reseedGuard && a.currentTime<state._reseedGuard)return;
-    const playT=a.currentTime-state.t0+state.offset;
+    const playT=playheadT();
     if(playT<1||playT>=dur()-0.5)return;
+    // If mixer stopped advancing while clock would still move → force reseed
+    if(state._pull&&!state._pull.alive){softReseed(playT);return}
     if(playT-(state._lastReseed||0)>=RESEED_EVERY){softReseed(playT);return}
     const an=state._meter;
     if(!an||!state._meterTd)return;
@@ -325,7 +384,7 @@ export function createStudio(ui){
     const expect=expectedRmsAt(playT);
     if(expect<0.01){state._silentMs=0;return}
     state._silentMs=(state._silentMs||0)+250;
-    if(state._silentMs>=900){state._silentMs=0;softReseed(playT)}
+    if(state._silentMs>=600){state._silentMs=0;softReseed(playT)}
   }
 
   // MIDI notes also drop if started minutes ahead — look-ahead refill on tick
@@ -339,7 +398,7 @@ export function createStudio(ui){
   function pumpMidi(){
     if(!state.playing||!state._midi||!state._midi.length)return;
     const a=ac();
-    const playT=a.currentTime-state.t0+state.offset;
+    const playT=playheadT();
     const until=playT+MIDI_LOOK;
     for(const job of state._midi){
       const {chain,when,playFrom,notes}=job;
@@ -352,18 +411,57 @@ export function createStudio(ui){
         const durN=end-Math.max(n.t,playFrom);
         const t0=when+delay;
         if(t0+durN<a.currentTime-0.05){job.i++;continue}
-        const osc=a.createOscillator();osc.type='sawtooth';osc.frequency.value=midiHz(n.n);
-        const g=a.createGain();
         const at=Math.max(t0,a.currentTime+0.005);
-        g.gain.setValueAtTime(0,at);
-        g.gain.linearRampToValueAtTime(0.18*(n.v||1),at+0.01);
-        g.gain.exponentialRampToValueAtTime(0.001,at+Math.max(0.05,durN));
-        const f=a.createBiquadFilter();f.type='lowpass';f.frequency.value=2200;
-        osc.connect(f);f.connect(g);g.connect(chain.input);
-        try{osc.start(at);osc.stop(at+durN+0.05);state.nodes.push(osc)}catch(e){}
+        try{voiceNote(chain.input,n.n,durN,at,job.tr.inst||'keys',n.v||0.9)}catch(e){}
         job.i++;
       }
     }
+  }
+  // Simple built-in instrument voices (no sample pack needed)
+  function voiceNote(dest,midiN,durN,at,inst,vel){
+    const a=ac();vel=clamp(vel==null?0.9:+vel,0,1.5);inst=inst||'keys';
+    const start=Math.max(at,a.currentTime+0.002);
+    const stop=start+Math.max(0.04,durN);
+    if(inst==='drums'){
+      const kind=midiN<42?'kick':midiN<50?'snare':midiN<60?'tom':'hat';
+      if(kind==='kick'){
+        const o=a.createOscillator(),g=a.createGain();
+        o.frequency.setValueAtTime(140,start);o.frequency.exponentialRampToValueAtTime(40,start+0.12);
+        g.gain.setValueAtTime(0.0001,start);g.gain.exponentialRampToValueAtTime(0.9*vel,start+0.005);g.gain.exponentialRampToValueAtTime(0.0001,start+0.28);
+        o.connect(g);g.connect(dest);o.start(start);o.stop(start+0.3);state.nodes.push(o);
+      }else if(kind==='snare'){
+        const len=Math.floor(a.sampleRate*0.2),buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);
+        for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(len*0.25));
+        const src=a.createBufferSource();src.buffer=buf;const g=a.createGain(),bp=a.createBiquadFilter();
+        bp.type='bandpass';bp.frequency.value=1800;bp.Q.value=0.8;
+        g.gain.setValueAtTime(0.55*vel,start);g.gain.exponentialRampToValueAtTime(0.0001,start+0.18);
+        src.connect(bp);bp.connect(g);g.connect(dest);src.start(start);src.stop(start+0.2);state.nodes.push(src);
+      }else if(kind==='tom'){
+        const o=a.createOscillator(),g=a.createGain();
+        o.frequency.setValueAtTime(midiHz(midiN)*0.5,start);o.frequency.exponentialRampToValueAtTime(60,start+0.15);
+        g.gain.setValueAtTime(0.0001,start);g.gain.exponentialRampToValueAtTime(0.55*vel,start+0.005);g.gain.exponentialRampToValueAtTime(0.0001,start+0.25);
+        o.connect(g);g.connect(dest);o.start(start);o.stop(start+0.28);state.nodes.push(o);
+      }else{
+        const len=Math.floor(a.sampleRate*0.08),buf=a.createBuffer(1,len,a.sampleRate),d=buf.getChannelData(0);
+        for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(len*0.2));
+        const src=a.createBufferSource();src.buffer=buf;const g=a.createGain(),hp=a.createBiquadFilter();
+        hp.type='highpass';hp.frequency.value=6000;
+        g.gain.setValueAtTime(0.35*vel,start);g.gain.exponentialRampToValueAtTime(0.0001,start+0.06);
+        src.connect(hp);hp.connect(g);g.connect(dest);src.start(start);src.stop(start+0.08);state.nodes.push(src);
+      }
+      return;
+    }
+    const o=a.createOscillator(),g=a.createGain(),f=a.createBiquadFilter();
+    o.type=inst==='bass'?'sine':inst==='keys'?'triangle':inst==='pad'?'sine':inst==='guitar'?'sawtooth':'sawtooth';
+    o.frequency.value=midiHz(midiN);
+    f.type='lowpass';
+    f.frequency.value=inst==='bass'?800:inst==='pad'?1400:inst==='guitar'?3200:inst==='lead'?4500:2200;
+    const peak=inst==='bass'?0.28:inst==='pad'?0.14:0.2;
+    g.gain.setValueAtTime(0,start);
+    g.gain.linearRampToValueAtTime(peak*vel,start+(inst==='pad'?0.08:0.012));
+    g.gain.exponentialRampToValueAtTime(0.0001,stop);
+    o.connect(f);f.connect(g);g.connect(dest);
+    try{o.start(start);o.stop(stop+0.05);state.nodes.push(o)}catch(e){}
   }
 
   // Sum a stereo node to mono, then feed only left (0) or right (1) of a ChannelMerger
@@ -391,58 +489,35 @@ export function createStudio(ui){
     state._lastReseed=state.offset;
     state._reseedGuard=a.currentTime+1.2;
     const master=a.createGain();master.gain.value=1;
-    const merge=a.createGain();
-    const revGain=a.createGain();revGain.gain.value=1;
-    const conv=a.createConvolver();
-    if(!state._imp){const len=a.sampleRate*1.2,imp=a.createBuffer(2,len,a.sampleRate);for(let c=0;c<2;c++){const d=imp.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.8)}state._imp=imp}
-    conv.buffer=state._imp;
-    revGain.connect(conv);conv.connect(master);
-    const lrOn=!!state.listenLR;
-    const nomRight=(state.nomSide||'R')!=='L';
-    const musicCh=nomRight?0:1, nomCh=nomRight?1:0;
-    let merger=null;
-    if(lrOn){
-      merger=a.createChannelMerger(2);
-      merger.connect(master);
-    }else{
-      merge.connect(master);
-    }
+    state._master=master;
     const meter=a.createAnalyser();meter.fftSize=2048;meter.smoothingTimeConstant=0.2;
     master.connect(meter);meter.connect(a.destination);
     state._meter=meter;state._meterTd=new Uint8Array(meter.fftSize);
 
-    const anySolo=state.tracks.some(t=>t.solo);
+    if(state.metro){
+      const ck=state.tracks.find(t=>t.stem==='click');
+      if(ck){ck.mute=false;if(state.nomVol!=null)ck.vol=state.nomVol}
+    }
     const when=a.currentTime+0.02;
     state.t0=when;state.playing=true;
+    // Audio clips → single keepalive mixer (must start AFTER playing=true)
+    attachPullMixer(state.offset,master);
+    // MIDI still uses short oscillators (look-ahead) into master
     state.tracks.forEach(tr=>{
+      if(tr.type!=='midi')return;
       const chain=makeTrackChain(tr);
       try{chain.input.gain.value=1}catch(e){}
       const muteG=a.createGain();
+      const anySolo=state.tracks.some(t=>t.solo);
       const silent=tr.mute||(anySolo&&!tr.solo);
       muteG.gain.value=silent?0:Math.max(0,(tr.vol||0)/100);
-      chain.dry.connect(muteG);
-      const isGuide=tr.stem==='click'||tr.stem==='countin';
-      if(lrOn&&merger){
-        connectMonoToChannel(muteG,merger,isGuide?nomCh:musicCh);
-      }else{
-        muteG.connect(merge);
-      }
-      if(chain.conv)chain.conv.connect(revGain);
+      chain.dry.connect(muteG);muteG.connect(master);
       state.fx.push(chain);
       state.live.set(tr.id,{muteG,volG:chain.input,lo:chain.lo,mid:chain.mid,hi:chain.hi});
-      if(tr.type==='audio')attachPullTrack(tr,chain,state.offset);
-      else scheduleMidi(tr,chain,when,state.offset);
+      scheduleMidi(tr,chain,when,state.offset);
     });
-    if(state.metro){
-      const ck=state.tracks.find(t=>t.stem==='click');
-      if(ck){
-        ck.mute=false;
-        if(state.nomVol!=null)ck.vol=state.nomVol;
-        const live=state.live.get(ck.id);if(live){live.muteG.gain.value=(anySolo&&!ck.solo)?0:1;live.volG.gain.value=(ck.vol||100)/100}
-      }
-      else scheduleMetro(when,state.offset);
-    }
-    state._watch=setInterval(()=>{if(state.playing){try{pumpMidi();pumpMetro();watchAudioHealth()}catch(e){}}},250);
+    if(state.metro&&!state.tracks.some(t=>t.stem==='click'))scheduleMetro(when,state.offset);
+    state._watch=setInterval(()=>{if(state.playing){try{pumpMidi();pumpMetro();watchAudioHealth()}catch(e){}}},200);
     ui.onTransport?.(state);tick();
   }
   const LANE_H=120;
@@ -467,7 +542,7 @@ export function createStudio(ui){
     if(!state.playing||!state._metroJob)return;
     const a=ac();const bs=beatSec();
     const {when,playFrom}=state._metroJob;
-    const playT=a.currentTime-state.t0+state.offset;
+    const playT=playheadT();
     const until=playT+8;
     const vol=(state.nomVol!=null?state.nomVol:140)/100*0.22;
     while(true){
@@ -488,7 +563,7 @@ export function createStudio(ui){
 
   function tick(){
     if(!state.playing)return;
-    let t=ac().currentTime-state.t0+state.offset;
+    let t=playheadT();
     if(state.loop&&t>=state.loopB){startPlay(state.loopA);return}
     if(t>=dur()+0.05){stopPlay();state.offset=0;ui.onTransport?.(state);renderArrange();return}
     try{pumpMidi();pumpMetro()}catch(e){}
@@ -511,43 +586,125 @@ export function createStudio(ui){
     renderAll();
   }
 
-  /* ---------- recording ---------- */
+  /* ---------- recording: mic | bus (no mic) | blank clip ---------- */
+  function recMode(){
+    try{return (document.getElementById('recMode')||{}).value||'mic'}catch(e){return'mic'}
+  }
   async function toggleRecord(){
     if(state.recording){await stopRecord();return}
+    const mode=recMode();
     mark();
     let tr=state.tracks[state.sel.track];
-    if(!tr||tr.type!=='audio'){tr=addAudioTrack('อัดเสียง');state.sel.track=state.tracks.length-1;renderTracks()}
-    let stream;
-    try{
-      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false}});
-    }catch(e){
-      ui.toast?.('ไมโครโฟนไม่พร้อม: '+(e.message||e.name||e));
-      ui.onTransport?.(state);
-      return;
+    if(!tr||tr.type!=='audio'){tr=addAudioTrack(mode==='blank'?'คลิปว่าง':'อัดเสียง');state.sel.track=state.tracks.length-1;renderTracks()}
+    if(mode==='blank'){
+      const bars=2,sec=bars*4*beatSec(),sr=ac().sampleRate;
+      const buf=ac().createBuffer(1,Math.max(1,Math.floor(sec*sr)),sr);
+      const id=putBuf(buf);
+      tr.clips.push({id:uid(),buf:id,start:snapT(state.offset),offset:0,dur:buf.duration,gain:1,peaks:peaksOf(buf),name:'ว่าง'});
+      state.sel.clip=tr.clips[tr.clips.length-1].id;
+      ui.toast?.('สร้างคลิปว่าง '+bars+' ห้องที่หัวเล่น');
+      renderAll();return;
     }
     const a=ac();if(a.state==='suspended')await a.resume();
-    const src=a.createMediaStreamSource(stream);
-    const rec=a.createScriptProcessor(4096,1,1);
-    const chunks=[];const silent=a.createGain();silent.gain.value=0;
-    rec.onaudioprocess=e=>{if(!state.recording)return;chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)))};
-    src.connect(rec);rec.connect(silent);silent.connect(a.destination);
-    state.recording=true;state.rec={stream,proc:rec,src,chunks,start:state.offset,tr:tr.id};
-    if(!state.playing)startPlay(state.offset);
+    const chunksL=[],chunksR=[];
+    let stream=null,src=null,proc=null,tap=null;
+    if(mode==='mic'){
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false}});
+      }catch(e){
+        ui.toast?.('ไมโครโฟนไม่พร้อม: '+(e.message||e.name||e)+' — ลองโหมด「จากเครื่องเล่น」หรือ「คลิปว่าง」');
+        ui.onTransport?.(state);return;
+      }
+      src=a.createMediaStreamSource(stream);
+      proc=a.createScriptProcessor(4096,1,1);
+      const silent=a.createGain();silent.gain.value=0;
+      proc.onaudioprocess=e=>{if(!state.recording)return;chunksL.push(new Float32Array(e.inputBuffer.getChannelData(0)))};
+      src.connect(proc);proc.connect(silent);silent.connect(a.destination);
+    }else{
+      // Record studio output (no microphone) — tap master while playing
+      if(!state.playing)startPlay(state.offset);
+      const master=state._master;if(!master){ui.toast?.('ยังไม่มีสัญญาณเครื่องเล่น');return}
+      proc=a.createScriptProcessor(4096,2,2);
+      const silent=a.createGain();silent.gain.value=0;
+      proc.onaudioprocess=e=>{
+        if(!state.recording)return;
+        chunksL.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+        chunksR.push(new Float32Array(e.inputBuffer.getChannelData(1)||e.inputBuffer.getChannelData(0)));
+      };
+      master.connect(proc);proc.connect(silent);silent.connect(a.destination);
+      tap=master;
+    }
+    state.recording=true;
+    state.rec={mode,stream,proc,src,tap,chunksL,chunksR,start:state.offset,tr:tr.id};
+    if(mode==='mic'&&!state.playing)startPlay(state.offset);
+    ui.toast?.(mode==='mic'?'อัดจากไมค์… กด ● อีกครั้งเพื่อหยุด':'อัดจากเครื่องเล่น (ไม่มีไมค์)… กด ● เพื่อหยุด');
     ui.onTransport?.(state);
   }
   async function stopRecord(){
     if(!state.recording)return;
     state.recording=false;
-    const {stream,proc,src,chunks,start,tr}=state.rec||{};
-    try{proc?.disconnect();src?.disconnect();stream?.getTracks?.().forEach(t=>t.stop())}catch(e){}
-    if(!chunks?.length){state.rec={};ui.onTransport?.(state);return}
-    const len=chunks.reduce((a,c)=>a+c.length,0);
-    const buf=ac().createBuffer(1,len,ac().sampleRate);
-    const d=buf.getChannelData(0);let o=0;for(const c of chunks){d.set(c,o);o+=c.length}
+    const {mode,stream,proc,src,tap,chunksL,chunksR,start,tr}=state.rec||{};
+    try{proc?.disconnect();src?.disconnect();if(tap&&proc)try{tap.disconnect(proc)}catch(e){}stream?.getTracks?.().forEach(t=>t.stop())}catch(e){}
+    const L=chunksL||[];
+    if(!L.length){state.rec={};ui.onTransport?.(state);return}
+    const len=L.reduce((a,c)=>a+c.length,0);
+    const ch=(chunksR&&chunksR.length===L.length)?2:1;
+    const buf=ac().createBuffer(ch,len,ac().sampleRate);
+    const d0=buf.getChannelData(0);let o=0;for(const c of L){d0.set(c,o);o+=c.length}
+    if(ch>1){const d1=buf.getChannelData(1);o=0;for(const c of chunksR){d1.set(c,o);o+=c.length}}
     const id=putBuf(buf);
     const track=state.tracks.find(t=>t.id===tr)||addAudioTrack('อัดเสียง');
-    track.clips.push({id:uid(),buf:id,start:snapT(start||0),offset:0,dur:buf.duration,gain:1,peaks:peaksOf(buf),name:'อัด'});
+    track.clips.push({id:uid(),buf:id,start:snapT(start||0),offset:0,dur:buf.duration,gain:1,peaks:peaksOf(buf),name:mode==='bus'?'อัดเครื่องเล่น':'อัดไมค์'});
+    state.sel.clip=track.clips[track.clips.length-1].id;
     state.rec={};ui.onTransport?.(state);renderAll();
+    ui.toast?.('บันทึกคลิปแล้ว · '+buf.duration.toFixed(1)+' วิ');
+  }
+
+  /* ---------- clip / note clipboard (Ctrl+C / X / V) ---------- */
+  function copySelected(cut){
+    const tr=state.tracks[state.sel.track];if(!tr)return false;
+    if(tr.type==='midi'&&state.sel.notes.length){
+      const set=new Set(state.sel.notes);
+      const notes=tr.notes.filter(n=>set.has(n.id)).map(n=>({...n}));
+      if(!notes.length)return false;
+      const t0=Math.min(...notes.map(n=>n.t));
+      state.clipBoard={kind:'notes',inst:tr.inst||'keys',notes:notes.map(n=>({n:n.n,t:n.t-t0,d:n.d,v:n.v})),t0};
+      if(cut){mark();tr.notes=tr.notes.filter(n=>!set.has(n.id));state.sel.notes=[];renderAll()}
+      ui.toast?.(cut?'ตัดโน้ตแล้ว · Ctrl+V วาง':'คัดลอกโน้ตแล้ว · Ctrl+V วาง');
+      return true;
+    }
+    if(tr.type==='audio'&&state.sel.clip){
+      const clip=tr.clips.find(c=>c.id===state.sel.clip);if(!clip)return false;
+      state.clipBoard={kind:'clip',clip:{buf:clip.buf,offset:clip.offset,dur:clip.dur,gain:clip.gain,peaks:clip.peaks,name:clip.name},fromTrack:tr.id};
+      if(cut){mark();tr.clips=tr.clips.filter(c=>c.id!==clip.id);state.sel.clip=null;renderAll()}
+      ui.toast?.(cut?'ตัดคลิปแล้ว · Ctrl+V วางที่หัวเล่น':'คัดลอกคลิปแล้ว · Ctrl+V วางที่หัวเล่น');
+      return true;
+    }
+    ui.toast?.('เลือกคลิปหรือโน้ตก่อน');return false;
+  }
+  function pasteClipboard(){
+    const board=state.clipBoard;if(!board){ui.toast?.('ยังไม่มีสิ่งที่คัดลอก');return}
+    mark();
+    if(board.kind==='clip'){
+      let tr=state.tracks[state.sel.track];
+      if(!tr||tr.type!=='audio'){tr=addAudioTrack('วางคลิป');state.sel.track=state.tracks.length-1}
+      const c=board.clip;
+      const neu={id:uid(),buf:c.buf,start:snapT(state.offset),offset:c.offset,dur:c.dur,gain:c.gain||1,peaks:c.peaks,name:(c.name||'คลิป')+' · สำเนา'};
+      tr.clips.push(neu);state.sel.clip=neu.id;renderAll();
+      ui.toast?.('วางคลิปที่ '+fmt(neu.start));return;
+    }
+    if(board.kind==='notes'){
+      let tr=state.tracks[state.sel.track];
+      if(!tr||tr.type!=='midi'){tr=ensureMidiInst(board.inst||'keys')}
+      const base=snapT(state.offset);
+      const ids=[];
+      for(const n of board.notes){
+        const neu={id:uid(),n:n.n,t:base+(n.t||0),d:n.d||beatSec()/2,v:n.v||0.9};
+        tr.notes.push(neu);ids.push(neu.id);
+      }
+      state.sel.notes=ids;state.tool='draw';syncTools();renderAll();
+      ui.toast?.('วางโน้ต '+ids.length+' ตัวที่ '+fmt(base));
+    }
   }
 
   /* ---------- clip ops ---------- */
@@ -558,7 +715,7 @@ export function createStudio(ui){
     const local=time-clip.start;
     const right={id:uid(),buf:clip.buf,start:time,offset:clip.offset+local,dur:clip.dur-local,gain:clip.gain,peaks:clip.peaks,name:clip.name};
     clip.dur=local;
-    tr.clips.push(right);renderAll();
+    tr.clips.push(right);state.sel.clip=right.id;renderAll();
   }
   function deleteSelected(){
     const tr=state.tracks[state.sel.track];if(!tr)return;
@@ -644,7 +801,7 @@ export function createStudio(ui){
     });
     const totalH=Math.max(LANE_H,state.tracks.length*LANE_H);
     ph.style.height=totalH+'px';
-    renderPlayhead(state.playing?ac().currentTime-state.t0+state.offset:state.offset);
+    renderPlayhead(playheadT());
   }
 
   function drawClipWave(cv,clip,color,waveZoom){
@@ -718,6 +875,13 @@ export function createStudio(ui){
     roll.hidden=!show;
     roll.classList.toggle('on',show);
     ui.onTransport?.(state);
+    const instSel=$('midiInst');
+    if(instSel){
+      if(!instSel.options.length){
+        instSel.innerHTML=MIDI_INST.map(x=>`<option value="${x.id}">${x.name}</option>`).join('');
+      }
+      if(show)instSel.value=tr.inst||'keys';
+    }
     if(!show)return;
     const grid=$('pianoGrid'),keys=$('pianoKeys');
     const W=Math.max(1200,Math.ceil((dur()+4)*state.pxPerSec));
@@ -771,9 +935,31 @@ export function createStudio(ui){
     $('btnStop').onclick=()=>{stopPlay();state.offset=0;renderPlayhead(0);ui.onTransport?.(state)};
     $('btnRec').onclick=()=>toggleRecord();
     $('btnUndo').onclick=undo;$('btnRedo').onclick=redo;
-    $('btnSplit').onclick=()=>{state.tool='split';syncTools()};
+    $('btnSplit').onclick=()=>{state.tool='split';syncTools();splitAt(state.offset)};
     $('btnSelect').onclick=()=>{state.tool='select';syncTools()};
-    $('btnDraw').onclick=()=>{state.tool='draw';syncTools()};
+    $('btnDraw').onclick=()=>{
+      state.tool='draw';syncTools();
+      const tr=state.tracks[state.sel.track];
+      if(!tr||tr.type!=='midi'){
+        const inst=(($('midiInst')||{}).value)||'keys';
+        ensureMidiInst(inst);
+        ui.toast?.('เปิดแทร็ก MIDI · '+instOf(state.tracks[state.sel.track]).name+' — วาดโน้ตได้เลย');
+      }
+    };
+    const btnCopy=$('btnCopy');if(btnCopy)btnCopy.onclick=()=>copySelected(false);
+    const btnCut=$('btnCut');if(btnCut)btnCut.onclick=()=>copySelected(true);
+    const btnPaste=$('btnPaste');if(btnPaste)btnPaste.onclick=()=>pasteClipboard();
+    const midiInst=$('midiInst');
+    if(midiInst){
+      midiInst.onchange=()=>{
+        const id=midiInst.value;
+        const tr=state.tracks[state.sel.track];
+        if(tr&&tr.type==='midi'){
+          mark();tr.inst=id;const meta=instOf(tr);tr.name='MIDI · '+meta.name;tr.color=meta.color;
+          renderAll();previewNote(60);
+        }else ensureMidiInst(id);
+      };
+    }
     $('chkMetro').onchange=e=>{
       // Toggle นอม anytime without rebuilding the whole timeline (avoids click bursts / disappearing)
       state.metro=!!e.target.checked;
@@ -790,7 +976,12 @@ export function createStudio(ui){
       nomVolEl.oninput=e=>setNomVol(e.target.value);
     }else if(state.nomVol==null)state.nomVol=140;
     $('btnAddAud').onclick=()=>{mark();addAudioTrack();state.sel.track=state.tracks.length-1;renderAll();ui.toast?.('เพิ่มช่องเสียงแล้ว — ดับเบิลคลิกเลนหรือกดนำเข้าไฟล์')};
-    $('btnAddMidi').onclick=()=>{mark();addMidiTrack();state.sel.track=state.tracks.length-1;renderAll()};
+    $('btnAddMidi').onclick=()=>{
+      mark();
+      const inst=(($('midiInst')||{}).value)||'keys';
+      ensureMidiInst(inst);
+      ui.toast?.('เพิ่ม MIDI · '+instOf(state.tracks[state.sel.track]).name);
+    };
     const fNew=$('fAudNew');
     if(fNew)fNew.onchange=async e=>{
       const f=e.target.files[0];e.target.value='';if(!f)return;
@@ -824,7 +1015,7 @@ export function createStudio(ui){
         // pick nom side from recipe if present
         const nomSel=document.getElementById('rNom');
         if(nomSel)state.nomSide=nomSel.value==='L'?'L':'R';
-        if(state.playing){const at=ac().currentTime-state.t0+state.offset;startPlay(at)}
+        if(state.playing){const at=playheadT();startPlay(at)}
       };
     }
     const nomSel=document.getElementById('rNom');
@@ -832,7 +1023,7 @@ export function createStudio(ui){
       state.nomSide=nomSel.value==='L'?'L':'R';
       nomSel.addEventListener('change',()=>{
         state.nomSide=nomSel.value==='L'?'L':'R';
-        if(state.listenLR&&state.playing){const at=ac().currentTime-state.t0+state.offset;startPlay(at)}
+        if(state.listenLR&&state.playing){const at=playheadT();startPlay(at)}
       });
     }
     $('trackHeads').onchange=e=>{const rn=e.target.closest('[data-rn]');if(rn){state.tracks[+rn.dataset.rn].name=rn.value;renderMixer()}};
@@ -864,12 +1055,51 @@ export function createStudio(ui){
       const s=e.target.closest('[data-s]');if(s){mark();state.tracks[+s.dataset.s].solo=!state.tracks[+s.dataset.s].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
     };
 
-    // arrange interactions
+    // arrange interactions + draggable red playhead
     const wrap=$('lanesWrap');
+    const timeFromClientX=(clientX)=>{
+      const lanes=$('lanes');if(!lanes)return 0;
+      const rect=lanes.getBoundingClientRect();
+      return clamp((clientX-rect.left+wrap.scrollLeft)/state.pxPerSec,0,dur());
+    };
+    let phDrag=null; // {wasPlaying}
+    const phMove=e=>{
+      if(!phDrag)return;
+      const t=state.snap?snapT(timeFromClientX(e.clientX)):timeFromClientX(e.clientX);
+      state.offset=t;renderPlayhead(t);ui.onTransport?.(state);
+    };
+    const phUp=()=>{
+      if(!phDrag)return;
+      const was=phDrag.wasPlaying;phDrag=null;
+      window.removeEventListener('pointermove',phMove);
+      window.removeEventListener('pointerup',phUp);
+      if(was)startPlay(state.offset);
+    };
+    const startPhDrag=(e)=>{
+      e.preventDefault();e.stopPropagation();
+      phDrag={wasPlaying:!!state.playing};
+      if(state.playing){stopPlay();state.offset=timeFromClientX(e.clientX)}
+      else state.offset=timeFromClientX(e.clientX);
+      renderPlayhead(state.offset);ui.onTransport?.(state);
+      window.addEventListener('pointermove',phMove);
+      window.addEventListener('pointerup',phUp);
+    };
+    wrap.addEventListener('pointerdown',e=>{
+      if(e.target&&e.target.id==='playhead'){startPhDrag(e);return}
+    });
+    // Ruler drag/click seeks (same as scrubbing the red line)
+    const rulerWrap=document.querySelector('.ruler-wrap');
+    if(rulerWrap){
+      rulerWrap.style.cursor='ew-resize';
+      rulerWrap.addEventListener('pointerdown',e=>{
+        if(e.button!=null&&e.button!==0)return;
+        startPhDrag(e);
+      });
+    }
     wrap.addEventListener('click',e=>{
-      if(e.target.closest('.clip,.hndl,.mblock'))return;
-      const rect=$('lanes').getBoundingClientRect();
-      const t=(e.clientX-rect.left+wrap.scrollLeft)/state.pxPerSec;
+      if(phDrag)return;
+      if(e.target.closest('.clip,.hndl,.mblock,#playhead'))return;
+      const t=timeFromClientX(e.clientX);
       if(state.tool==='split'){state.sel.track=+e.target.closest('.lane')?.dataset.ti||state.sel.track;splitAt(snapT(t));return}
       seek(snapT(t));
     });
@@ -952,10 +1182,13 @@ export function createStudio(ui){
   }
 
   function previewNote(n){
-    const a=ac();const osc=a.createOscillator();const g=a.createGain();
-    osc.type='sawtooth';osc.frequency.value=midiHz(n);
-    g.gain.value=0.15;osc.connect(g);g.connect(a.destination);
-    osc.start();g.gain.exponentialRampToValueAtTime(0.001,a.currentTime+0.3);osc.stop(a.currentTime+0.32);
+    const a=ac();if(a.state==='suspended')a.resume();
+    const tr=state.tracks[state.sel.track];
+    const g=a.createGain();g.gain.value=1;g.connect(a.destination);
+    const nodesBefore=state.nodes.length;
+    voiceNote(g,n,0.28,a.currentTime+0.01,(tr&&tr.inst)||'keys',0.9);
+    // preview voices auto-stop; drop refs after a beat
+    setTimeout(()=>{try{g.disconnect()}catch(e){};state.nodes.length=Math.min(state.nodes.length,nodesBefore)},500);
   }
 
   function syncTools(){
@@ -1279,6 +1512,29 @@ export function createStudio(ui){
       L[at+i]+=v;R[at+i]+=v;
     }
   }
+  // Nudge click-grid phase (t0) then rebuild guide tracks. deltaSec e.g. ±0.02
+  function nudgeNom(deltaSec){
+    state.t0=Math.max(0,Math.round(((+state.t0||0)+(+deltaSec||0))*1000)/1000);
+    try{
+      const bpm=state.bpm||120,ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
+      syncGuideTracks({bpm,t0:state.t0,ci,metroOn:!!state.metro,preview:true});
+    }catch(e){}
+    return state.t0;
+  }
+  // Re-run onset detect + rebuild nom so clicks lock to the song again
+  function relockBeat(){
+    const g=detectBeatGrid('drums');
+    state.bpm=g.bpm;state.t0=g.t0;
+    try{
+      const bpmEl=typeof document!=='undefined'&&document.getElementById('bpm');
+      if(bpmEl)bpmEl.value=String(Math.round(g.bpm));
+      const ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
+      syncGuideTracks({bpm:g.bpm,t0:g.t0,ci,metroOn:true,preview:true});
+      state.metro=true;
+      const m=typeof document!=='undefined'&&document.getElementById('chkMetro');if(m)m.checked=true;
+    }catch(e){}
+    return g;
+  }
   // Beat grid from drums (prefer) / bass mix: {bpm, t0} — t0 = first downbeat (sec).
   // Onset-interval method (same idea as live app detectBpm) — more stable than autocorr for rock.
   function detectBeatGrid(preferStem){
@@ -1353,15 +1609,30 @@ export function createStudio(ui){
         }
         if(sc>bestSc){bestSc=sc;bestOff=off}
       }
-      // Snap phase near first strong onset within ±½ beat
+      // Snap phase to strong onsets (prefer early kicks within first ~8 bars)
       let snap=bestOff;let snapSc=-1;
-      for(const o of onsets.slice(0,40)){
+      const early=onsets.filter(o=>o<spb*32).slice(0,80);
+      for(const o of (early.length?early:onsets.slice(0,40))){
+        // Candidate: shift bestOff so a grid line lands on this onset
         const cand=o-Math.round((o-bestOff)/spb)*spb;
         const d=Math.abs(cand-bestOff);if(d>spb*0.55)continue;
-        const i=Math.floor(o/hopSec);const sc=(flux[i]||0)+1/(1+d*8);
+        const i=Math.floor(o/hopSec);
+        // Prefer downbeats (beat 0) and earlier song position
+        const b4=((Math.round((o-cand)/spb)%4)+4)%4;
+        const sc=(flux[i]||0)*(b4===0?1.8:b4===2?1.15:0.7)+1/(1+d*8)+1/(1+o);
         if(sc>snapSc){snapSc=sc;snap=Math.max(0,cand)}
       }
-      t0=Math.round(Math.max(0,snap)*1000)/1000;
+      // Micro-fit: maximize flux on beat-1 over first 16 bars around snap
+      let fine=snap,fineSc=-1;
+      for(let d=-8;d<=8;d++){
+        const off=snap+d*(spb/64);if(off<0)continue;let sc=0;
+        for(let bi=0;bi<64;bi++){
+          const i=Math.floor((off+bi*spb)/hopSec);if(i>=n)break;
+          const b4=bi%4;sc+=flux[i]*(b4===0?2:b4===2?1.1:0.35);
+        }
+        if(sc>fineSc){fineSc=sc;fine=off}
+      }
+      t0=Math.round(Math.max(0,fine)*1000)/1000;
     }else{
       // Fallback autocorr if few onsets
       const hop=256,nn=Math.floor(mixL.length/hop);
@@ -1610,7 +1881,8 @@ export function createStudio(ui){
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
     applyStemMutes,renderTrackWav,renderMusicMono,makeDualMonoBlob,makeExportClickBuf,
-    makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
+    makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
+    copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
     async boot(){bind();
       // Preload spoken one–two–three–four for Data count-in
@@ -1641,12 +1913,15 @@ export function createStudio(ui){
       // keyboard — guard non-Element targets (Document/Window) that lack .matches
       addEventListener('keydown',e=>{
         const t=e.target;
-        if(t&&typeof t.matches==='function'&&t.matches('input,textarea'))return;
+        if(t&&typeof t.matches==='function'&&t.matches('input,textarea,select'))return;
         if(e.code==='Space'){e.preventDefault();$('btnPlay').click()}
         if(e.key==='Delete'||e.key==='Backspace')deleteSelected();
         if(e.key==='s'&&!e.metaKey&&!e.ctrlKey){state.tool='split';syncTools();splitAt(state.offset)}
-        if(e.key==='v'){state.tool='select';syncTools()}
-        if(e.key==='d'){state.tool='draw';syncTools()}
+        if(e.key==='v'&&!e.metaKey&&!e.ctrlKey){state.tool='select';syncTools()}
+        if(e.key==='d'&&!e.metaKey&&!e.ctrlKey){state.tool='draw';syncTools()}
+        if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='c'||e.key==='C')){e.preventDefault();copySelected(false)}
+        if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='x'||e.key==='X')){e.preventDefault();copySelected(true)}
+        if((e.metaKey||e.ctrlKey)&&!e.shiftKey&&(e.key==='v'||e.key==='V')){e.preventDefault();pasteClipboard()}
         if((e.metaKey||e.ctrlKey)&&e.key==='z'){e.preventDefault();undo()}
         if((e.metaKey||e.ctrlKey)&&e.key==='y'){e.preventDefault();redo()}
       });

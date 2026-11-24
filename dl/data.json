@@ -1,5 +1,5 @@
 {
-  "ver": "1.0.19",
-  "notes": "เล่นยาวไม่ตัด: เลิก BufferSource — ดึง PCM ต่อเนื่องใน Data Studio",
+  "ver": "1.0.21",
+  "notes": "ตัด/คัดลอก/วาง · MIDI เลือกเครื่อง · อัดไมค์หรือไม่มีไมค์ · เล่นไม่ตัด",
   "url": "https://paithoonbeer.github.io/data.html"
 }

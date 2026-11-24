@@ -2,8 +2,10 @@
  * Bump DATAV here (and meta bp-data in data.html) when shipping Data-only changes.
  * Do NOT bump public/app.js APPV / sw cache / APK for Data-only work.
  */
-export const DATAV='1.0.19';
+export const DATAV='1.0.21';
 export const DATACHG={
+  '1.0.21':'ตัด/คัดลอก/วางคลิป·โน้ต · เลือกเสียงเครื่อง MIDI · อัดไมค์หรือจากเครื่องเล่น/คลิปว่าง · เล่นไม่ตัด+ลากเส้นแดง+ล็อกนอม',
+  '1.0.20':'แก้เสียงตัด ~0:07 (มิกเซอร์ keepalive) · ลากเส้นแดงได้ · ล็อก/เลื่อนนอมให้ตรงจังหวะ',
   '1.0.19':'เล่นยาวไม่ตัด: เลิกใช้ BufferSource — ดึง PCM ต่อเนื่อง (ScriptProcessor) · ไม่พึ่ง soft-reseed',
   '1.0.18':'มิกเซอร์: ปรับดังตอนมิวต์แล้วเปิดกลับมีผลทันที · ดาต้าสะอาดขึ้น (mix−สเต็มที่ปิด) · นอมดังชัดแบบเด๋อ · กันเสียงตัด 1:20',
   '1.0.17':'แก้เสียงตัด ~1:20 ถาวร: คัดลอกชิ้นสั้นไม่ seek บัฟเฟอร์ใหญ่ · soft-reseed ทุก 45วิ · ตรวจเงียบแล้วต่อเอง',
