@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.31">
+<meta name="bp-data" content="1.0.32">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -141,7 +141,13 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 .top .bpmbox input{width:72px;background:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:4px}
 .btn.sm{min-height:26px;min-width:26px;padding:2px 6px}
 .nudge{display:inline-flex;gap:2px}
-.btn.tog.on,.btn.armed{background:#2b3a1c;border-color:#7fbf3f;color:#e8ffd0}
+.btn.tog.on{background:#2b3a1c;border-color:#7fbf3f;color:#e8ffd0}
+.btn.tog:not(.on){opacity:.75}
+.btn.armed{background:#ffd60a;border-color:#ffd60a;color:#111;font-weight:700;box-shadow:0 0 0 3px rgba(255,214,10,.35);animation:armp 1.2s ease-in-out infinite}
+@keyframes armp{50%{box-shadow:0 0 0 6px rgba(255,214,10,.12)}}
+.corner{position:relative}
+.count-hint{position:fixed;left:50%;transform:translateX(-50%);top:150px;z-index:20;background:#ffd60a;color:#111;font-weight:700;font-size:12px;padding:4px 12px;border-radius:999px;box-shadow:0 4px 14px #0008;pointer-events:none}
+.counting .lanes-wrap{outline:2px solid rgba(255,214,10,.7);outline-offset:-2px}
 .zoombox{display:inline-flex;align-items:center;gap:4px}.zoombox input{width:90px}
 .menu{position:relative}.menu>summary{list-style:none}.menu>summary::-webkit-details-marker{display:none}
 .menu .pop{position:absolute;right:0;top:calc(100% + 4px);z-index:30;background:#151b22;border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;min-width:260px;box-shadow:0 10px 30px #000a}
@@ -157,6 +163,8 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 .chip i{font-style:normal;font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;color:var(--mut)}
 .chip input:checked+i{background:#3a2222;border-color:#a04848;color:#ffb0b0;text-decoration:line-through}
 .cblock{position:absolute;top:0;bottom:0;background:rgba(255,214,10,.14);border-left:2px solid #ffd60a;border-right:1px dashed rgba(255,214,10,.5);z-index:3;cursor:grab;touch-action:none}
+.cband{position:absolute;top:0;z-index:2;pointer-events:none;background:rgba(255,214,10,.07);border-left:2px solid rgba(255,214,10,.85)}
+.cband b{position:sticky;top:0;display:inline-block;margin:2px 0 0 4px;font-size:11px;color:#111;background:#ffd60a;border-radius:4px;padding:1px 6px}
 .cblock.intro{pointer-events:none;background:rgba(255,214,10,.07);border-left-style:dashed}
 .cblock b{position:absolute;left:4px;top:2px;font-size:10px;color:#ffd60a;white-space:nowrap;text-shadow:0 1px 2px #000}
 .counting .lanes-wrap,.counting .ruler-wrap,.tapping .lanes-wrap,.tapping .ruler-wrap{cursor:copy}
@@ -177,7 +185,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button type="button" class="btn icon" id="btnLockBeat" title="จับจังหวะใหม่จากเพลง (BPM + จังหวะ 1)">🎯</button>
     <button type="button" class="btn icon" id="btnTap" title="แตะจังหวะ 1: กดปุ่มนี้แล้วคลิกบนไทม์ไลน์ตรงจังหวะ 1 — หรือกด T ระหว่างเล่นตรงจังหวะ 1">👆</button>
     <span class="nudge" title="เลื่อนนอมทีละ 10 ms ถ้ายังไม่ตรง"><button type="button" class="btn icon sm" id="btnT0L">◀</button><button type="button" class="btn icon sm" id="btnT0R">▶</button></span>
-    <label class="btn icon tog" id="btnMetro" title="เปิด/ปิดเสียงนอมตอนฟัง"><input type="checkbox" id="chkMetro" hidden>🔔</label>
+    <label class="btn icon tog on" id="btnMetro" title="เสียงนอมตอนฟัง: เปิด (คลิกเพื่อปิด)"><input type="checkbox" id="chkMetro" checked hidden><span id="metroIco">🔔</span></label>
     <label class="zoombox" title="ซูมไทม์ไลน์">🔍 <input id="zoom" type="range" min="40" max="200" value="80"></label>
     <button type="button" class="btn icon" id="btnUndo" title="ย้อน (Ctrl+Z)">↶</button>
     <button type="button" class="btn icon" id="btnRedo" title="ทำซ้ำ">↷</button>
@@ -187,7 +195,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <button type="button" class="btn" id="btnSave">💾 บันทึก (ในเบราว์เซอร์)</button>
       <button type="button" class="btn" id="btnLoad">📂 เปิดไฟล์โปรเจกต์</button>
       <button type="button" class="btn" id="btnExportProj">⬇ ส่งออกไฟล์โปรเจกต์</button>
-      <input id="fileProj" type="file" accept=".json,application/json" hidden>
+      <input id="fileProj" type="file" accept=".setsod-project,.json,application/json" hidden>
     </div></details>
     <details class="menu" id="mnuTools"><summary class="btn icon" title="เครื่องมือสตูดิโอ">⋯</summary><div class="pop">
       <b>แก้คลิป</b>
@@ -237,7 +245,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button class="btn" id="goAi" hidden>↻ ลองแยกใหม่</button>
     <span class="status" id="sAi"></span>
     <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างเหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับเข้าตอนต้นเพลง · 48k · −11 LUFS">⭐ แบบไฟล์ตัวอย่าง</button>
-    <span class="cnt"><button type="button" class="btn" id="btnCount" title="เปิดแล้วคลิกบนไทม์ไลน์ตรงไหน = นับตรงนั้น (ตามนอมของเพลง) · คลิกที่ช่องนับ = ลบ · ลาก = ย้าย">🗣 นับ 1-2-3-4</button><select id="rCountN" title="แบบการนับ"><option value="8" title="one · two · one two three four">8 ครั้ง</option><option value="4" title="one two three four">4 ครั้ง</option></select></span>
+    <span class="cnt"><button type="button" class="btn" id="btnCount" aria-pressed="false" title="เปิดแล้วคลิกบนไทม์ไลน์ตรงไหน = นับตรงนั้น (ตามนอมของเพลง) · คลิกที่ช่องนับ = ลบ · ลาก = ย้าย">🗣 นับ 1-2-3-4</button><select id="rCountN" title="แบบการนับ"><option value="8" title="one · two · one two three four">8 ครั้ง</option><option value="4" title="one two three four">4 ครั้ง</option></select></span>
     <label class="chk">นับเข้า <select id="rIntro"><option value="0">ไม่นับ</option><option value="over1" selected>ต้นเพลง 1 รอบ</option><option value="over2">ต้นเพลง 2 รอบ</option><option value="pre1">ก่อนเพลง 1 ห้อง</option><option value="pre2">ก่อนเพลง 2 ห้อง</option></select></label>
     <div class="rmutes" id="rMutes" title="ฝั่งเพลงไม่เอาเครื่องไหน (จำแยกต่อเพลง) — ตรงกับปุ่ม M ที่หัวแทร็ก">
       <span>ปิด:</span>
@@ -254,7 +262,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
   </div>
 
   <div class="main">
-    <div class="corner"></div>
+    <div class="corner"><span class="count-hint" id="countHint" hidden></span></div>
     <div class="ruler-wrap"><canvas id="ruler" height="28"></canvas></div>
     <div class="heads" id="trackHeads"></div>
     <div class="lanes-wrap" id="lanesWrap">
@@ -320,7 +328,7 @@ const studio=createStudio({
   root:document.getElementById('app'),
   toast,
   onTransport(st){
-    const t=(typeof studio.playheadT==='function')?studio.playheadT():(st.playing?st.ac.currentTime-st.t0+st.offset:st.offset);
+    const t=(typeof studio.playheadT==='function')?studio.playheadT():(st.playing?st.ac.currentTime-(st.playT0||0)+st.offset:st.offset);
     document.getElementById('clock').textContent=studio.fmt(t);
     document.getElementById('btnPlay').textContent=st.playing?'❚❚':'▶';
     document.getElementById('btnRec')?.classList.toggle('on',!!st.recording);
@@ -413,6 +421,7 @@ async function startAi(){
     }
     $('sAi').textContent=`✅ แยกเสร็จ ${fmtMmSs(d.outSec||secIn)} — โหลดเข้าสตูดิโอแล้ว`;
     studio.state.title=title;
+    const pend=(studio.state.markers||[]).filter(m=>m.kind==='count'&&m.src==='manual').map(m=>({...m}));
     studio.setMarkers([]); // new song → its own markers (restored below if saved before)
     studio.loadStemChannels({
       title,src:d.src,
@@ -427,8 +436,9 @@ async function startAi(){
       const g=studio.relockBeat();
       setBpmField(g.bpm);
       document.getElementById('chkMetro').checked=true;studio.state.metro=true;syncMetroBtn();
+      if(pend.length&&!(studio.state.markers||[]).length){studio.setMarkers(pend);for(const m of pend)studio.moveCount(m.id,m.t);toast('จัดจุดนับ '+pend.length+' จุดให้ตรงจังหวะเพลงแล้ว')}
       applyRecipeMutes();refreshGuides();
-      beatToast(g);
+      if(!pend.length)beatToast(g);
       $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · นอม ${fmtBpm(g.bpm)} BPM`;
     }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — กด 🎯 จับจังหวะ หรือพิมพ์ BPM');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
   }catch(e){$('sAi').textContent='❌ '+(e.message||e);$('goAi').hidden=!aiFile}
@@ -547,22 +557,39 @@ $('btnRefPreset').onclick=()=>{
 function setArmed(kind,on){
   window.__countArmed=kind==='count'?on:false;window.__tapArmed=kind==='tap'?on:false;
   $('btnCount').classList.toggle('armed',!!window.__countArmed);$('btnTap').classList.toggle('armed',!!window.__tapArmed);
+  $('btnCount').setAttribute('aria-pressed',window.__countArmed?'true':'false');
+  $('btnCount').textContent=window.__countArmed?'🗣 กำลังนับ (Esc)':'🗣 นับ 1-2-3-4';
+  $('countHint').hidden=!window.__countArmed&&!window.__tapArmed;$('countHint').textContent=window.__tapArmed?'👆 คลิกตรงจังหวะ 1 ของเพลง':'🗣 โหมดนับ — คลิกตรงไหนก็ได้บนไทม์ไลน์ · Esc ออก';
   $('app').classList.toggle('counting',!!window.__countArmed);$('app').classList.toggle('tapping',!!window.__tapArmed);
 }
-$('btnCount').onclick=()=>{const on=!window.__countArmed;setArmed('count',on);if(on)toast('คลิกบนไทม์ไลน์ตรงที่อยากให้นับ · คลิกช่องสีเหลือง = ลบ')};
+function hasMusic(){return studio.state.tracks.some(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length)}
+function gridState(){if(aiBusy)return 'split';if(!hasMusic())return 'nosong';return studio.state.beatInfo||studio.state.tracks.some(t=>t.stem==='click')?'ok':'nogrid'}
+$('btnCount').onclick=()=>{const on=!window.__countArmed;setArmed('count',on);if(!on)return;
+  const g=gridState(),b=fmtBpm(studio.state.bpm||120);
+  toast(g==='ok'?'โหมดนับ: คลิกบนไทม์ไลน์ตรงที่อยากให้นับ · คลิกช่องสีเหลือง = ลบ · Esc ออก'
+    :g==='split'?`กำลังแยก AI — วางจุดนับได้เลย (ตอนนี้ใช้ ${b} BPM) จะจัดให้ตรงจังหวะเพลงหลังแยกเสร็จ`
+    :g==='nosong'?`ยังไม่มีเพลง — วางจุดนับได้ตาม ${b} BPM · ลากเพลงมาวางเพื่อให้ตรงจังหวะ`
+    :`ยังไม่มีจังหวะ — กด 🎯 หรือใส่ BPM (ตอนนี้นับตาม ${b} BPM)`)};
 $('btnTap').onclick=()=>{const on=!window.__tapArmed;setArmed('tap',on);if(on)toast('คลิกบนไทม์ไลน์ตรงจังหวะ 1 ของเพลง (หรือกด T ระหว่างเล่น)')};
 window.__onTapAt=r=>{setArmed('tap',false);saveRecipe();toast('ตั้งจังหวะ 1 แล้ว · t0='+r.t0.toFixed(3)+'s');$('sRecipe').textContent=`นอม ${fmtBpm(studio.state.bpm)} BPM · จังหวะ 1 @ ${r.t0.toFixed(2)}s`};
 addEventListener('keydown',e=>{if(e.code!=='KeyT'||e.target.closest?.('input,select,textarea'))return;if(!studio.state.playing)return;e.preventDefault();const r=studio.tapNow();window.__onTapAt(r)});
 addEventListener('keydown',e=>{if(e.key==='Escape')setArmed('',false)});
 window.__onMarkers=()=>{saveRecipe();refreshGuides();$('sRecipe').textContent=markerStatus()||'ไม่มีจุดนับ'};
 window.__onStemMute=(stem,mute)=>{const c=$('rMutes').querySelector(`input[data-mute="${stem}"]`);if(c)c.checked=!!mute;applyRecipeMutes();saveRecipe()};
-function syncMetroBtn(){$('btnMetro').classList.toggle('on',!!$('chkMetro').checked)}
+function syncMetroBtn(){const on=!!$('chkMetro').checked;$('btnMetro').classList.toggle('on',on);$('metroIco').textContent=on?'🔔':'🔕';$('btnMetro').title=on?'เสียงนอมตอนฟัง: เปิด (คลิกเพื่อปิด)':'เสียงนอมตอนฟัง: ปิดอยู่ (คลิกเพื่อเปิด)'}
 $('chkMetro').addEventListener('change',syncMetroBtn);syncMetroBtn();
 function fmtBpm(b){return String(Math.round((+b||0)*100)/100)}
 function setBpmField(b){const el=$('bpm');if(el)el.value=fmtBpm(b)}
 function beatToast(g){const low=g.conf!=null&&g.conf<0.9;toast(`นอม ${fmtBpm(g.bpm)} BPM · จังหวะ 1 @ ${(g.t0||0).toFixed(2)}s`+(low?' · ⚠️ จับไม่ค่อยชัด — ฟังแล้วกด 👆 ตรงจังหวะ 1 หรือแก้ BPM':''))}
 document.addEventListener('click',e=>{document.querySelectorAll('details.menu[open]').forEach(d=>{if(!d.contains(e.target))d.open=false})});
-window.__applyProj=proj=>{if(proj&&proj.recipe)applyRecipeState(proj.recipe);syncNomOpt();refreshGuides()};
+window.__applyProj=proj=>{
+  if(proj&&proj.recipe)applyRecipeState(proj.recipe);syncNomOpt();
+  const ck=studio.state.tracks.find(t=>t.stem==='click');if(ck&&!(ck.vol>=5))ck.vol=studio.state.nomVol||140;
+  if(hasMusic()&&studio.state.mixBuf&&!(proj&&proj.beatV>=132)){ // saved before 1.0.32 → its grid is unreliable
+    try{const g=studio.relockBeat();setBpmField(g.bpm)}catch(e){}
+  }
+  $('chkMetro').checked=true;studio.state.metro=true;syncMetroBtn();
+  refreshGuides()};
 window.__recipeReady=true;
 if(window.__pendProj){window.__applyProj(window.__pendProj);window.__pendProj=null}
 syncNomOpt();
@@ -638,7 +665,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.31',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.32',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
