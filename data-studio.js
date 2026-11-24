@@ -85,15 +85,15 @@ export function createStudio(ui){
     return await ac().decodeAudioData(ab.slice(0));
   }
   function putBuf(buf){const id=uid();state.buffers.set(id,buf);return id}
-  // denser min/max + RMS peaks. Per-window local gain so mid-song quiet parts
-  // still draw body (global peak alone made post-AI stems look like a flat hairline).
-  // True digital silence (near-zero window) stays flat.
+  // min/max + RMS peaks. Mild global normalize only — never per-window boost
+  // (that turned demucs near-silence into solid filled blocks).
+  // Bins below ~2.5% of peak = true silence → stay flat.
   function peaksOf(buf,bins){
     const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
     const n=L.length;
-    const nb=Math.max(1600,Math.min(bins||Math.ceil(buf.duration*600),20000));
-    const step=Math.max(1,Math.floor(n/nb)),nPairs=Math.ceil(n/step);
-    const out=new Float32Array(nPairs*2);
+    const nb=Math.max(1200,Math.min(bins||Math.ceil(buf.duration*400),12000));
+    const step=Math.max(1,Math.floor(n/nb)),out=new Float32Array(Math.ceil(n/step)*2);
+    let peak=0;
     for(let i=0,o=0;i<n;i+=step,o+=2){
       let mn=1,mx=-1,ss=0,cnt=0;const e=Math.min(n,i+step);
       for(let j=i;j<e;j+=2){
@@ -102,59 +102,34 @@ export function createStudio(ui){
       }
       if(mn>mx){mn=0;mx=0}
       const rms=cnt?Math.sqrt(ss/cnt):0;
-      const span=Math.max(Math.abs(mn),Math.abs(mx),rms*1.8);
+      const span=Math.max(Math.abs(mn),Math.abs(mx),rms*1.4);
       out[o]=-span;out[o+1]=span;
+      if(span>peak)peak=span;
     }
-    // Sliding local normalize (~0.6s windows) — quiet mid sections get their own gain
-    const win=Math.max(4,Math.round(0.6*buf.sampleRate/step));
-    const scaled=new Float32Array(out.length);
-    for(let p=0;p<nPairs;p++){
-      let loc=0;const a=Math.max(0,p-win),b=Math.min(nPairs-1,p+win);
-      for(let k=a;k<=b;k++){
-        const s=Math.max(Math.abs(out[k*2]),Math.abs(out[k*2+1]));
-        if(s>loc)loc=s;
-      }
-      const g=(loc>1e-5&&loc<0.45)?Math.min(0.92/loc,16):1;
-      scaled[p*2]=clamp(out[p*2]*g,-1,1);
-      scaled[p*2+1]=clamp(out[p*2+1]*g,-1,1);
+    const floor=peak*0.025;
+    const g=(peak>1e-4&&peak<0.35)?Math.min(0.75/peak,3.5):1;
+    for(let i=0;i<out.length;i+=2){
+      const s=Math.max(Math.abs(out[i]),Math.abs(out[i+1]));
+      if(s<floor){out[i]=0;out[i+1]=0;continue}
+      if(g!==1){out[i]=clamp(out[i]*g,-1,1);out[i+1]=clamp(out[i+1]*g,-1,1)}
     }
-    return scaled;
+    return out;
   }
-  // Peak-normalize a stereo LR pair so quiet demucs stems aren't inaudible
+  // Mild peak-norm only when the WHOLE stem is quiet (not mid-song gaps)
   function peakNormLR(ch,target){
     if(!ch||!ch.L)return ch;
-    target=target==null?0.85:target;
+    target=target==null?0.75:target;
     const n=ch.L.length,R=ch.R&&ch.R.length===n?ch.R:ch.L;
     let peak=0;const step=Math.max(1,(n/250000)|0);
     for(let i=0;i<n;i+=step){
       const a=ch.L[i]<0?-ch.L[i]:ch.L[i],b=R[i]<0?-R[i]:R[i];
       if(a>peak)peak=a;if(b>peak)peak=b;
     }
-    if(!(peak>1e-5)||peak>=0.55)return ch;
-    const g=Math.min(target/peak,10);
+    if(!(peak>1e-4)||peak>=0.22)return ch; // already usable, or near-empty
+    const g=Math.min(target/peak,4);
     const oL=new Float32Array(n),oR=new Float32Array(n);
     for(let i=0;i<n;i++){oL[i]=clamp(ch.L[i]*g,-1,1);oR[i]=clamp(R[i]*g,-1,1)}
     return{L:oL,R:oR};
-  }
-  // Fold mix−Σstems residual into "other" so energy demucs dropped mid-song isn't lost
-  function foldResidualIntoOther(by,mix){
-    try{
-      if(!mix||!mix.L||!by)return;
-      const n=mix.L.length;const keys=['drums','bass','other','vocals','guitar','piano'];
-      if(!by.other)by.other={L:new Float32Array(n),R:new Float32Array(n)};
-      const oL=by.other.L,oR=by.other.R&&by.other.R.length===n?by.other.R:oL;
-      const mR=mix.R&&mix.R.length===n?mix.R:mix.L;
-      for(let i=0;i<n;i++){
-        let sL=mix.L[i],sR=mR[i];
-        for(const k of keys){
-          const ch=by[k];if(!ch||!ch.L||ch.L.length!==n)continue;
-          sL-=ch.L[i]||0;sR-=(ch.R&&ch.R[i])||0;
-        }
-        // only add meaningful residual (avoid doubling noise floor)
-        if((sL*sL+sR*sR)>1e-8){oL[i]=clamp(oL[i]+sL,-1,1);if(oR!==oL)oR[i]=clamp(oR[i]+sR,-1,1)}
-      }
-      by.other={L:oL,R:oR===oL?oL:oR};
-    }catch(e){}
   }
 
   function importAudioToTrack(trackIdx,file,atTime){
@@ -207,9 +182,8 @@ export function createStudio(ui){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
     fillQuietBass(by,mix);
-    foldResidualIntoOther(by,mix);
-    // Peak-normalize each stem — demucs often leaves usable but quiet lanes that look/sound empty
-    for(const k of Object.keys(by))by[k]=peakNormLR(by[k],0.88);
+    // Only boost stems that are quiet end-to-end (mid-song demucs gaps stay silence — correct)
+    for(const k of Object.keys(by))by[k]=peakNormLR(by[k],0.75);
     const sr=sampleRate||44100;
     // Keep original mix — mix-minus muted stems beats summing demucs parts for clean beds
     state.mixBuf=null;
@@ -266,6 +240,7 @@ export function createStudio(ui){
     cancelAnimationFrame(state._raf);
     if(state._watch){clearInterval(state._watch);state._watch=null}
     if(state.playing)state.offset=clamp(playheadT(),0,dur());
+    state._scrubUI=null;
     if(state._pull){state._pull.alive=false;state._pull=null}
     for(const n of state.nodes){try{n.onended=null;n.onaudioprocess=null;n.stop?.()}catch(e){}try{n.disconnect?.()}catch(e){}}
     for(const x of state.fx){try{x.nodes.forEach(n=>n.disconnect())}catch(e){}}
@@ -325,6 +300,8 @@ export function createStudio(ui){
     return best;
   }
   function playheadT(){
+    // While user drags the red line, freeze displayed/seek time to the scrub target
+    if(state._scrubUI!=null)return state._scrubUI;
     if(state.playing&&state._pull&&state._pull.alive){
       return state._pull.from+(state._pull.frame/ac().sampleRate);
     }
@@ -877,33 +854,36 @@ export function createStudio(ui){
     const a0=clip.offset/total,a1=(clip.offset+clip.dur)/total;
     const pairs=pk.length>=4&&pk.length%2===0;
     const bins=pairs?pk.length/2:pk.length;
-    // Per-pixel envelope + sliding local amp so quiet middles of a stem still draw
-    const raw=new Float32Array(w);
-    for(let x=0;x<w;x++){
+    // One amp for the visible clip — quiet mid gaps stay thin (real demucs silence)
+    let loc=0;
+    for(let x=0;x<w;x+=Math.max(1,(w/500)|0)){
       const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
-      raw[x]=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      if(mx>loc)loc=mx;
     }
-    const win=Math.max(12,(w*0.06)|0);
-    const amp=new Float32Array(w);
-    for(let x=0;x<w;x++){
-      let loc=0;const a=Math.max(0,x-win),b=Math.min(w-1,x+win);
-      for(let i=a;i<=b;i++)if(raw[i]>loc)loc=raw[i];
-      amp[x]=(mid-pad)*z*(loc>1e-5&&loc<0.42?Math.min(0.9/loc,14):1);
-    }
+    const amp=(mid-pad)*z*(loc>0.02&&loc<0.4?Math.min(0.7/loc,2.8):1);
+    const floor=loc*0.03;
     g.beginPath();g.moveTo(0,mid);
     for(let x=0;x<w;x++){
-      const mx=raw[x];
-      g.lineTo(x,mid-Math.max(mx>1e-5?1:0,mx*amp[x]));
+      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
+      let mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      if(mx<floor)mx=0;
+      g.lineTo(x,mid-Math.max(mx>1e-5?1:0,mx*amp));
     }
     for(let x=w-1;x>=0;x--){
-      const mn=-raw[x];
-      g.lineTo(x,mid-Math.min(mn<-1e-5?-1:0,mn*amp[x]));
+      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
+      let mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      if(mx<floor)mx=0;
+      g.lineTo(x,mid+Math.max(mx>1e-5?1:0,mx*amp));
     }
     g.closePath();
     g.globalAlpha=.55;g.fillStyle=color;g.fill();
     g.beginPath();
     for(let x=0;x<w;x++){
-      const y=mid-raw[x]*amp[x];if(x)g.lineTo(x,y);else g.moveTo(x,y);
+      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
+      let mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      if(mx<floor)mx=0;
+      const y=mid-mx*amp;if(x)g.lineTo(x,y);else g.moveTo(x,y);
     }
     g.globalAlpha=.95;g.strokeStyle=color;g.lineWidth=1;g.stroke();
   }
@@ -1139,21 +1119,28 @@ export function createStudio(ui){
     const phMove=e=>{
       if(!phDrag)return;
       e.preventDefault();
-      scrubTo(timeFromClientX(e.clientX),{snap:!!state.snap&&!e.shiftKey});
+      phDrag.moved=true;
+      // Visual only while dragging — audio jumps once on release (avoids stutter every pixel)
+      scrubTo(timeFromClientX(e.clientX),{snap:false,dragging:true,visualOnly:!!phDrag.wasPlaying});
     };
     const phUp=()=>{
       if(!phDrag)return;
+      const was=phDrag.wasPlaying;
+      const t=state._scrubUI!=null?state._scrubUI:state.offset;
       phDrag=null;
       window.removeEventListener('pointermove',phMove);
       window.removeEventListener('pointerup',phUp);
       window.removeEventListener('pointercancel',phUp);
-      // live scrub already retargeted the mixer — do NOT stop/start (that was the stutter)
+      // Commit audio seek once (clears _scrubUI)
+      scrubTo(t,{snap:false});
+      if(was&&!state.playing){/* softReseed/stop edge */}
     };
     const startPhDrag=(e)=>{
       e.preventDefault();e.stopPropagation();
-      phDrag={wasPlaying:!!state.playing,pid:e.pointerId};
+      phDrag={wasPlaying:!!state.playing,pid:e.pointerId,moved:false};
       try{(e.target||wrap).setPointerCapture?.(e.pointerId)}catch(_){}
-      scrubTo(timeFromClientX(e.clientX),{snap:false});
+      // First touch: visual if already playing (keep music going until release)
+      scrubTo(timeFromClientX(e.clientX),{snap:false,dragging:true,visualOnly:!!state.playing});
       window.addEventListener('pointermove',phMove,{passive:false});
       window.addEventListener('pointerup',phUp);
       window.addEventListener('pointercancel',phUp);
@@ -1280,22 +1267,30 @@ export function createStudio(ui){
     Object.entries(map).forEach(([tool,id])=>{const b=$(id);if(b)b.classList.toggle('on',state.tool===tool)});
   }
 
-  // Live scrub: move playhead WITHOUT tearing down the keepalive mixer (no stutter).
+  // Live scrub. While dragging during play: hold UI at target (state._scrubUI) and keep
+  // audio running; commit audio once on pointer-up. Retargeting every mousemove = stutter.
   function scrubTo(t,opt){
     opt=opt||{};
     let want=clamp(t,0,dur());
-    if(opt.snap!==false&&state.snap)want=snapT(want);
+    if(opt.snap===true||(opt.snap!==false&&state.snap&&!opt.dragging))want=snapT(want);
     state.offset=want;
+    if(opt.visualOnly){
+      state._scrubUI=want;
+      renderPlayhead(want);
+      ui.onTransport?.(state);
+      return want;
+    }
+    state._scrubUI=null;
     renderPlayhead(want);
     ui.onTransport?.(state);
     if(!(state.playing&&state._pull&&state._pull.alive))return want;
-    // Retarget pull mixer in place (onaudioprocess reads pull.from — not a closed-over start)
+    // Retarget pull mixer in place (onaudioprocess reads pull.from)
     state._pull.from=want;
     state._pull.frame=0;
     state.t0=ac().currentTime;
     state._lastReseed=want;
     state._silentMs=0;
-    state._reseedGuard=ac().currentTime+1.2; // don't softReseed mid-scrub
+    state._reseedGuard=ac().currentTime+1.5;
     if(state._midi){
       for(const job of state._midi){
         job.playFrom=want;job.when=ac().currentTime;job.i=0;
@@ -1635,12 +1630,38 @@ export function createStudio(ui){
       L[at+i]+=v;R[at+i]+=v;
     }
   }
-  // Nudge click-grid phase (t0) then rebuild guide tracks. deltaSec e.g. ±0.02
+  // Nudge click-grid phase (t0). Replace click buffer in place — never full syncGuideTracks
+  // while playing (that rebuilt tracks mid-mix and killed nom).
   function nudgeNom(deltaSec){
     state.t0=Math.max(0,Math.round(((+state.t0||0)+(+deltaSec||0))*1000)/1000);
     try{
-      const bpm=state.bpm||120,ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
-      syncGuideTracks({bpm,t0:state.t0,ci,metroOn:!!state.metro,preview:true});
+      const bpm=state.bpm||120;
+      const ci=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;
+      const sr=nativeSr();
+      const spb=60/bpm,ciSec=ci*4*spb;
+      let musicDur=1;
+      for(const tr of state.tracks){
+        if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin')continue;
+        for(const c of tr.clips){
+          const b=state.buffers.get(c.buf);
+          musicDur=Math.max(musicDur,b?b.duration:c.dur||0);
+        }
+      }
+      const click=makeClickBuf(musicDur,bpm,sr,{style:'normal',flourish:false,t0:state.t0});
+      const cid=putBuf(click);
+      let ct=state.tracks.find(t=>t.stem==='click');
+      if(!ct){
+        const nomV=state.nomVol!=null?state.nomVol:140;
+        ct=addAudioTrack('เมโทรนอม / นอม','#45c4d4');ct.stem='click';ct.vol=nomV;
+      }
+      ct.mute=!state.metro;
+      ct.clips=[{id:uid(),buf:cid,start:ciSec,offset:0,dur:click.duration,gain:1,peaks:peaksOf(click),name:'click'}];
+      renderArrange();renderTracks();renderMixer();
+      // Re-attach mixer once so new click buffer is heard without killing transport
+      if(state.playing){
+        const at=playheadT();
+        softReseed(at);
+      }
     }catch(e){}
     return state.t0;
   }
@@ -1958,6 +1979,13 @@ export function createStudio(ui){
     const feel=opts.feel||'normal',flourish=!!opts.flourish;
     const metroOn=opts.metroOn!=null?!!opts.metroOn:!!state.metro;
     const preview=opts.preview!==false; // default: studio-safe click
+    opts._wasPlaying=!!state.playing;
+    // Pause mixer before ripping guide tracks out from under it
+    if(state.playing){
+      state.offset=playheadT();
+      stopPlay();
+      opts._wasPlaying=true;
+    }
     state.bpm=bpm;state.t0=t0;
     const sr=nativeSr();
     const spb=60/bpm,ciSec=ci*4*spb;
@@ -1995,6 +2023,11 @@ export function createStudio(ui){
     ct.clips.push({id:uid(),buf:cid,start:ciSec,offset:0,dur:click.duration,gain:1,peaks:peaksOf(click),name:'click'});
 
     renderAll();
+    // If transport was running, rebuild mixer against new guide clips (don't leave orphan jobs)
+    if(state.playing||opts._wasPlaying){
+      const at=Math.max(0,state.offset||0);
+      try{softReseed(at)}catch(e){}
+    }
     return{bpm,t0,ci,ciSec,feel,musicDur};
   }
 
