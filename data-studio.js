@@ -85,23 +85,29 @@ export function createStudio(ui){
     return await ac().decodeAudioData(ab.slice(0));
   }
   function putBuf(buf){const id=uid();state.buffers.set(id,buf);return id}
-  // denser min/max peaks for smoother waveforms (pairs: min,max per bin)
-  // Auto-normalize quiet stems so bass/guitar graphs stay visible when separation is weak
+  // denser min/max + RMS peaks so mid-song quiet sections stay visible (not a flat hairline).
+  // Auto-normalize quiet stems; true digital silence stays flat.
   function peaksOf(buf,bins){
     const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
     const n=L.length;
-    const nb=Math.max(800,Math.min(bins||Math.ceil(buf.duration*400),12000));
+    const nb=Math.max(1200,Math.min(bins||Math.ceil(buf.duration*500),16000));
     const step=Math.max(1,Math.floor(n/nb)),out=new Float32Array(Math.ceil(n/step)*2);
     let peak=0;
     for(let i=0,o=0;i<n;i+=step,o+=2){
-      let mn=1,mx=-1;const e=Math.min(n,i+step);
-      for(let j=i;j<e;j+=2){const v=(L[j]+(R[j]||L[j]))*0.5;if(v<mn)mn=v;if(v>mx)mx=v}
-      if(mn>mx){mn=0;mx=0}out[o]=mn;out[o+1]=mx;
-      const a=mx>-mn?-mx:mn;const aa=a<0?-a:a;if(aa>peak)peak=aa;
+      let mn=1,mx=-1,ss=0,cnt=0;const e=Math.min(n,i+step);
+      for(let j=i;j<e;j+=2){
+        const v=(L[j]+(R[j]||L[j]))*0.5;
+        if(v<mn)mn=v;if(v>mx)mx=v;ss+=v*v;cnt++;
+      }
+      if(mn>mx){mn=0;mx=0}
+      // Blend peak with RMS so sustained quiet notes still draw body
+      const rms=cnt?Math.sqrt(ss/cnt):0;
+      const span=Math.max(Math.abs(mn),Math.abs(mx),rms*1.6);
+      out[o]=-span;out[o+1]=span;
+      if(span>peak)peak=span;
     }
-    // Boost display of quiet stems (keep true silence flat)
-    if(peak>1e-4&&peak<0.22){
-      const g=Math.min(0.85/peak,12);
+    if(peak>1e-4&&peak<0.28){
+      const g=Math.min(0.9/peak,14);
       for(let i=0;i<out.length;i++)out[i]=clamp(out[i]*g,-1,1);
     }
     return out;
@@ -811,26 +817,33 @@ export function createStudio(ui){
     g.clearRect(0,0,w,h);
     const pk=clip.peaks;if(!pk||!pk.length)return;
     const z=clamp(+(waveZoom||1),0.5,8);
-    const mid=h/2,pad=2,amp=(mid-pad)*z;
+    const mid=h/2,pad=2;
     const buf=state.buffers.get(clip.buf);const total=buf?buf.duration:clip.dur;
     const a0=clip.offset/total,a1=(clip.offset+clip.dur)/total;
-    const pairs=pk.length>=4&&pk.length%2===0; // min/max pairs
+    const pairs=pk.length>=4&&pk.length%2===0;
     const bins=pairs?pk.length/2:pk.length;
-    // soft fill
+    // Local gain for THIS clip window so mid-song quiet parts aren't a flat hairline
+    // next to a loud intro peak on the same stem.
+    let loc=0;
+    for(let x=0;x<w;x+=Math.max(1,(w/400)|0)){
+      const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
+      const mx=pairs?Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1])):(pk[bi]||0);
+      if(mx>loc)loc=mx;
+    }
+    const amp=(mid-pad)*z*(loc>1e-4&&loc<0.35?Math.min(0.85/loc,10):1);
     g.beginPath();g.moveTo(0,mid);
     for(let x=0;x<w;x++){
       const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
       let mx;if(pairs)mx=Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mx=pk[bi]||0;
-      g.lineTo(x,mid-Math.max(0.5,mx*amp));
+      g.lineTo(x,mid-Math.max(mx>1e-5?1:0,mx*amp));
     }
     for(let x=w-1;x>=0;x--){
       const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
       let mn;if(pairs)mn=-Math.max(Math.abs(pk[bi*2]),Math.abs(pk[bi*2+1]));else mn=-(pk[bi]||0);
-      g.lineTo(x,mid-Math.min(-0.5,mn*amp));
+      g.lineTo(x,mid-Math.min(mn<-1e-5?-1:0,mn*amp));
     }
     g.closePath();
     g.globalAlpha=.55;g.fillStyle=color;g.fill();
-    // crisp center stroke
     g.beginPath();
     for(let x=0;x<w;x++){
       const u=a0+(a1-a0)*(x/(w-1||1));const bi=Math.min(bins-1,Math.floor(u*bins));
@@ -1062,25 +1075,22 @@ export function createStudio(ui){
       const rect=lanes.getBoundingClientRect();
       return clamp((clientX-rect.left+wrap.scrollLeft)/state.pxPerSec,0,dur());
     };
-    let phDrag=null; // {wasPlaying}
+    let phDrag=null;
     const phMove=e=>{
       if(!phDrag)return;
-      const t=state.snap?snapT(timeFromClientX(e.clientX)):timeFromClientX(e.clientX);
-      state.offset=t;renderPlayhead(t);ui.onTransport?.(state);
+      scrubTo(timeFromClientX(e.clientX),{snap:!!state.snap});
     };
     const phUp=()=>{
       if(!phDrag)return;
-      const was=phDrag.wasPlaying;phDrag=null;
+      phDrag=null;
       window.removeEventListener('pointermove',phMove);
       window.removeEventListener('pointerup',phUp);
-      if(was)startPlay(state.offset);
+      // live scrub already retargeted the mixer — do NOT stop/start (that was the stutter)
     };
     const startPhDrag=(e)=>{
       e.preventDefault();e.stopPropagation();
       phDrag={wasPlaying:!!state.playing};
-      if(state.playing){stopPlay();state.offset=timeFromClientX(e.clientX)}
-      else state.offset=timeFromClientX(e.clientX);
-      renderPlayhead(state.offset);ui.onTransport?.(state);
+      scrubTo(timeFromClientX(e.clientX),{snap:false});
       window.addEventListener('pointermove',phMove);
       window.addEventListener('pointerup',phUp);
     };
@@ -1101,7 +1111,7 @@ export function createStudio(ui){
       if(e.target.closest('.clip,.hndl,.mblock,#playhead'))return;
       const t=timeFromClientX(e.clientX);
       if(state.tool==='split'){state.sel.track=+e.target.closest('.lane')?.dataset.ti||state.sel.track;splitAt(snapT(t));return}
-      seek(snapT(t));
+      scrubTo(t); // click-to-seek without restart glitch
     });
     wrap.addEventListener('dblclick',e=>{
       const lane=e.target.closest('.lane');if(!lane)return;
@@ -1196,7 +1206,45 @@ export function createStudio(ui){
     Object.entries(map).forEach(([tool,id])=>{const b=$(id);if(b)b.classList.toggle('on',state.tool===tool)});
   }
 
-  function seek(t){const was=state.playing;stopPlay();state.offset=clamp(t,0,dur());renderPlayhead(state.offset);ui.onTransport?.(state);if(was)startPlay(state.offset)}
+  // Live scrub: move playhead WITHOUT tearing down the keepalive mixer (no stutter).
+  function scrubTo(t,opt){
+    opt=opt||{};
+    let want=clamp(t,0,dur());
+    if(opt.snap!==false&&state.snap)want=snapT(want);
+    state.offset=want;
+    renderPlayhead(want);
+    ui.onTransport?.(state);
+    if(!(state.playing&&state._pull&&state._pull.alive))return want;
+    // Retarget pull mixer in place
+    state._pull.from=want;
+    state._pull.frame=0;
+    state.t0=ac().currentTime;
+    state._lastReseed=want;
+    state._reseedGuard=ac().currentTime+0.35;
+    if(state._midi){
+      for(const job of state._midi){
+        job.playFrom=want;job.when=ac().currentTime;job.i=0;
+        while(job.i<job.notes.length){
+          const n=job.notes[job.i];
+          if((n.t+(n.d||0))>want)break;
+          job.i++;
+        }
+      }
+    }
+    if(state._metroJob){
+      state._metroJob.playFrom=want;
+      state._metroJob.when=ac().currentTime;
+      state._metroJob.nextBeat=Math.ceil(want/beatSec()-1e-6);
+    }
+    try{pumpMidi();pumpMetro()}catch(e){}
+    return want;
+  }
+  function seek(t){
+    // Prefer live scrub while playing — full stop/start caused a glitch on every click
+    if(state.playing&&state._pull&&state._pull.alive){scrubTo(t);return}
+    stopPlay();state.offset=clamp(state.snap?snapT(t):t,0,dur());
+    renderPlayhead(state.offset);ui.onTransport?.(state);
+  }
 
   function newProject(){
     stopPlay();state.tracks=[];state.buffers.clear();state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;
@@ -1882,7 +1930,7 @@ export function createStudio(ui){
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
     applyStemMutes,renderTrackWav,renderMusicMono,makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
-    copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,
+    copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
     async boot(){bind();
       // Preload spoken one–two–three–four for Data count-in
