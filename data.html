@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.13">
+<meta name="bp-data" content="1.0.14">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -426,36 +426,43 @@ async function makeDataNow(){
     studio.state.bpm=bpm;studio.state.t0=t0;
     const bpmEl=document.getElementById('bpm');if(bpmEl)bpmEl.value=String(Math.round(bpm));
     const feel=$('rFeel').value||'normal',flourish=!!$('rFlourish').checked,ci=+$('rCi').value||0;
+    const nomSide=$('rNom').value==='L'?'L':'R';
     const title=studio.state.title||'track';
     const sr=studio.nativeSr();
     const out=[];
     const musicDur=Math.max(1,...music.map(tr=>tr.clips.reduce((m,c)=>Math.max(m,(c.dur||0)),0)));
     try{await studio.loadCiVoices()}catch(e){}
-    const clickBlob=studio.makeClickWav(musicDur,bpm,sr,{style:feel,flourish,t0});
+    // เด๋อ-style: bake spoken count-in into the click stem; pad music so timelines align
+    const guide=studio.makeExportClickBuf(musicDur,bpm,sr,{ci,style:feel,flourish,t0});
+    const clickBlob=studio.bufToWavBlob(guide.buf,{targetPeak:0.89,maxGain:1.2});
     out.push(new File([clickBlob],`${title} (คลิก นอม).wav`,{type:'audio/wav'}));
-    if(ci>0){
-      const cib=studio.makeCountInBuf(ci,bpm,sr);
-      if(cib)out.push(new File([studio.bufToWavBlob(cib,{targetPeak:0.85,maxGain:1})],`${title} (นับเข้า).wav`,{type:'audio/wav'}));
-    }
     if(flourish){
       const fl=studio.makeFlourishWav(musicDur,bpm,sr,feel,t0);
       out.push(new File([fl],`${title} (ลูกเล่น).wav`,{type:'audio/wav'}));
     }
+    const pad=guide.ciSec||0, total=guide.totalDur||(pad+musicDur);
     for(const tr of music){
       const saved=tr.clips.map(c=>c.start);
       tr.clips.forEach(c=>c.start=0);
-      const blob=await studio.renderTrackWav(tr,sr);
+      const blob=await studio.renderTrackWav(tr,sr,{padLead:pad,totalDur:total});
       tr.clips.forEach((c,i)=>c.start=saved[i]);
       if(!blob)continue;
       out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
     }
+    // Dual-mono ready file (L/R split like reference เด๋อ E) for simple import
+    try{
+      const mono=await studio.renderMusicMono(music,sr,pad,total);
+      const dual=studio.makeDualMonoBlob(mono,guide.buf,nomSide,{targetPeak:0.95,maxGain:1.4});
+      const sideLab=nomSide==='R'?'L=เพลง R=นอม':'L=นอม R=เพลง';
+      out.push(new File([dual],`${title} (พร้อมใช้ ${sideLab}).wav`,{type:'audio/wav'}));
+    }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
-    const meta={s:$('rNom').value==='L'?'L':'R',ci,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.13'};
-    if(ci===0)meta.cia=0;
+    // cia=0 → ไฟล์มีนับเข้าในช่องนอมแล้ว อย่านับซ้ำในแอป
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.14',ciBaked:ci||0};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);
-    $('sRecipe').textContent=`ส่ง ${out.length} ไฟล์ · นอมล็อก ${bpm}BPM · นับเข้า ${ci} · ${feelTh} (~${mb}MB)`;
+    $('sRecipe').textContent=`ส่ง ${out.length} ไฟล์ · นอม${nomSide==='R'?'ขวา':'ซ้าย'} · นับเข้าในไฟล์ ${ci} ห้อง · ${feelTh} (~${mb}MB)`;
   }catch(e){toast('❌ '+(e.message||e));$('sRecipe').textContent='❌ ส่งไม่สำเร็จ'}
   finally{$('btnMakeData').disabled=false}
 }

@@ -937,10 +937,14 @@ export function createStudio(ui){
     applyLiveMix();renderAll();
   }
 
-  async function renderTrackWav(tr,sr){
+  async function renderTrackWav(tr,sr,opt){
     if(!tr||tr.type!=='audio'||!tr.clips.length)return null;
-    sr=sr||nativeSr();
-    const length=Math.max(1,Math.ceil(dur()*sr));
+    opt=opt||{};sr=sr||nativeSr();
+    const pad=Math.max(0,+opt.padLead||0); // leading silence (count-in gap), sec
+    let end=pad;
+    for(const c of tr.clips)end=Math.max(end,pad+(c.start||0)+(c.dur||0));
+    if(opt.totalDur!=null)end=Math.max(end,+opt.totalDur);
+    const length=Math.max(1,Math.ceil(end*sr));
     const off=new OfflineAudioContext(2,length,sr);
     const g=off.createGain();g.gain.value=(tr.vol||100)/100;g.connect(off.destination);
     for(const c of tr.clips){
@@ -951,11 +955,124 @@ export function createStudio(ui){
       const maxOff=Math.max(0,buf.duration-1e-4);
       const off0=clamp(c.offset||0,0,maxOff);
       const dur0=Math.min(Math.max(0.001,c.dur||0),Math.max(0.001,buf.duration-off0));
-      try{src.start(c.start,off0,dur0)}catch(e){}
+      try{src.start(pad+(c.start||0),off0,dur0)}catch(e){}
     }
     const rendered=await off.startRendering();
     // Stems: loudness-match to −1 dBFS so quiet demucs lanes aren't thin
     return bufToWavBlob(rendered,{targetPeak:0.89,maxGain:4});
+  }
+
+  /** Mix unmuted audio stems → mono music bed (for dual-mono ready file). */
+  async function renderMusicMono(tracks,sr,padLead,totalDur){
+    sr=sr||nativeSr();
+    const pad=Math.max(0,+padLead||0);
+    const length=Math.max(1,Math.ceil((totalDur||dur())*sr));
+    const off=new OfflineAudioContext(1,length,sr);
+    const merge=off.createGain();merge.gain.value=1;merge.connect(off.destination);
+    for(const tr of tracks){
+      if(!tr||tr.type!=='audio'||tr.mute||!tr.clips.length)continue;
+      if(tr.stem==='click'||tr.stem==='countin')continue;
+      const g=off.createGain();g.gain.value=(tr.vol||100)/100;g.connect(merge);
+      for(const c of tr.clips){
+        const buf=state.buffers.get(c.buf);if(!buf)continue;
+        const src=off.createBufferSource();src.buffer=buf;
+        const cg=off.createGain();cg.gain.value=c.gain||1;
+        src.connect(cg);cg.connect(g);
+        const maxOff=Math.max(0,buf.duration-1e-4);
+        const off0=clamp(c.offset||0,0,maxOff);
+        const dur0=Math.min(Math.max(0.001,c.dur||0),Math.max(0.001,buf.duration-off0));
+        // Export: music starts after count-in pad (clip.start forced 0)
+        try{src.start(pad,off0,dur0)}catch(e){}
+      }
+    }
+    return await off.startRendering();
+  }
+
+  /**
+   * Dual-mono ready WAV like reference「เด๋อ E」:
+   * nom side = click+count-in only; other side = mono music only.
+   * side 'R' → L=music R=nom (most common); 'L' → opposite.
+   */
+  function makeDualMonoBlob(musicMonoBuf,clickBuf,side,opt){
+    opt=opt||{};
+    const sr=clickBuf.sampleRate||musicMonoBuf.sampleRate||nativeSr();
+    const n=Math.max(musicMonoBuf.length,clickBuf.length);
+    const outL=new Float32Array(n),outR=new Float32Array(n);
+    const m=musicMonoBuf.numberOfChannels>1
+      ?(()=>{const a=musicMonoBuf.getChannelData(0),b=musicMonoBuf.getChannelData(1);const o=new Float32Array(musicMonoBuf.length);for(let i=0;i<o.length;i++)o[i]=0.5*(a[i]+b[i]);return o})()
+      :musicMonoBuf.getChannelData(0);
+    const c0=clickBuf.getChannelData(0);
+    const c1=clickBuf.numberOfChannels>1?clickBuf.getChannelData(1):c0;
+    const ck=new Float32Array(clickBuf.length);
+    for(let i=0;i<ck.length;i++)ck[i]=0.5*(c0[i]+c1[i]);
+    const nomRight=side!=='L';
+    for(let i=0;i<n;i++){
+      const mv=i<m.length?m[i]:0, cv=i<ck.length?ck[i]:0;
+      if(nomRight){outL[i]=mv;outR[i]=cv}else{outL[i]=cv;outR[i]=mv}
+    }
+    const buf=ac().createBuffer(2,n,sr);buf.copyToChannel(outL,0);buf.copyToChannel(outR,1);
+    return bufToWavBlob(buf,{targetPeak:opt.targetPeak!=null?opt.targetPeak:0.95,maxGain:opt.maxGain!=null?opt.maxGain:1.5});
+  }
+
+  /**
+   * Export click track for full timeline: spoken count-in baked at head, then song clicks.
+   * Matches working dual-mono packs (count-in lives on the nom channel, not a separate short file).
+   */
+  function makeExportClickBuf(musicDur,bpm,sr,opt){
+    opt=opt||{};sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
+    const ci=Math.max(0,Math.min(4,+(opt.ci||0)|0));
+    const style=opt.style||'normal',flourish=!!opt.flourish,t0=Math.max(0,+opt.t0||0);
+    const spb=60/bpm,ciSec=ci*4*spb,total=ciSec+Math.max(0.5,+musicDur||1);
+    const n=Math.max(1,Math.ceil(total*sr));
+    const L=new Float32Array(n),R=new Float32Array(n);
+    const hasVoice=CI_WORDS.some(w=>CI_VOICE[w]);
+    // —— count-in (baked) ——
+    // 2 bars: bar1 "one … two …" (beats 1+3), bar2 "one two three four" — like reference เด๋อ
+    for(let bi=0;bi<ci*4;bi++){
+      const at=Math.floor(bi*spb*sr),b4=bi%4,bar=Math.floor(bi/4);
+      const word=CI_WORDS[b4];
+      let speak=true;
+      if(ci>=2&&bar===0&&(b4===1||b4===3))speak=false; // half-time first bar
+      let spoke=false;
+      if(speak&&hasVoice)spoke=mixVoiceAt(L,R,at,word,sr,b4===0?1.15:1.0);
+      if(speak||!hasVoice){
+        if(b4===0)hitAt(L,R,at,sr,2100,spoke?0.35:1.0,16);
+        else if(speak)hitAt(L,R,at,sr,1550,spoke?0.22:0.75,11);
+      }
+    }
+    // —— song clicks (after count-in), grid locked to music t0 ——
+    const songBars=Math.ceil(Math.max(0,musicDur-t0)/(spb*4))+1;
+    for(let beat=0;;beat++){
+      const t=ciSec+t0+beat*spb;if(t>=total-1e-6)break;
+      const at=Math.floor(t*sr);if(at>=n)break;
+      const b4=beat%4;
+      if(style==='rock'){
+        if(b4===0)hitAt(L,R,at,sr,1800,0.78,14);
+        else if(b4===2)hitAt(L,R,at,sr,1600,0.5,12);
+        if(b4===1||b4===3)hitAt(L,R,at,sr,900,0.58,10);
+      }else if(style==='samcha'){
+        if(b4===0)hitAt(L,R,at,sr,2000,0.72,14);
+        else if(b4===1){hitAt(L,R,at,sr,1400,0.35,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1500,0.45,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1500,0.45,9)}
+        else if(b4===2){hitAt(L,R,at,sr,1300,0.32,9);hitAt(L,R,at+Math.floor(spb*0.5*sr),sr,1450,0.42,9);hitAt(L,R,at+Math.floor(spb*0.75*sr),sr,1450,0.42,9)}
+        else hitAt(L,R,at,sr,1200,0.38,10);
+      }else if(style==='slow'){
+        if(b4===0)hitAt(L,R,at,sr,1500,0.7,16);
+        else if(b4===2)hitAt(L,R,at,sr,1100,0.35,12);
+      }else{
+        const accent=b4===0;hitAt(L,R,at,sr,accent?2000:1200,accent?0.95:0.58,12);
+      }
+    }
+    if(flourish){
+      for(let bar=7;bar<songBars;bar+=8){
+        const tf=ciSec+t0+(bar*4+3)*spb;
+        for(let k=0;k<6;k++){
+          const at=Math.floor((tf+k*(spb/6))*sr);if(at<0||at>=n)break;
+          hitAt(L,R,at,sr,2200-k*120,0.42+k*0.04,8);
+        }
+      }
+    }
+    const buf=floatToBuf(L,R,sr);
+    return{buf,ciSec,totalDur:total,sr};
   }
 
   function bufToWavBlob(buf,opt){
@@ -1301,7 +1418,8 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    applyStemMutes,renderTrackWav,makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
+    applyStemMutes,renderTrackWav,renderMusicMono,makeDualMonoBlob,makeExportClickBuf,
+    makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
     async boot(){bind();
       // Preload spoken one–two–three–four for Data count-in

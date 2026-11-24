@@ -2,8 +2,9 @@
  * Bump DATAV here (and meta bp-data in data.html) when shipping Data-only changes.
  * Do NOT bump public/app.js APPV / sw cache / APK for Data-only work.
  */
-export const DATAV='1.0.13';
+export const DATAV='1.0.14';
 export const DATACHG={
+  '1.0.14':'ตามตัวอย่างเด๋อ: นับเข้าฝังในช่องนอม · ไฟล์พร้อมใช้ dual-mono · นอมดังขึ้น · กันนับซ้ำในแอป',
   '1.0.13':'เล่นยาวไม่ตัดที่ ~1:20 · ดังนอมปรับได้ · ซูมกราฟต่อแทร็ก · เพิ่มช่องเสียงง่ายขึ้น · ตัดปุ่มซ้ำ',
   '1.0.12':'สูตรดาต้าไม่ซ้ำ — เหลือช่องปิดเครื่อง + เปิดทุกแทร็ก (โปรไฟล์ยังมีสูตรสำเร็จรูป)',
   '1.0.11':'แก้เสียงหายหลัง ~1 นาทีขณะกราฟยังวิ่ง — จัดคิวเสียงแบบ look-ahead',
