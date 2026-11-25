@@ -1,12 +1,22 @@
-/* SetSod Data 1.0.35 — clean mute / solo / volume on AI stems (t317u).
- * 1.0.33 played "mix + Σ (gain−1)·stem" (mix − muted stem). That leaves whatever the AI drum lane missed, so drum
- * hits stayed clearly audible. Here that same signal is cleaned per STFT bin with a soft mask built from the stems:
- *   keep = Σ g²·|S_k|²   (what should be heard)      cut = Σ w(g)·|S_k|²   (stems muted / turned nearly off;
- *   w = ((1−g)·max(0,1−4g))² → 1 at mute, 0 from 25 % up, so a fader keeps its exact level)
- *   M = keep^P / (keep^P + (GAMMA·cut)^P)
- * so a bin where the muted drums are present is pushed down further, bins of the remaining music are untouched.
- * All gains 1 → output = the mix exactly. Pure JS, no deps; runs in slices so the page never freezes. */
-export const UNMIX={N:2048,H:512,P:1,GAMMA:3};
+/* SetSod Data 1.0.37 — clean mute / solo / volume / per-lane EQ on AI stems (t317u, t320u).
+ * Source = mix + Σ (G_k(f) − 1)·S_k   (1.0.33 "mix − muted stem", now per frequency: G = gain × lane EQ)
+ * then a soft mask per STFT bin cleans what the AI lanes left behind of the stems that were turned off:
+ *   keep = Σ G²·|S_k|²      cut = Σ w(G)·γ·cutMul_k(f)·|S_k|²      w = ((1−G)·max(0,1−4G))²  (0 from 25 % up)
+ *   M = max(floor·floorMul(f), keep/(keep+cut))
+ * 1.0.37: keep/cut are smoothed over 5 frames × 5 bins (≈58 ms × 108 Hz) and the mask has a floor (−14 dB) — the
+ * per-bin mask of 1.0.35 flickered ("alien"/watery sound). A muted lane's 🎚 = how much MORE to remove per band, 0…24 dB
+ * (γ × 10^(dB/20), floor × 10^(−dB/40): 24 dB → γ 48, floor −26 dB — stronger means more damage to the music in that band).
+ * All gains 1 and EQ flat → output = the mix exactly. Renders progressively from any start point (playhead first)
+ * so playback can switch to it hop by hop; pure JS, yields every ~8 ms (keeps the audio thread fed). */
+export const UNMIX={N:2048,H:512,GAMMA:3,FLOOR:0.2,TF:5,FF:5};
+const EQF={lo:180,mid:1200,hi:6000};
+/** 3-band lane EQ (dB) → dB at frequency f: low ≲180 Hz, mid around 1.2 kHz, high ≳6 kHz, smooth crossfades between (no phase) */
+export function eqDb(eq,f){
+  if(!eq)return 0;const lo=+eq.lo||0,mid=+eq.mid||0,hi=+eq.hi||0;if(!lo&&!mid&&!hi)return 0;
+  const ff=Math.max(f,1),wl=1/(1+(ff/EQF.lo)**2),wh=1/(1+(EQF.hi/ff)**2),x=Math.log2(ff/EQF.mid),wm=Math.exp(-x*x/(2*1.1*1.1));
+  return (lo*wl+mid*wm+hi*wh)/(wl+wm+wh); // weights normalised: all three bands equal = flat
+}
+export const eqFlat=eq=>!eq||(!+eq.lo&&!+eq.mid&&!+eq.hi);
 function fftPlan(N){
   const lev=Math.log2(N)|0,rev=new Uint32Array(N),cos=new Float32Array(N/2),sin=new Float32Array(N/2);
   for(let i=0;i<N;i++){let r=0,x=i;for(let b=0;b<lev;b++){r=(r<<1)|(x&1);x>>=1}rev[i]=r}
@@ -29,58 +39,101 @@ function fft(pl,re,im,inv){
   }
 }
 /**
- * @param o.mix   {L,R} Float32Array (the original song)
- * @param o.stems [{L,R,g,scale}] g = heard gain (0 = muted, vol/100 …), scale = stem's share of the mix (usually 1)
- * @returns {L,R} Float32Array, same length as the mix
+ * @param o.mix    {L,R} Float32Array (the original song)
+ * @param o.stems  [{L,R,g,scale,eq:{lo,mid,hi},cut:{lo,mid,hi}}]  g = heard gain, eq = tone (audible lane), cut = extra removal dB (muted lane)
+ * @param o.sr     sample rate (EQ frequencies)
+ * @param o.startSec render from here first (then the beginning) — playback uses it hop by hop
+ * @param o.target optional {L,R,ready} to fill (created if missing) — readable while rendering: ready[h]=1 → samples h·H … h·H+H−1 final
+ * @returns the target (or null if cancelled)
  */
 export async function renderHeard(o){
-  const N=o.N||UNMIX.N,H=o.H||UNMIX.H,P=o.P||UNMIX.P,GAMMA=o.gamma||UNMIX.GAMMA;
-  const mL=o.mix.L,mR=o.mix.R||o.mix.L,n=mL.length,st=o.stems.filter(s=>s&&s.L);
+  const N=o.N||UNMIX.N,H=o.H||UNMIX.H,GAMMA=o.gamma!=null?o.gamma:UNMIX.GAMMA,FLOOR=o.floor!=null?o.floor:UNMIX.FLOOR;
+  const TF=Math.max(1,o.tf||UNMIX.TF)|0,FF=Math.max(1,o.ff||UNMIX.FF)|0,TR=TF>>1,FR=FF>>1,sr=o.sr||44100;
+  const mL=o.mix.L,mR=o.mix.R||o.mix.L,n=mL.length,st=o.stems.filter(s=>s&&s.L),K=st.length,B=N/2+1;
   const pl=fftPlan(N),win=new Float32Array(N);for(let i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
-  const outL=new Float32Array(n),outR=new Float32Array(n),wsum=new Float32Array(n+N);
-  const K=st.length,gs=st.map(s=>Math.max(0,+s.g||0)),g2=gs.map(g=>g*g),c2=gs.map(g=>(Math.max(0,1-g)*Math.max(0,1-g/0.25))**2); // only stems turned (nearly) off get cleaned; a fader at ≥25 % keeps its exact level
-  const mgain=(kp,cp)=>{if(cp<=0)return 1;const c=GAMMA*cp;if(P===1)return kp/(kp+c+1e-30);const a=Math.pow(kp,P);return a/(a+Math.pow(c,P)+1e-30)};
-  const re=new Float32Array(N),im=new Float32Array(N);
-  const sRe=st.map(()=>new Float32Array(N)),sIm=st.map(()=>new Float32Array(N));
-  const gainL=new Float32Array(N/2+1),gainR=new Float32Array(N/2+1);
-  const frames=Math.ceil((n+N/2)/H)+1;let t0=performance.now();
-  for(let f=0;f<frames;f++){
-    const start=f*H-N/2;
-    // stems: pack L + iR in one complex FFT
+  const frames=Math.ceil((n+N/2)/H)+1,hops=Math.ceil(n/H),R=N/(2*H);
+  const T=o.target||{L:new Float32Array(n),R:new Float32Array(n),ready:new Uint8Array(hops),H,n};
+  const outL=T.L,outR=T.R,ready=T.ready;
+  // per-sample Σw² (OLA normalisation) and per-hop frame coverage
+  const wsum=new Float32Array(n);
+  for(let f=0;f<frames;f++){const s0=f*H-N/2;for(let i=0;i<N;i++){const j=s0+i;if(j>=0&&j<n)wsum[j]+=win[i]*win[i]}}
+  const need=new Uint8Array(hops),cnt=new Uint8Array(hops);
+  for(let h=0;h<hops;h++){let c=0;for(let f=h+1-R;f<=h+R;f++)if(f>=0&&f<frames)c++;need[h]=c}
+  // per-stem per-bin gains (EQ) and removal weights
+  const G=[],C=[],FM=new Float32Array(B).fill(Infinity);let anyCut=false;
+  for(let k=0;k<K;k++){
+    const s=st[k],g=Math.max(0,+s.g||0),gk=new Float32Array(B),ck=new Float32Array(B);
+    for(let q=0;q<B;q++){
+      const f=q*sr/N,Gq=g*Math.pow(10,(g>0?eqDb(s.eq,f):0)/20);gk[q]=Gq;
+      const w=(Math.max(0,1-Gq)*Math.max(0,1-Gq/0.25))**2;
+      if(w>0){const cd=Math.max(0,Math.min(24,eqDb(s.cut,f)));ck[q]=w*GAMMA*Math.pow(10,cd/20);FM[q]=Math.min(FM[q],Math.pow(10,-cd/40));anyCut=true}
+    }
+    G.push(gk);C.push(ck);
+  }
+  for(let q=0;q<B;q++)if(!isFinite(FM[q]))FM[q]=1;
+  // ring of TF frames: stem spectra (packed L+iR) + keep/cut powers per channel
+  const RS=TF,slotF=new Int32Array(RS).fill(-1);
+  const sRe=[],sIm=[],kL=[],kR=[],cL=[],cR=[];
+  for(let r=0;r<RS;r++){sRe.push(st.map(()=>new Float32Array(N)));sIm.push(st.map(()=>new Float32Array(N)));kL.push(new Float32Array(B));kR.push(new Float32Array(B));cL.push(new Float32Array(B));cR.push(new Float32Array(B))}
+  function analyse(f){
+    const r=f%RS;if(slotF[r]===f)return;slotF[r]=f;
+    const start=f*H-N/2,KL=kL[r],KR=kR[r],CL=cL[r],CR=cR[r];KL.fill(0);KR.fill(0);CL.fill(0);CR.fill(0);
     for(let k=0;k<K;k++){
-      const s=st[k],L=s.L,R=s.R||s.L,sc=(s.scale!=null?+s.scale:1),a=sRe[k],b=sIm[k];
-      for(let i=0;i<N;i++){const j=start+i;if(j>=0&&j<L.length){a[i]=L[j]*win[i]*sc;b[i]=R[j]*win[i]*sc}else{a[i]=0;b[i]=0}}
+      const s=st[k],L=s.L,Rr=s.R||s.L,sc=(s.scale!=null?+s.scale:1),a=sRe[r][k],b=sIm[r][k],gk=G[k],ck=C[k];
+      for(let i=0;i<N;i++){const j=start+i;if(j>=0&&j<L.length){a[i]=L[j]*win[i]*sc;b[i]=Rr[j]*win[i]*sc}else{a[i]=0;b[i]=0}}
       fft(pl,a,b,false);
-    }
-    // per-bin gains for each channel
-    for(let q=0;q<=N/2;q++){
-      const q2=(N-q)%N;let kL=0,cL=0,kR=0,cR=0;
-      for(let k=0;k<K;k++){
-        const a=sRe[k],b=sIm[k];
-        const lr=0.5*(a[q]+a[q2]),li=0.5*(b[q]-b[q2]); // left  = (Z[q] + conj Z[N−q]) / 2
-        const rr=0.5*(b[q]+b[q2]),ri=-0.5*(a[q]-a[q2]); // right = (Z[q] − conj Z[N−q]) / 2i
-        const pL=lr*lr+li*li,pR=rr*rr+ri*ri;
-        kL+=g2[k]*pL;kR+=g2[k]*pR;cL+=c2[k]*pL;cR+=c2[k]*pR;
+      for(let q=0;q<B;q++){
+        const q2=(N-q)%N,lr=0.5*(a[q]+a[q2]),li=0.5*(b[q]-b[q2]),rr=0.5*(b[q]+b[q2]),ri=-0.5*(a[q]-a[q2]);
+        const pL=lr*lr+li*li,pR=rr*rr+ri*ri,g2=gk[q]*gk[q];
+        KL[q]+=g2*pL;KR[q]+=g2*pR;if(ck[q]>0){CL[q]+=ck[q]*pL;CR[q]+=ck[q]*pR}
       }
-      gainL[q]=mgain(kL,cL);gainR[q]=mgain(kR,cR);
     }
-    // source = mix + Σ (g−1)·stem (linear, in the packed spectrum), then the per-channel masks
+  }
+  const re=new Float32Array(N),im=new Float32Array(N),tKL=new Float32Array(B),tKR=new Float32Array(B),tCL=new Float32Array(B),tCR=new Float32Array(B);
+  const gainL=new Float32Array(B),gainR=new Float32Array(B);
+  const boxF=(src,dst)=>{let acc=0;for(let q=0;q<Math.min(FR,B);q++)acc+=src[q];for(let q=0;q<B;q++){const add=q+FR,sub=q-FR-1;if(add<B)acc+=src[add];if(sub>=0)acc-=src[sub];const lo=Math.max(0,q-FR),hi=Math.min(B-1,q+FR);dst[q]=acc/(hi-lo+1)}};
+  const sm1=new Float32Array(B);
+  function doFrame(f){
+    for(let d=-TR;d<=TR;d++){const x=f+d;if(x>=0&&x<frames)analyse(x)}
+    tKL.fill(0);tKR.fill(0);tCL.fill(0);tCR.fill(0);let nT=0;
+    for(let d=-TR;d<=TR;d++){const x=f+d;if(x<0||x>=frames)continue;const r=x%RS;nT++;
+      const a=kL[r],b=kR[r],c=cL[r],e=cR[r];for(let q=0;q<B;q++){tKL[q]+=a[q];tKR[q]+=b[q];tCL[q]+=c[q];tCR[q]+=e[q]}}
+    if(anyCut){
+      boxF(tKL,sm1);tKL.set(sm1);boxF(tKR,sm1);tKR.set(sm1);boxF(tCL,sm1);tCL.set(sm1);boxF(tCR,sm1);tCR.set(sm1);
+      for(let q=0;q<B;q++){
+        const fl=Math.min(1,FLOOR*FM[q]);
+        gainL[q]=tCL[q]>0?Math.max(fl,tKL[q]/(tKL[q]+tCL[q]+1e-30)):1;
+        gainR[q]=tCR[q]>0?Math.max(fl,tKR[q]/(tKR[q]+tCR[q]+1e-30)):1;
+      }
+    }else{gainL.fill(1);gainR.fill(1)}
+    // source = mix + Σ (G_k(f) − 1)·S_k, then the masks
+    const start=f*H-N/2,r=f%RS;
     for(let i=0;i<N;i++){const j=start+i;if(j>=0&&j<n){re[i]=mL[j]*win[i];im[i]=mR[j]*win[i]}else{re[i]=0;im[i]=0}}
     fft(pl,re,im,false);
-    for(let k=0;k<K;k++){const d=gs[k]-1;if(Math.abs(d)<1e-6)continue;const a=sRe[k],b=sIm[k];for(let i=0;i<N;i++){re[i]+=d*a[i];im[i]+=d*b[i]}}
-    for(let q=0;q<=N/2;q++){
+    for(let k=0;k<K;k++){
+      const gk=G[k],a=sRe[r][k],b=sIm[r][k];let flat=true;for(let q=0;q<B;q++)if(Math.abs(gk[q]-1)>1e-6){flat=false;break}
+      if(flat)continue;
+      for(let q=0;q<B;q++){const d=gk[q]-1;if(d===0)continue;re[q]+=d*a[q];im[q]+=d*b[q];if(q>0&&q<N/2){const q2=N-q;re[q2]+=d*a[q2];im[q2]+=d*b[q2]}}
+    }
+    for(let q=0;q<B;q++){
       const q2=(N-q)%N;
       const lr=0.5*(re[q]+re[q2])*gainL[q],li=0.5*(im[q]-im[q2])*gainL[q];
       const rr=0.5*(im[q]+im[q2])*gainR[q],ri=-0.5*(re[q]-re[q2])*gainR[q];
-      // rebuild Z = Lspec + i·Rspec at q and N−q (both are Hermitian)
       const zr=lr-ri,zi=li+rr,zr2=lr+ri,zi2=-li+rr;
       if(q===0||q===N/2){re[q]=zr;im[q]=zi}else{re[q]=zr;im[q]=zi;re[q2]=zr2;im[q2]=zi2}
     }
     fft(pl,re,im,true);
-    for(let i=0;i<N;i++){const j=start+i;if(j<0||j>=n)continue;const w=win[i];outL[j]+=re[i]/N*w;outR[j]+=im[i]/N*w;wsum[j]+=w*w}
-    if(o.onProgress&&(f&63)===0)o.onProgress(f/frames);
-    if(performance.now()-t0>12){await new Promise(r=>setTimeout(r,0));t0=performance.now();if(o.cancelled&&o.cancelled())return null}
+    for(let i=0;i<N;i++){const j=start+i;if(j<0||j>=n)continue;const w=win[i];outL[j]+=re[i]/N*w;outR[j]+=im[i]/N*w}
+    for(let h=f-R;h<=f+R-1;h++){if(h<0||h>=hops)continue;if(++cnt[h]===need[h]){const a=h*H,b=Math.min(n,a+H);for(let j=a;j<b;j++){const w=wsum[j]>1e-6?wsum[j]:1;outL[j]/=w;outR[j]/=w}ready[h]=1}}
   }
-  for(let j=0;j<n;j++){const w=wsum[j]>1e-6?wsum[j]:1;outL[j]/=w;outR[j]/=w}
-  return{L:outL,R:outR};
+  const f0=Math.max(0,Math.min(frames-1,Math.floor((+o.startSec||0)*sr/H)));
+  let t0=performance.now(),done=0;
+  for(const [a,b] of [[f0,frames],[0,f0]]){
+    for(let f=a;f<b;f++){
+      doFrame(f);done++;
+      if(o.onProgress&&(done&63)===0)o.onProgress(done/frames);
+      if(performance.now()-t0>8){await new Promise(r=>setTimeout(r,0));t0=performance.now();if(o.cancelled&&o.cancelled())return null}
+    }
+  }
+  T.done=true;return T;
 }

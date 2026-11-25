@@ -1,7 +1,7 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
 import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.33';
 import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
-import {renderHeard,UNMIX} from './data-unmix.js?v=1.0.35';
+import {renderHeard,UNMIX,eqFlat} from './data-unmix.js?v=1.0.37';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -512,36 +512,42 @@ export function createStudio(ui){
     const st0=mt[0].clips[0].start||0;
     return mt.every(t=>t.clips.length===1&&Math.abs((t.clips[0].start||0)-st0)<1e-6&&!(+t.clips[0].offset>0)&&(()=>{const b=state.buffers.get(t.clips[0].buf);return b&&b.sampleRate===mb.sampleRate&&Math.abs(b.length-mb.length)<=2}));
   }
+  const eqKey=e=>eqFlat(e)?'':[+e.lo||0,+e.mid||0,+e.hi||0].join(',');
   function heardKey(){
-    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+UNMIX.P+'/'+UNMIX.GAMMA;
+    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(t.cut)).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF].join('/');
   }
-  /** only stems muted / turned below 25 % get the extra cleaning (data-unmix.js); above that mix + (g−1)·stem is exact */
-  function needsHeard(){return canUnmix()&&musicTracks().some(t=>heardGain(t,t.clips[0])<0.25-1e-6)}
+  /** the clean render is needed when a lane is muted / below 25 % (extra cleaning) or an audible lane has EQ (1.0.37);
+   *  otherwise mix + (g−1)·stem is exact */
+  function needsHeard(){return canUnmix()&&musicTracks().some(t=>{const g=heardGain(t,t.clips[0]);return g<0.25-1e-6||(g>0&&!eqFlat(t.eq))})}
   function heardReady(){const h=state._heard;return needsHeard()&&h&&h.buf&&h.key===heardKey()?h.buf:null}
-  /** render (or reuse) the clean bed; resolves null when not needed / not possible */
+  /** what the live mixer may crossfade to: the (possibly still rendering) target of the current state */
+  function heardLive(){const h=state._heard;return h&&h.T&&h.key===state._wantKey?h:null}
+  /** render (or reuse) the clean bed; resolves the finished AudioBuffer (null when not needed / cancelled).
+   *  Renders from the playhead first, so playback crossfades into it within a moment (1.0.37). */
   async function ensureHeard(){
     if(!needsHeard())return null;
-    const key=heardKey();
+    const key=heardKey();state._wantKey=key;
     if(state._heard&&state._heard.key===key){if(state._heard.buf)return state._heard.buf;if(state._heard.p)return state._heard.p}
-    const mb=state.mixBuf,mt=musicTracks();
-    const job={key,buf:null,p:null};state._heard=job;
+    const mb=state.mixBuf,mt=musicTracks(),n=mb.length;
+    const job={key,buf:null,p:null,T:{L:new Float32Array(n),R:new Float32Array(n),ready:new Uint8Array(Math.ceil(n/UNMIX.H)),H:UNMIX.H,n},start:mt[0].clips[0].start||0,sr:mb.sampleRate};
+    state._heard=job;
+    const from=state.playing?Math.max(0,playheadT()-job.start+0.3):0; // a bit ahead of the playhead
     job.p=(async()=>{
       ui.onUnmix?.(0);
-      const out=await renderHeard({mix:{L:mb.getChannelData(0),R:mb.numberOfChannels>1?mb.getChannelData(1):mb.getChannelData(0)},
-        stems:mt.map(t=>{const b=state.buffers.get(t.clips[0].buf);return{L:b.getChannelData(0),R:b.numberOfChannels>1?b.getChannelData(1):b.getChannelData(0),g:heardGain(t,t.clips[0]),scale:t.clips[0].mixScale!=null?+t.clips[0].mixScale:1}}),
-        onProgress:p=>ui.onUnmix?.(p),cancelled:()=>state._heard!==job});
+      const out=await renderHeard({mix:{L:mb.getChannelData(0),R:mb.numberOfChannels>1?mb.getChannelData(1):mb.getChannelData(0)},sr:mb.sampleRate,startSec:from,target:job.T,
+        stems:mt.map(t=>{const b=state.buffers.get(t.clips[0].buf);return{L:b.getChannelData(0),R:b.numberOfChannels>1?b.getChannelData(1):b.getChannelData(0),g:heardGain(t,t.clips[0]),scale:t.clips[0].mixScale!=null?+t.clips[0].mixScale:1,eq:t.eq,cut:t.cut}}),
+        onProgress:p=>{if(state._heard===job)ui.onUnmix?.(p)},cancelled:()=>state._heard!==job});
       if(!out||state._heard!==job){return null}
-      const b=ac().createBuffer(2,out.L.length,mb.sampleRate);b.copyToChannel(out.L,0);b.copyToChannel(out.R,1);
+      const b=ac().createBuffer(2,n,mb.sampleRate);b.copyToChannel(out.L,0);b.copyToChannel(out.R,1);
       job.buf=b;ui.onUnmix?.(1);
-      if(state.playing)softReseed(playheadT()); // swap the clean bed in without stopping
       return b;
     })();
     return job.p;
   }
   function scheduleHeard(){
-    // playing on a clean bed that no longer matches (M/S/fader changed) → back to mix − stem at once, clean bed follows
-    if(state.playing&&state._bedKey&&state._bedKey!==heardKey())softReseed(playheadT());
-    clearTimeout(state._heardT);state._heardT=setTimeout(()=>{if(needsHeard())ensureHeard().catch(()=>{});else ui.onUnmix?.(-1)},250)}
+    // 1.0.37: no reseed — the live mixer crossfades (≈120 ms) back to mix − stem at once and into the new render as it arrives
+    state._wantKey=needsHeard()?heardKey():null;
+    clearTimeout(state._heardT);state._heardT=setTimeout(()=>{if(needsHeard())ensureHeard().catch(()=>{});else ui.onUnmix?.(-1)},200)}
   /** 1.0.33: the ONE rule for what is heard (preview, ทำดาต้า, มิกซ์ดาวน์): gain of a music stem, 0 = silent */
   function heardGain(tr,c){const anySolo=state.tracks.some(t=>t.solo&&t.type==='audio'&&t.stem!=='click'&&t.stem!=='countin');
     if(tr.mute||(anySolo&&!tr.solo))return 0;return Math.max(0,(tr.vol!=null?+tr.vol:100)/100)*((c&&c.gain)||1)}
@@ -572,16 +578,12 @@ export function createStudio(ui){
         if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
         if(tr.clips[0]){mixStart=tr.clips[0].start||0;break}
       }
-      const hb=heardReady(); // 1.0.35: the clean "what you hear" render (mute/solo/volume) when it's ready
-      const bL=hb?hb.getChannelData(0):L,bR=hb?hb.getChannelData(1):R;
       jobs.push({
         tr:{mute:false,solo:false,vol:100,pan:0,stem:'__mixbed'},
-        L:bL,R:bR,sr:buf.sampleRate,start:mixStart,offset:0,dur:buf.duration,
-        gain:1,len:bL.length,guide:false,role:'bed',heard:!!hb
+        L,R,sr:buf.sampleRate,start:mixStart,offset:0,dur:buf.duration,
+        gain:1,len:L.length,guide:false,role:'bed'
       });
     }
-    const heardBed=jobs.length&&jobs[0].heard;
-    state._bedKey=heardBed?heardKey():null;
     for(const tr of state.tracks){
       if(tr.type!=='audio')continue;
       // Skip mix lane (display-only) — bed already uses mixBuf
@@ -594,7 +596,6 @@ export function createStudio(ui){
         if(c.start+clipDur<=playFrom+1e-4)continue;
         const L=buf.getChannelData(0);
         const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
-        if(heardBed&&!isGuide)continue; // already in the clean bed
         let role='add';
         if(mixMode&&!isGuide)role='sub'; // subtract when this stem should be silent
         if(!mixMode)role='add';
@@ -607,7 +608,7 @@ export function createStudio(ui){
     const keep=a.createConstantSource();keep.offset.value=0;
     try{keep.start()}catch(e){}
     const sp=a.createScriptProcessor(2048,1,2);
-    const pull={from:playFrom,frame:0,alive:true,sp,keep,mixMode};
+    const pull={from:playFrom,frame:0,alive:true,sp,keep,mixMode,hw:0,hj:null};
     state._pull=pull;
     const lrOn=()=>!!state.listenLR;
     const nomRight=()=>(state.nomSide||'R')!=='L';
@@ -625,6 +626,10 @@ export function createStudio(ui){
       // (music already ≈ full scale). Preview only: boost the guide and make headroom by dipping the
       // music bed while the nom is audible. Export is mastered separately (music −11 LUFS / nom −0.5 dBFS).
       for(const c of jobs)if(c.role==='sub')c._g=heardGain(c.tr,c.clip);
+      // 1.0.37: clean render overlay — music = (1−w)·(mix + Σ(g−1)·stem) + w·clean, w ramps ≈120 ms (no clicks, no reseed)
+      const hl=mixMode?heardLive():null;
+      if(hl&&(!pull.hj||(pull.hj.T!==hl.T&&pull.hw<=0)))pull.hj={T:hl.T,job:{L:hl.T.L,R:hl.T.R,sr:hl.sr,start:hl.start,offset:0,dur:hl.T.n/hl.sr,len:hl.T.n}}; // a new render takes over only after the old one faded out
+      const hj=pull.hj,hOn=!!(hl&&hj&&hj.T===hl.T),hStep=1/(0.12*ctxSr);const gStep=1/(0.03*ctxSr);
       const nomOn=jobs.some(c=>c.guide&&!c.tr.mute&&(c.tr.vol||0)>0&&!(anySolo&&!c.tr.solo));
       const nb=nomOn?NOM_PREVIEW_BOOST:1,dk=nomOn&&!split?NOM_PREVIEW_DUCK:1;
       for(let i=0;i<N;i++){
@@ -651,7 +656,10 @@ export function createStudio(ui){
           }
           if(cl.role==='sub'){
             // 1.0.33: bed = mix + Σ (heard gain − 1)·(stem at its true level) — mute = 0, solo, volume all exact
-            const d=(cl._g!=null?cl._g:heardGain(tr,cl.clip))-1;
+            // 1.0.37: gain glides ≈30 ms (M/S/fader while playing → no click)
+            const tg=(cl._g!=null?cl._g:heardGain(tr,cl.clip));if(cl._cur==null)cl._cur=tg;
+            if(cl._cur!==tg)cl._cur+=tg>cl._cur?Math.min(gStep,tg-cl._cur):-Math.min(gStep,cl._cur-tg);
+            const d=cl._cur-1;
             if(d>-1e-6&&d<1e-6)continue;
             mL+=sL*d*cl.scale;mR+=sR*d*cl.scale;
             continue;
@@ -663,6 +671,14 @@ export function createStudio(ui){
           const pan=clamp(tr.pan||0,-1,1);
           const pl=Math.cos((pan+1)*Math.PI/4),pr=Math.sin((pan+1)*Math.PI/4);
           mL+=sL*vol*pl;mR+=sR*vol*pr;
+        }
+        if(hj&&(hOn||pull.hw>0)){
+          let tgt=0,hs=null;const li=((t-hj.job.start)*hj.job.sr)|0,rdy=li>=0&&li+1<hj.T.n&&hj.T.ready[(li/hj.T.H)|0]&&hj.T.ready[((li+1)/hj.T.H)|0];
+          // fade in only while ≈150 ms ahead is rendered too → if the playhead catches up with a slow render the overlay has already faded out (no jump)
+          const la=Math.min(hj.T.n-1,li+((0.15*hj.job.sr)|0));if(hOn&&rdy&&(la<=li+1||hj.T.ready[(la/hj.T.H)|0]))tgt=1;
+          pull.hw+=tgt>pull.hw?Math.min(hStep,tgt-pull.hw):-Math.min(hStep,pull.hw-tgt);
+          if(pull.hw>0&&rdy&&(hs=sampleJobAt(hj.job,t))){const w=pull.hw;mL=mL*(1-w)+hs[0]*w;mR=mR*(1-w)+hs[1]*w}
+          if(!hOn&&pull.hw<=0)pull.hj=null;
         }
         if(split){
           const music=(mL+mR)*0.707,guide=(gL+gR)*0.707; // nom alone on its side is already full-scale
@@ -1137,11 +1153,37 @@ export function createStudio(ui){
         <div class="tops">
           <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="${tr.stem==='click'?'ปิด/เปิดเสียงนอมตอนฟัง':'ปิดเครื่องนี้ (มีผลกับไฟล์ดาต้าด้วย)'}">M</button>
           <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
+          ${isMusicLane(tr)?`<button type="button" class="tb eqb ${(!eqFlat(tr.eq)||(tr.mute&&!eqFlat(tr.cut)))?'on':''}" data-eqo="${i}" title="${tr.mute?'ตัดเสียงที่หลงเหลือเพิ่ม (ต่ำ/กลาง/แหลม)':'EQ ต่ำ/กลาง/แหลม (ได้ทั้งตอนฟังและในไฟล์ดาต้า)'}">🎚</button>`:''}
         </div>`;
       box.appendChild(el);
     });
     const wrap=$('lanesWrap');if(wrap)box.scrollTop=wrap.scrollTop;
     paintFineStatus();
+    if(state._eqOpen!=null)paintEqPop();
+  }
+  /* ---------- 1.0.37 (t320u): per-lane EQ popup — audible lane: tone EQ · muted lane: remove MORE of what is left, per band ---------- */
+  function isMusicLane(tr){return tr&&tr.type==='audio'&&tr.stem&&!['click','countin','mix'].includes(tr.stem)&&tr.clips.length}
+  const EQB=[['lo','🔈','ต่ำ'],['mid','🔉','กลาง'],['hi','🔊','แหลม']];
+  function paintEqPop(){
+    let pop=document.getElementById('eqPop');const tr=state.tracks.find(t=>t.id===state._eqOpen);
+    if(!tr||!isMusicLane(tr)){if(pop)pop.remove();state._eqOpen=null;return}
+    if(!pop){pop=document.createElement('div');pop.id='eqPop';pop.className='eqpop';document.body.appendChild(pop);
+      pop.addEventListener('pointerdown',e=>{if(e.target.matches('input[type=range]'))mark()});
+      pop.addEventListener('input',e=>{const r=e.target.closest('input[data-band]');if(!r)return;const t=state.tracks.find(x=>x.id===state._eqOpen);if(!t)return;
+        const f=r.dataset.field;t[f]={lo:0,mid:0,hi:0,...(t[f]||{})};t[f][r.dataset.band]=+r.value;
+        const v=r.parentElement.querySelector('output');if(v)v.textContent=(f==='cut'?'−':(+r.value>0?'+':''))+Math.abs(+r.value)+' dB';
+        state.dirty=true;applyLiveMix();const b=document.querySelector(`#trackHeads [data-eqo="${state.tracks.indexOf(t)}"]`);if(b)b.classList.toggle('on',!eqFlat(t.eq)||(t.mute&&!eqFlat(t.cut)))});
+      pop.addEventListener('click',e=>{if(e.target.closest('[data-eqx]')){state._eqOpen=null;pop.remove();return}
+        if(e.target.closest('[data-eqreset]')){const t=state.tracks.find(x=>x.id===state._eqOpen);if(!t)return;mark();const f=t.mute?'cut':'eq';t[f]={lo:0,mid:0,hi:0};applyLiveMix();renderTracks()}});
+    }
+    const muted=heardGain(tr,tr.clips[0])<0.25,f=muted?'cut':'eq',vals={lo:0,mid:0,hi:0,...(tr[f]||{})};
+    pop.dataset.field=f;pop.dataset.track=tr.id;
+    pop.innerHTML=`<div class="eqh"><b>${muted?'✂':'🎚'} ${escAttr(tr.name)}</b><button type="button" class="tb" data-eqx title="ปิด">✕</button></div>
+      <div class="eqsub">${muted?'ปิดอยู่ — ลากเพื่อตัดเสียงที่ยังหลงเหลือเพิ่ม (ตอนฟัง = ไฟล์ดาต้า)':'ปรับเสียงเครื่องนี้ (ตอนฟัง = ไฟล์ดาต้า)'}</div>`+
+      EQB.map(([k,ic,lab])=>`<label class="eqr"><span title="${lab}">${ic} ${lab}</span><input type="range" data-field="${f}" data-band="${k}" min="${muted?0:-24}" max="${muted?24:12}" step="1" value="${+vals[k]||0}"><output>${muted?'−':(+vals[k]>0?'+':'')}${Math.abs(+vals[k]||0)} dB</output></label>`).join('')+
+      `<div class="eqf"><button type="button" class="tb" data-eqreset>↺ รีเซ็ต</button></div>`;
+    const b=document.querySelector(`#trackHeads [data-eqo="${state.tracks.indexOf(tr)}"]`);
+    if(b){const r=b.getBoundingClientRect();pop.style.left=Math.min(innerWidth-270,r.right+6)+'px';pop.style.top=Math.max(8,Math.min(innerHeight-220,r.top-10))+'px'}
   }
   function escAttr(s){return String(s??'').replace(/[&"<>]/g,c=>({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]))}
 
@@ -1394,8 +1436,17 @@ export function createStudio(ui){
     });
   }
 
+  /** 1.0.37 (t320u): M changes ONLY the clicked lane (header or mixer). The page just mirrors it into the recipe chips —
+   *  it no longer re-applies every chip over all lanes (that flipped คอรัส/นำ and other lanes on/off by themselves). */
+  function toggleLaneMute(i){
+    const tr=state.tracks[i];if(!tr)return;
+    if(tr.stem==='click'&&ui.onNomMute){ui.onNomMute(!tr.mute);return}
+    mark();tr.mute=!tr.mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();
+    if(tr.stem&&!['click','countin','mix'].includes(tr.stem))ui.onStemMute?.(tr.stem,tr.mute);
+  }
   /* events wiring */
   function bind(){
+    document.addEventListener('pointerdown',e=>{if(state._eqOpen!=null&&!e.target.closest('#eqPop,[data-eqo]')){state._eqOpen=null;document.getElementById('eqPop')?.remove()}});
     $('btnPlay').onclick=()=>{
       if(state.playing){
         stopPlay();renderPlayhead(state.offset);return
@@ -1491,13 +1542,11 @@ export function createStudio(ui){
 
     $('trackHeads').onclick=e=>{
       const fine=e.target.closest('[data-fine]');if(fine){fineSplit(+fine.dataset.fine);return}
+      const eqo=e.target.closest('[data-eqo]');if(eqo){const t=state.tracks[+eqo.dataset.eqo];state._eqOpen=state._eqOpen===t.id?null:t.id;if(state._eqOpen==null)document.getElementById('eqPop')?.remove();else paintEqPop();return}
       const del=e.target.closest('[data-deltr]');if(del){const tr=state.tracks[+del.dataset.deltr];if(tr&&confirm('ลบแทร็ก「'+tr.name+'」?'))deleteTrack(+del.dataset.deltr);return}
       const wz=e.target.closest('[data-wz]');if(wz){setTrackWaveZoom(+wz.dataset.wz,+wz.dataset.d);return}
       const m=e.target.closest('[data-m]');if(m){const i=+m.dataset.m,trm=state.tracks[i];
-        if(trm&&trm.fineOf){mark();trm.mute=!trm.mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
-        if(trm&&ui.onStemMute&&trm.stem&&!['click','countin','mix'].includes(trm.stem)&&!FINE_CHILD[trm.stem]){ui.onStemMute(trm.stem,!trm.mute);return}
-        if(trm&&trm.stem==='click'&&ui.onNomMute){ui.onNomMute(!trm.mute);return}
-        mark();state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+        toggleLaneMute(i);return}
       const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){
         state.sel.track=+th.dataset.i;
@@ -1555,7 +1604,7 @@ export function createStudio(ui){
       }
     };
     $('mixer').onclick=e=>{
-      const m=e.target.closest('[data-m]');if(m){mark();state.tracks[+m.dataset.m].mute=!state.tracks[+m.dataset.m].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+      const m=e.target.closest('[data-m]');if(m){toggleLaneMute(+m.dataset.m);return}
       const s=e.target.closest('[data-s]');if(s){mark();state.tracks[+s.dataset.s].solo=!state.tracks[+s.dataset.s].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
     };
 
@@ -2000,10 +2049,11 @@ export function createStudio(ui){
 
   // mute by stem key for ทำดาต้า presets — never auto-mute click/countin here
   function applyStemMutes(muteKeys,opt){
-    const set=new Set(muteKeys||[]),preserve=!!(opt&&opt.preserveFine);
+    const set=new Set(muteKeys||[]),preserve=!!(opt&&opt.preserveFine),only=opt&&opt.only?new Set(opt.only):null;
     for(const tr of state.tracks){
       if(tr.type!=='audio')continue;
       if(tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
+      if(only&&!only.has(tr.stem)&&!only.has(tr.fineOf))continue; // 1.0.37: one chip changed → only its lane (+ its sub-lanes)
       const byParent=!!(tr.fineOf&&(set.has(tr.fineOf)||set.has(FINE_CHILD[tr.stem])));
       if(tr.fineOf&&preserve&&!byParent)continue; // keep a locally muted sub-stem (kick etc.)
       tr.mute=!!(tr.stem&&(set.has(tr.stem)||set.has(tr.fineOf)||set.has(FINE_CHILD[tr.stem])));

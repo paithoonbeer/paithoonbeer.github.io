@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.36">
+<meta name="bp-data" content="1.0.37">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -178,6 +178,10 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 .cblock b{position:absolute;left:4px;top:2px;font-size:10px;color:#ffd60a;white-space:nowrap;text-shadow:0 1px 2px #000}
 .counting .lanes-wrap,.counting .ruler-wrap,.tapping .lanes-wrap,.tapping .ruler-wrap{cursor:copy}
 
+.eqpop{position:fixed;z-index:60;width:260px;background:#1b2130;border:1px solid #3a4560;border-radius:10px;padding:8px 10px;box-shadow:0 8px 24px #0008;color:#e6ebf5;font-size:13px}
+.eqpop .eqh{display:flex;justify-content:space-between;align-items:center;gap:6px}.eqpop .eqsub{opacity:.75;font-size:11.5px;margin:2px 0 6px}
+.eqpop .eqr{display:grid;grid-template-columns:70px 1fr 52px;align-items:center;gap:6px;margin:4px 0}.eqpop .eqr output{text-align:right;font-variant-numeric:tabular-nums}
+.eqpop input[type=range]{width:100%}.eqpop .eqf{text-align:right;margin-top:4px}.thead .tb.eqb.on{background:#2f6b4a}
 </style>
 </head>
 <body>
@@ -510,7 +514,11 @@ function restoreSong(){const t=songKey();if(!t)return false;let hit=false;
   syncNomOpt();return hit}
 function markerStatus(){const n=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;return n?`🗣 ${n} จุดนับ`:''}
 $('btnMuteClear').onclick=()=>{setMuteUI([]);applyRecipeMutes();saveRecipe()};
-$('rMutes').onchange=()=>{applyRecipeMutes();saveRecipe()};
+// 1.0.37 (t320u): a chip changes only its own lane (and that lane's sub-lanes), never the others
+$('rMutes').onchange=e=>{const k=e.target?.dataset?.mute;if(k){studio.applyStemMutes(muteKeysFromUI(),{only:[k]});$('sRecipe').textContent=muteStatus()}else applyRecipeMutes();saveRecipe()};
+function muteStatus(){const m=studio.state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&!['click','countin','mix'].includes(t.stem)).map(t=>t.name||t.stem);return m.length?'ปิด: '+m.join(', '):'เปิดทุกแทร็กเสียง'}
+/** chips mirror the lanes: a chip is on when its lane (or all of its sub-lanes) is muted */
+function syncChipsFromTracks(){$('rMutes').querySelectorAll('input[data-mute]').forEach(inp=>{const k=inp.dataset.mute;const ls=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length&&(t.stem===k||t.fineOf===k));if(ls.length)inp.checked=ls.every(t=>t.mute)})}
 
 function refreshGuides(){
   const hasMusic=studio.state.tracks.some(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
@@ -532,7 +540,9 @@ function refreshGuides(){
       metroOn:!!document.getElementById('chkMetro')?.checked,
       preview:true // studio nom = clean clicks; export still uses feel/flourish
     });
-    applyRecipeMutes({preserveFine:true});
+    // 1.0.37: guides only — never re-apply the mute chips here (it flipped sub-lanes like คอรัส back on/off)
+    {const ck=studio.state.tracks.find(t=>t.stem==='click');if(ck)ck.mute=!document.getElementById('chkMetro')?.checked;
+     const ci=studio.state.tracks.find(t=>t.stem==='countin');if(ci)ci.mute=false;studio.applyLiveMix?.()}
   }catch(e){console.warn('guides',e)}
 }
 
@@ -590,7 +600,7 @@ window.__onTapAt=r=>{setArmed('tap',false);saveRecipe();toast('ตั้งจ�
 addEventListener('keydown',e=>{if(e.code!=='KeyT'||e.target.closest?.('input,select,textarea'))return;if(!studio.state.playing)return;e.preventDefault();const r=studio.tapNow();window.__onTapAt(r)});
 addEventListener('keydown',e=>{if(e.key==='Escape')setArmed('',false)});
 window.__onMarkers=()=>{saveRecipe();refreshGuides();$('sRecipe').textContent=markerStatus()||'ไม่มีจุดนับ'};
-window.__onStemMute=(stem,mute)=>{const c=$('rMutes').querySelector(`input[data-mute="${stem}"]`);if(c)c.checked=!!mute;applyRecipeMutes();saveRecipe()};
+window.__onStemMute=()=>{syncChipsFromTracks();$('sRecipe').textContent=muteStatus();saveRecipe()}; // 1.0.37: the studio already changed that one lane
 function syncMetroBtn(){const on=!!$('chkMetro').checked;$('btnMetro').classList.toggle('on',on);$('metroIco').textContent=on?'🔔':'🔕';$('btnMetro').title=on?'เสียงนอมตอนฟัง: เปิด (คลิกเพื่อปิด)':'เสียงนอมตอนฟัง: ปิดอยู่ (คลิกเพื่อเปิด)'}
 $('chkMetro').addEventListener('change',syncMetroBtn);syncMetroBtn();
 function fmtBpm(b){return String(Math.round((+b||0)*100)/100)}
@@ -681,7 +691,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.36',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.37',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
