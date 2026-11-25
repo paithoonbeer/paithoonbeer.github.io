@@ -231,6 +231,105 @@ export function createStudio(ui){
     renderAll();
   }
 
+  /* ---------- แยกละเอียด: DrumSep v2 (กลอง) · UVR KARA 2 (ร้อง) ---------- */
+  const FINE={
+    drums:{
+      kind:'drums',bytes:168050967,
+      url:'https://huggingface.co/Acapellas/drumsep-v2-onnx/resolve/main/drumsep_v2_w10_f16w.onnx',
+      title:'แยกกลองเป็น กระเดื่อง / สแนร์ / ทอม / ฉาบ?',
+      note:'ฉาบ รวมไฮแฮต แครช และไรด์',
+      fold:'kick',
+      parts:[
+        {key:'kick',name:'กระเดื่อง',color:'#e08a2a'},
+        {key:'snare',name:'สแนร์',color:'#f0c36a'},
+        {key:'toms',name:'ทอม',color:'#c97b5a'},
+        {key:'cymbals',name:'ฉาบ',color:'#d4c35a',tip:'ฉาบ รวมไฮแฮต แครช และไรด์'}
+      ]
+    },
+    vocals:{
+      kind:'vocals',bytes:52786726,
+      url:'https://huggingface.co/TheDailyOWO/splitwave-models/resolve/main/mdx_kara_2.onnx',
+      title:'แยกเสียงร้องเป็น นำ / คอรัส?',
+      note:'คุณภาพขึ้นกับเพลง',
+      fold:'backing',
+      parts:[
+        {key:'lead',name:'นำ',color:'#d67bb8',tip:'คุณภาพขึ้นกับเพลง'},
+        {key:'backing',name:'คอรัส',color:'#9b8af0',tip:'คุณภาพขึ้นกับเพลง'}
+      ]
+    }
+  };
+  const FINE_CHILD={kick:'drums',snare:'drums',toms:'drums',cymbals:'drums',lead:'vocals',backing:'vocals'};
+  function isFineParent(tr){return !!(tr&&FINE[tr.stem]&&!tr.fineOf&&!state.tracks.some(x=>x.fineOf===tr.stem))}
+  function foldResidual(parent,parts,foldKey){
+    const n=parent.L.length,sL=new Float32Array(n),sR=new Float32Array(n);
+    for(const p of parts){const L=p.L,R=p.R||L;for(let i=0;i<n;i++){sL[i]+=L[i]||0;sR[i]+=(R[i]||0)}}
+    const t=parts.find(p=>p.key===foldKey)||parts[0];
+    const TL=t.L,TR=t.R||t.L,PL=parent.L,PR=parent.R||parent.L;
+    for(let i=0;i<n;i++){TL[i]+=PL[i]-sL[i];TR[i]+=PR[i]-sR[i]}
+  }
+  async function modelCached(url){try{const c=await caches.open('bp-ai-models-v4');return !!(await c.match(url))}catch(e){return false}}
+  async function fineSplit(trackIdx){
+    const tr=state.tracks[trackIdx];if(!isFineParent(tr))return;
+    const spec=FINE[tr.stem],clip=tr.clips&&tr.clips[0],buf=clip&&state.buffers.get(clip.buf);
+    if(!buf){ui.toast?.('ไม่มีเสียงในเลนนี้');return}
+    const sec=buf.duration||clip.dur||0,phone=!!(ui.isPhone&&ui.isPhone()),cached=await modelCached(spec.url);
+    const lo=Math.max(1,Math.round(sec/120)||1),hi=Math.max(lo+1,Math.round(sec/40)||2);
+    const lines=[spec.title,
+      cached?('โมเดลพร้อมแล้ว · แยกในเครื่องนี้ เพลง ~'+Math.round(sec)+' วินาที ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'):('ครั้งแรกจะโหลดโมเดล '+(spec.bytes/1e6|0)+' MB จาก Hugging Face แล้วแยกในเครื่อง · ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'),
+      spec.note+(spec.kind==='vocals'?'':'') ,
+      phone?'บนมือถืออาจช้าหรือหน่วยความจำไม่พอ — แนะนำใช้คอมพิวเตอร์':'โมเดล MIT ทำงานในเบราว์เซอร์ เสียงไม่ออกเครื่อง'];
+    if(!confirm(lines.join('\n\n')))return;
+    if(state.playing)stopPlay();
+    const sr=buf.sampleRate||44100;
+    const pL=Float32Array.from(buf.getChannelData(0));
+    const pR=buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):pL.slice();
+    const parent={L:pL.slice(),R:pR.slice()};
+    const wL=pL.slice(),wR=pR.slice();
+    ui.onFineProg?.('⏳ แยกละเอียด…');
+    const w=new Worker('stems-fine-worker.js?v=1.0.34');
+    let stems;
+    try{
+      stems=await new Promise((ok,no)=>{
+        const got=[];
+        w.onmessage=({data:m})=>{
+          if(m.t==='dl')ui.onFineProg?.('⏳ โหลดโมเดล '+(m.p*100|0)+'%');
+          else if(m.t==='ready'||m.t==='sepStart')ui.onFineProg?.('⏳ กำลังแยก…');
+          else if(m.t==='prog')ui.onFineProg?.('⏳ แยก '+(m.p*100|0)+'%');
+          else if(m.t==='log')try{console.warn(m.m)}catch(e){}
+          else if(m.t==='stem')got[m.i]={key:m.name,L:m.L,R:m.R};
+          else if(m.t==='err'){try{w.terminate()}catch(e){};no(new Error(m.m))}
+          else if(m.t==='done'){try{w.terminate()}catch(e){};ok(got)}
+        };
+        w.onerror=e=>{try{w.terminate()}catch(err){};no(e.error||e)};
+        const useGpu=!!(ui.gpuF16&&ui.gpuF16());
+        w.postMessage({kind:spec.kind,L:wL,R:wR,sr,opt:{wasmOnly:!useGpu,eps:useGpu?['webgpu','wasm']:['wasm']}},[wL.buffer,wR.buffer]);
+      });
+    }catch(e){ui.onFineProg?.('❌ '+(e.message||e));ui.toast?.('❌ แยกละเอียดไม่สำเร็จ: '+(e.message||e));return}
+    if(!stems||stems.filter(Boolean).length!==spec.parts.length){ui.toast?.('แยกไม่ครบสเต็ม');return}
+    const parts=spec.parts.map(meta=>{
+      const g=stems.find(x=>x&&x.key===meta.key);if(!g)throw new Error('missing '+meta.key);
+      return{key:meta.key,L:g.L,R:g.R};
+    });
+    foldResidual(parent,parts,spec.fold);
+    mark();
+    const idx=state.tracks.indexOf(tr),start=clip.start||0,mute=!!tr.mute,vol=tr.vol||100;
+    const parentScale=clip.mixScale!=null?+clip.mixScale:1; // inherit true-level scale so children sum back to the parent in mix−minus
+    state.tracks.splice(idx,1);
+    parts.forEach((p,i)=>{
+      const meta=spec.parts[i];
+      const t={id:uid(),type:'audio',name:meta.name,color:meta.color||tr.color,
+        mute,solo:false,vol,pan:tr.pan||0,eq:{lo:0,mid:0,hi:0},rev:0,waveZoom:tr.waveZoom||1,clips:[],notes:[],
+        stem:meta.key,fineOf:spec.kind,fineTip:meta.tip||spec.note||''};
+      state.tracks.splice(idx+i,0,t);
+      const b=bufFromLR(p.L,p.R,sr);const id=putBuf(b);
+      t.clips.push({id:uid(),buf:id,start,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:meta.key,mixScale:parentScale});
+    });
+    state.sel.track=idx;state.dirty=true;renderAll();
+    const names=spec.parts.map(p=>p.name).join(' / ');
+    ui.onFineProg?.('✅ แยกแล้ว — '+names);
+    ui.toast?.('แยกละเอียดแล้ว · '+names);
+  }
+
   /* ---------- FX graph helpers ---------- */
   function makeTrackChain(tr){
     const a=ac();
@@ -939,9 +1038,10 @@ export function createStudio(ui){
   function renderTracks(){
     const box=$('trackHeads');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
-      const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'');el.dataset.i=i;
-      const wz=+(tr.waveZoom||1);
-      el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}"><b>${tr.type==='midi'?'MIDI':'AUD'}</b>
+      const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'')+(tr.fineOf?' fine':'');el.dataset.i=i;
+      if(tr.fineTip)el.title=tr.fineTip;
+      const fine=isFineParent(tr)?`<button type="button" class="tb fine" data-fine="${i}" title="${tr.stem==='drums'?'แยกละเอียด — กระเดื่อง สแนร์ ทอม ฉาบ':'แยกละเอียด — นำ / คอรัส (คุณภาพขึ้นกับเพลง)'}">✂</button>`:'';
+      el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}">${fine}<b>${tr.type==='midi'?'MIDI':'AUD'}</b>
           <button type="button" class="tb del" data-deltr="${i}" title="ลบแทร็กนี้">✕</button></div>
         <div class="tops">
           <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="${tr.stem==='click'?'ปิด/เปิดเสียงนอมตอนฟัง':'ปิดเครื่องนี้ (มีผลกับไฟล์ดาต้าด้วย)'}">M</button>
@@ -949,6 +1049,7 @@ export function createStudio(ui){
         </div>`;
       box.appendChild(el);
     });
+    const wrap=$('lanesWrap');if(wrap)box.scrollTop=wrap.scrollTop;
   }
   function escAttr(s){return String(s??'').replace(/[&"<>]/g,c=>({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]))}
 
@@ -1297,10 +1398,12 @@ export function createStudio(ui){
     $('btnNew').onclick=()=>{if(!state.dirty||confirm('เริ่มโปรเจกต์ใหม่?'))newProject()};
 
     $('trackHeads').onclick=e=>{
+      const fine=e.target.closest('[data-fine]');if(fine){fineSplit(+fine.dataset.fine);return}
       const del=e.target.closest('[data-deltr]');if(del){const tr=state.tracks[+del.dataset.deltr];if(tr&&confirm('ลบแทร็ก「'+tr.name+'」?'))deleteTrack(+del.dataset.deltr);return}
       const wz=e.target.closest('[data-wz]');if(wz){setTrackWaveZoom(+wz.dataset.wz,+wz.dataset.d);return}
       const m=e.target.closest('[data-m]');if(m){const i=+m.dataset.m,trm=state.tracks[i];
-        if(trm&&ui.onStemMute&&trm.stem&&!['click','countin','mix'].includes(trm.stem)){ui.onStemMute(trm.stem,!trm.mute);return}
+        if(trm&&trm.fineOf){mark();trm.mute=!trm.mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+        if(trm&&ui.onStemMute&&trm.stem&&!['click','countin','mix'].includes(trm.stem)&&!FINE_CHILD[trm.stem]){ui.onStemMute(trm.stem,!trm.mute);return}
         if(trm&&trm.stem==='click'&&ui.onNomMute){ui.onNomMute(!trm.mute);return}
         mark();state.tracks[i].mute=!state.tracks[i].mute;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
       const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
@@ -1802,12 +1905,14 @@ export function createStudio(ui){
   }
 
   // mute by stem key for ทำดาต้า presets — never auto-mute click/countin here
-  function applyStemMutes(muteKeys){
-    const set=new Set(muteKeys||[]);
+  function applyStemMutes(muteKeys,opt){
+    const set=new Set(muteKeys||[]),preserve=!!(opt&&opt.preserveFine);
     for(const tr of state.tracks){
       if(tr.type!=='audio')continue;
       if(tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
-      tr.mute=!!(tr.stem&&set.has(tr.stem));
+      const byParent=!!(tr.fineOf&&(set.has(tr.fineOf)||set.has(FINE_CHILD[tr.stem])));
+      if(tr.fineOf&&preserve&&!byParent)continue; // keep a locally muted sub-stem (kick etc.)
+      tr.mute=!!(tr.stem&&(set.has(tr.stem)||set.has(tr.fineOf)||set.has(FINE_CHILD[tr.stem])));
     }
     // Light UI only — renderAll during play freezes ScriptProcessor audio
     applyLiveMix();renderTracks();renderMixer();
@@ -2009,7 +2114,7 @@ export function createStudio(ui){
   /** Mono sum of chosen stems (for the quiet guide bed on the nom side), regardless of mute. */
   async function renderStemsMono(keys,sr,padLead,totalDur){
     const set=new Set(keys||[]);
-    const trs=state.tracks.filter(t=>t.type==='audio'&&t.stem&&set.has(t.stem)&&t.clips.length);
+    const trs=state.tracks.filter(t=>t.type==='audio'&&t.stem&&t.clips.length&&(set.has(t.stem)||set.has(t.fineOf)||set.has(FINE_CHILD[t.stem])));
     if(!trs.length)return null;
     const length=Math.max(1,Math.ceil((totalDur||dur())*sr));
     const off=new OfflineAudioContext(1,length,sr);
@@ -2361,7 +2466,7 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,makeDualMonoBlob,makeExportClickBuf,
+    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.33">
+<meta name="bp-data" content="1.0.34">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -80,6 +80,9 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .heads{grid-row:2;overflow:hidden;border-right:1px solid var(--line);background:#101419}/* vertical scroll driven by lanesWrap */
 .thead{height:120px;padding:6px 8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;justify-content:center;gap:4px;box-sizing:border-box}
 .thead.on{background:#18222c}
+.thead.fine{padding-left:14px}
+.tb.fine{color:#ffd60a}
+.credits{font-size:10px;color:var(--mut);line-height:1.4;max-width:36em;margin:8px 0 0}
 .tn{display:flex;align-items:center;gap:6px;width:100%}
 .tn i{width:8px;height:8px;border-radius:50%}
 .tn input{flex:1;min-width:0;background:transparent;border:0;border-bottom:1px solid transparent;padding:0}
@@ -238,6 +241,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <div class="row"><select id="rProf"><option value="">— เลือก —</option></select><button type="button" class="btn" id="btnProfSave">บันทึกเป็นโปรไฟล์</button><button type="button" class="btn" id="btnProfDel">ลบโปรไฟล์</button></div>
       <b>ไทม์ไลน์</b>
       <div class="row"><label class="chk"><input type="checkbox" id="chkSnap" checked> สแนปคลิป</label></div>
+      <p class="credits">แยกเสียงในเครื่องนี้ (MIT): HT-Demucs 6s · DrumSep v2 (inagoy / Gridshift) สำหรับปุ่ม ✂ แยกละเอียดที่เลนกลอง · UVR-MDX-NET KARA 2 (Ultimate Vocal Remover) สำหรับเลนร้อง — เครดิตผู้พัฒนาโมเดล</p>
       <select id="rCi" hidden><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option></select>
       <select id="rCiMode" hidden><option value="pre">pre</option><option value="over" selected>over</option></select>
       <input type="checkbox" id="rCues" checked hidden>
@@ -347,7 +351,10 @@ const studio=createStudio({
   countN(){return +(document.getElementById('rCountN')?.value)||8},
   tapArmed(){return !!window.__tapArmed},
   onTapAt(r){window.__onTapAt?.(r)},
-  onProject(st){document.getElementById('sOut').textContent=`${st.title} · BPM ${Math.round((st.bpm||0)*100)/100}${st.dirty?' · ยังไม่บันทึก':''} · Space เล่น/หยุด · T แตะจังหวะ 1`}
+  onProject(st){document.getElementById('sOut').textContent=`${st.title} · BPM ${Math.round((st.bpm||0)*100)/100}${st.dirty?' · ยังไม่บันทึก':''} · Space เล่น/หยุด · T แตะจังหวะ 1`},
+  gpuF16:()=>gpuF16,
+  isPhone:()=>!desk,
+  onFineProg(msg){const el=document.getElementById('sAi');if(el)el.textContent=msg}
 });
 await studio.boot();
 window.__ssd=studio;
@@ -462,9 +469,9 @@ const DEF_PROFS=[
 ];
 function muteKeysFromUI(){return [...$('rMutes').querySelectorAll('input[data-mute]:checked')].map(x=>x.dataset.mute)}
 function setMuteUI(keys){const set=new Set(keys||[]);$('rMutes').querySelectorAll('input[data-mute]').forEach(inp=>{inp.checked=set.has(inp.dataset.mute)})}
-function applyRecipeMutes(){
+function applyRecipeMutes(opt){
   const keys=muteKeysFromUI();
-  studio.applyStemMutes(keys);
+  studio.applyStemMutes(keys,opt);
   // keep guide tracks audible according to metro / always show count-in
   const ck=studio.state.tracks.find(t=>t.stem==='click');
   if(ck)ck.mute=!document.getElementById('chkMetro')?.checked;
@@ -522,7 +529,7 @@ function refreshGuides(){
       metroOn:!!document.getElementById('chkMetro')?.checked,
       preview:true // studio nom = clean clicks; export still uses feel/flourish
     });
-    applyRecipeMutes();
+    applyRecipeMutes({preserveFine:true});
   }catch(e){console.warn('guides',e)}
 }
 
@@ -618,9 +625,13 @@ async function sendStemsToSetsod(files,meta){
 async function makeDataNow(){
   if(!desk){toast('ใช้พีซีเท่านั้น');return}
   // 1.0.33 (t315u): the studio's M/S/volume ARE the recipe — never re-apply the chips over them (that un-muted stems)
+  // 1.0.34: also snapshot mute/solo/vol so refreshGuides → applyRecipeMutes cannot unmute a sub-stem (กระเดื่อง etc. have no chip)
+  const keptMix=studio.state.tracks.map(t=>({id:t.id,mute:!!t.mute,solo:!!t.solo,vol:t.vol,stem:t.stem}));
   {const muted=studio.state.tracks.filter(t=>t.type==='audio'&&t.stem&&!['click','countin','mix'].includes(t.stem)&&t.mute).map(t=>t.stem);setMuteUI(muted)}
   {const ck=studio.state.tracks.find(t=>t.stem==='click');if(ck)ck.mute=!document.getElementById('chkMetro')?.checked}
   saveRecipe();refreshGuides();
+  for(const k of keptMix){const t=studio.state.tracks.find(x=>x.id===k.id);if(!t||t.stem==='click'||t.stem==='countin'||t.stem==='mix')continue;t.mute=k.mute;t.solo=k.solo;if(k.vol!=null)t.vol=k.vol}
+  studio.applyLiveMix?.();
   const allMusic=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix');
   const music=allMusic.filter(t=>t.clips.some(c=>studio.heardGain(t,c)>0));
   if(!music.length){toast('ยังไม่มีแทร็กเสียง — ลากเพลงแยก AI ก่อน หรือเปิดอย่างน้อย 1 แทร็ก');return}
@@ -667,7 +678,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.33',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.34',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
