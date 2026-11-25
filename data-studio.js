@@ -268,33 +268,80 @@ export function createStudio(ui){
     for(let i=0;i<n;i++){TL[i]+=PL[i]-sL[i];TR[i]+=PR[i]-sR[i]}
   }
   async function modelCached(url){try{const c=await caches.open('bp-ai-models-v4');return !!(await c.match(url))}catch(e){return false}}
+  // 1.0.36 (t319u): one fine-split at a time (saves memory). Second click is queued;
+  // each parent row shows its own status; the global #sAi line is labeled and never mixes two %.
+  const fineState=Object.create(null); // stem -> {phase,line,row}
+  const fineQueue=[];
+  let fineRunning=false;
+  function fineLabel(kind){return kind==='vocals'?'ร้อง':'กลอง'}
+  function paintFineStatus(){
+    const kinds=['drums','vocals'];
+    const run=kinds.map(k=>fineState[k]).find(s=>s&&s.phase==='run');
+    const q=kinds.filter(k=>fineState[k]&&fineState[k].phase==='queued').map(fineLabel);
+    let line=run&&run.line||'';
+    if(q.length)line=(line?line+' · ':'⏳ ')+q.join(' และ ')+'รอคิว';
+    if(!line){const last=[...kinds].reverse().map(k=>fineState[k]).find(s=>s&&(s.phase==='done'||s.phase==='err'));if(last)line=last.line||''}
+    if(line)ui.onFineProg?.(line); // never blank #sAi (6-stem / other status lives there too)
+    const box=$('trackHeads');if(!box)return;
+    box.querySelectorAll('.thead[data-stem]').forEach(el=>{
+      const st=fineState[el.dataset.stem],btn=el.querySelector('.tb.fine');
+      let slot=el.querySelector('.fine-prog');
+      if(!st||st.phase==='done'||st.phase==='err'){if(slot)slot.remove();if(btn)btn.hidden=false;return}
+      if(!slot){slot=document.createElement('span');slot.className='fine-prog';if(btn){btn.hidden=true;btn.after(slot)}else el.querySelector('.tn')?.appendChild(slot)}
+      else if(btn)btn.hidden=true;
+      slot.textContent=st.phase==='queued'?'รอคิว':(st.row||'กำลังแยก…');
+      slot.title=st.line||'';
+    });
+  }
+  function setFineStatus(stem,phase,line,row){fineState[stem]={phase,line,row:row||''};paintFineStatus()}
   async function fineSplit(trackIdx){
     const tr=state.tracks[trackIdx];if(!isFineParent(tr))return;
+    if(fineState[tr.stem]&&(fineState[tr.stem].phase==='queued'||fineState[tr.stem].phase==='run'))return;
     const spec=FINE[tr.stem],clip=tr.clips&&tr.clips[0],buf=clip&&state.buffers.get(clip.buf);
     if(!buf){ui.toast?.('ไม่มีเสียงในเลนนี้');return}
     const sec=buf.duration||clip.dur||0,phone=!!(ui.isPhone&&ui.isPhone()),cached=await modelCached(spec.url);
     const lo=Math.max(1,Math.round(sec/120)||1),hi=Math.max(lo+1,Math.round(sec/40)||2);
     const lines=[spec.title,
       cached?('โมเดลพร้อมแล้ว · แยกในเครื่องนี้ เพลง ~'+Math.round(sec)+' วินาที ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'):('ครั้งแรกจะโหลดโมเดล '+(spec.bytes/1e6|0)+' MB จาก Hugging Face แล้วแยกในเครื่อง · ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'),
-      spec.note+(spec.kind==='vocals'?'':'') ,
+      spec.note+(spec.kind==='vocals'?'':''),
       phone?'บนมือถืออาจช้าหรือหน่วยความจำไม่พอ — แนะนำใช้คอมพิวเตอร์':'โมเดล MIT ทำงานในเบราว์เซอร์ เสียงไม่ออกเครื่อง'];
     if(!confirm(lines.join('\n\n')))return;
     if(state.playing)stopPlay();
     const sr=buf.sampleRate||44100;
     const pL=Float32Array.from(buf.getChannelData(0));
     const pR=buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):pL.slice();
-    const parent={L:pL.slice(),R:pR.slice()};
-    const wL=pL.slice(),wR=pR.slice();
-    ui.onFineProg?.('⏳ แยกละเอียด…');
-    const w=new Worker('stems-fine-worker.js?v=1.0.34');
+    fineQueue.push({
+      stem:tr.stem,id:tr.id,spec,clip,buf,sr,
+      parent:{L:pL.slice(),R:pR.slice()},wL:pL.slice(),wR:pR.slice(),
+      start:clip.start||0,mute:!!tr.mute,vol:tr.vol||100,
+      parentScale:clip.mixScale!=null?+clip.mixScale:1
+    });
+    setFineStatus(tr.stem,'queued','⏳ '+fineLabel(tr.stem)+'รอคิว','รอคิว');
+    pumpFineQueue();
+  }
+  async function pumpFineQueue(){
+    if(fineRunning)return;
+    const job=fineQueue.shift();if(!job)return;
+    fineRunning=true;
+    try{await runFineJob(job)}
+    finally{fineRunning=false;pumpFineQueue()}
+  }
+  async function runFineJob(job){
+    const {spec,clip,buf,sr,parent,wL,wR,start,mute,vol,parentScale}=job;
+    const lab=fineLabel(job.stem);
+    const tr=state.tracks.find(t=>t.id===job.id);
+    if(!tr||!isFineParent(tr)){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่สำเร็จ — ไม่มีเลนนี้','');return}
+    const prog=(line,row)=>setFineStatus(job.stem,'run',line,row);
+    prog('⏳ แยก'+lab+'…','กำลังแยก…');
+    const w=new Worker('stems-fine-worker.js?v=1.0.36');
     let stems;
     try{
       stems=await new Promise((ok,no)=>{
         const got=[];
         w.onmessage=({data:m})=>{
-          if(m.t==='dl')ui.onFineProg?.('⏳ โหลดโมเดล '+(m.p*100|0)+'%');
-          else if(m.t==='ready'||m.t==='sepStart')ui.onFineProg?.('⏳ กำลังแยก…');
-          else if(m.t==='prog')ui.onFineProg?.('⏳ แยก '+(m.p*100|0)+'%');
+          if(m.t==='dl')prog('⏳ โหลดโมเดลแยก'+lab+' '+(m.p*100|0)+'%','โหลด '+(m.p*100|0)+'%');
+          else if(m.t==='ready'||m.t==='sepStart')prog('⏳ กำลังแยก'+lab+'…','กำลังแยก…');
+          else if(m.t==='prog')prog('⏳ แยก'+lab+' '+(m.p*100|0)+'%','แยก '+(m.p*100|0)+'%');
           else if(m.t==='log')try{console.warn(m.m)}catch(e){}
           else if(m.t==='stem')got[m.i]={key:m.name,L:m.L,R:m.R};
           else if(m.t==='err'){try{w.terminate()}catch(e){};no(new Error(m.m))}
@@ -304,21 +351,21 @@ export function createStudio(ui){
         const useGpu=!!(ui.gpuF16&&ui.gpuF16());
         w.postMessage({kind:spec.kind,L:wL,R:wR,sr,opt:{wasmOnly:!useGpu,eps:useGpu?['webgpu','wasm']:['wasm']}},[wL.buffer,wR.buffer]);
       });
-    }catch(e){ui.onFineProg?.('❌ '+(e.message||e));ui.toast?.('❌ แยกละเอียดไม่สำเร็จ: '+(e.message||e));return}
-    if(!stems||stems.filter(Boolean).length!==spec.parts.length){ui.toast?.('แยกไม่ครบสเต็ม');return}
+    }catch(e){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่สำเร็จ: '+(e.message||e),'');ui.toast?.('❌ แยกละเอียดไม่สำเร็จ: '+(e.message||e));return}
+    if(!stems||stems.filter(Boolean).length!==spec.parts.length){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่ครบสเต็ม','');ui.toast?.('แยกไม่ครบสเต็ม');return}
     const parts=spec.parts.map(meta=>{
       const g=stems.find(x=>x&&x.key===meta.key);if(!g)throw new Error('missing '+meta.key);
       return{key:meta.key,L:g.L,R:g.R};
     });
     foldResidual(parent,parts,spec.fold);
     mark();
-    const idx=state.tracks.indexOf(tr),start=clip.start||0,mute=!!tr.mute,vol=tr.vol||100;
-    const parentScale=clip.mixScale!=null?+clip.mixScale:1; // inherit true-level scale so children sum back to the parent in mix−minus
+    const now=state.tracks.find(t=>t.id===job.id);if(!now){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่สำเร็จ — ไม่มีเลนนี้','');return}
+    const idx=state.tracks.indexOf(now);
     state.tracks.splice(idx,1);
     parts.forEach((p,i)=>{
       const meta=spec.parts[i];
-      const t={id:uid(),type:'audio',name:meta.name,color:meta.color||tr.color,
-        mute,solo:false,vol,pan:tr.pan||0,eq:{lo:0,mid:0,hi:0},rev:0,waveZoom:tr.waveZoom||1,clips:[],notes:[],
+      const t={id:uid(),type:'audio',name:meta.name,color:meta.color||now.color,
+        mute,solo:false,vol,pan:now.pan||0,eq:{lo:0,mid:0,hi:0},rev:0,waveZoom:now.waveZoom||1,clips:[],notes:[],
         stem:meta.key,fineOf:spec.kind,fineTip:meta.tip||spec.note||''};
       state.tracks.splice(idx+i,0,t);
       const b=bufFromLR(p.L,p.R,sr);const id=putBuf(b);
@@ -326,7 +373,7 @@ export function createStudio(ui){
     });
     state.sel.track=idx;state.dirty=true;renderAll();
     const names=spec.parts.map(p=>p.name).join(' / ');
-    ui.onFineProg?.('✅ แยกแล้ว — '+names);
+    setFineStatus(job.stem,'done','✅ แยก'+lab+'แล้ว — '+names,'');
     ui.toast?.('แยกละเอียดแล้ว · '+names);
   }
 
@@ -1082,7 +1129,7 @@ export function createStudio(ui){
   function renderTracks(){
     const box=$('trackHeads');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
-      const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'')+(tr.fineOf?' fine':'');el.dataset.i=i;
+      const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'')+(tr.fineOf?' fine':'');el.dataset.i=i;if(tr.stem)el.dataset.stem=tr.stem;
       if(tr.fineTip)el.title=tr.fineTip;
       const fine=isFineParent(tr)?`<button type="button" class="tb fine" data-fine="${i}" title="${tr.stem==='drums'?'แยกละเอียด — กระเดื่อง สแนร์ ทอม ฉาบ':'แยกละเอียด — นำ / คอรัส (คุณภาพขึ้นกับเพลง)'}">✂</button>`:'';
       el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}">${fine}<b>${tr.type==='midi'?'MIDI':'AUD'}</b>
@@ -1094,6 +1141,7 @@ export function createStudio(ui){
       box.appendChild(el);
     });
     const wrap=$('lanesWrap');if(wrap)box.scrollTop=wrap.scrollTop;
+    paintFineStatus();
   }
   function escAttr(s){return String(s??'').replace(/[&"<>]/g,c=>({'&':'&amp;','"':'&quot;','<':'&lt;','>':'&gt;'}[c]))}
 

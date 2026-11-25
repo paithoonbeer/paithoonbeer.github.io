@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.35">
+<meta name="bp-data" content="1.0.36">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -82,6 +82,7 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .thead.on{background:#18222c}
 .thead.fine{padding-left:14px}
 .tb.fine{color:#ffd60a}
+.fine-prog{font:650 10px NotoThai,system-ui,sans-serif;color:#ffd60a;white-space:nowrap;margin-left:2px}
 .credits{font-size:10px;color:var(--mut);line-height:1.4;max-width:36em;margin:8px 0 0}
 .tn{display:flex;align-items:center;gap:6px;width:100%}
 .tn i{width:8px;height:8px;border-radius:50%}
@@ -680,7 +681,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.35',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.36',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
