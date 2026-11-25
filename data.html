@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.32">
+<meta name="bp-data" content="1.0.33">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -165,6 +165,11 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 .cblock{position:absolute;top:0;bottom:0;background:rgba(255,214,10,.14);border-left:2px solid #ffd60a;border-right:1px dashed rgba(255,214,10,.5);z-index:3;cursor:grab;touch-action:none}
 .cband{position:absolute;top:0;z-index:2;pointer-events:none;background:rgba(255,214,10,.07);border-left:2px solid rgba(255,214,10,.85)}
 .cband b{position:sticky;top:0;display:inline-block;margin:2px 0 0 4px;font-size:11px;color:#111;background:#ffd60a;border-radius:4px;padding:1px 6px}
+.cband .cgrip{pointer-events:auto;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:3px 4px 3px 7px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+.cband .cdel{font-style:normal;margin-left:6px;padding:0 4px;border-radius:3px;background:rgba(0,0,0,.18);cursor:pointer}
+.cband .cdel:hover{background:#ff453a;color:#fff}
+.cband.cdrag,.cblock.cdrag{background:rgba(255,214,10,.22);z-index:6;will-change:transform}
+.cband.cdrag .cgrip{cursor:grabbing}
 .cblock.intro{pointer-events:none;background:rgba(255,214,10,.07);border-left-style:dashed}
 .cblock b{position:absolute;left:4px;top:2px;font-size:10px;color:#ffd60a;white-space:nowrap;text-shadow:0 1px 2px #000}
 .counting .lanes-wrap,.counting .ruler-wrap,.tapping .lanes-wrap,.tapping .ruler-wrap{cursor:copy}
@@ -216,7 +221,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
         <label class="chk"><input type="checkbox" id="rAccent"> เน้นจังหวะ 1</label>
         <label class="chk"><input type="checkbox" id="rFlourish"> ลูกเล่น (สไตล์ร็อค/สามช่า/ช้า)</label>
         <label class="chk"><input type="checkbox" id="rEndAuto" checked> หยุดนอมเมื่อเพลงจบ</label>
-        <label class="chk">ดังนอมตอนฟัง <input id="nomVol" type="range" min="40" max="200" value="140"></label>
+        <label class="chk">ดังนอมตอนฟัง <input id="nomVol" type="range" min="40" max="300" value="140"></label>
         <label class="chk" title="ฟังเพลงซ้าย นอมขวา เหมือนไฟล์ที่ส่งออก"><input type="checkbox" id="chkListenLR"> ฟังแยก L/R</label>
       </div>
       <b>ไฟล์ส่งออก</b>
@@ -269,7 +274,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <div class="lanes" id="lanes"><div class="playhead" id="playhead"></div></div>
     </div>
     <div class="mixer-wrap folded" id="mixerWrap">
-      <button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="false" title="หุบ/กางมิกเซอร์">ระดับฟัง (ไม่มีผลกับไฟล์ดาต้า) <span class="chev" id="mixerChev">▸</span></button>
+      <button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="false" title="หุบ/กางมิกเซอร์">ระดับเสียง (ไฟล์ดาต้าได้ตามที่ได้ยิน) <span class="chev" id="mixerChev">▸</span></button>
       <div class="mixer" id="mixer"></div>
     </div>
   </div>
@@ -612,8 +617,12 @@ async function sendStemsToSetsod(files,meta){
 
 async function makeDataNow(){
   if(!desk){toast('ใช้พีซีเท่านั้น');return}
-  applyRecipeMutes();saveRecipe();refreshGuides();
-  const music=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&!t.mute);
+  // 1.0.33 (t315u): the studio's M/S/volume ARE the recipe — never re-apply the chips over them (that un-muted stems)
+  {const muted=studio.state.tracks.filter(t=>t.type==='audio'&&t.stem&&!['click','countin','mix'].includes(t.stem)&&t.mute).map(t=>t.stem);setMuteUI(muted)}
+  {const ck=studio.state.tracks.find(t=>t.stem==='click');if(ck)ck.mute=!document.getElementById('chkMetro')?.checked}
+  saveRecipe();refreshGuides();
+  const allMusic=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix');
+  const music=allMusic.filter(t=>t.clips.some(c=>studio.heardGain(t,c)>0));
   if(!music.length){toast('ยังไม่มีแทร็กเสียง — ลากเพลงแยก AI ก่อน หรือเปิดอย่างน้อย 1 แทร็ก');return}
   $('btnMakeData').disabled=true;$('sRecipe').textContent='⏳ เรนเดอร์ดาต้า…';
   try{
@@ -631,24 +640,14 @@ async function makeDataNow(){
     try{await studio.loadCiVoices()}catch(e){}
     const pad=r.ciMode==='pre'?ci*4*60/bpm:0,total=pad+musicDur;
     // music bed first (needed for auto end-of-click)
-    const mono=await studio.renderMusicMono(music,sr,pad,total);
+    const mono=await studio.renderMusicMono(music,sr,pad,total); // exactly what is heard (mute/solo/volume)
     const endT=r.endAuto?studio.autoEndT(mono,t0,bpm,r.rate,pad):undefined;
     const guide=studio.makeExportClickBuf(musicDur,bpm,sr,{ci,style:feel,flourish,t0,rate:r.rate,accent:r.accent,ciMode:r.ciMode,
       cues:r.cues,markers:studio.state.markers,endT});
-    const clickBlob=studio.bufToWavBlob(guide.buf,{targetPeak:0.89,maxGain:1.2});
-    out.push(new File([clickBlob],`${title} (คลิก นอม).wav`,{type:'audio/wav'}));
-    if(flourish){
-      const fl=studio.makeFlourishWav(musicDur,bpm,sr,feel,t0);
-      out.push(new File([fl],`${title} (ลูกเล่น).wav`,{type:'audio/wav'}));
-    }
-    for(const tr of music){
-      const saved=tr.clips.map(c=>c.start);
-      tr.clips.forEach(c=>c.start=0);
-      const blob=await studio.renderTrackWav(tr,sr,{padLead:pad,totalDur:total});
-      tr.clips.forEach((c,i)=>c.start=saved[i]);
-      if(!blob)continue;
-      out.push(new File([blob],`${title} (${tr.name}).wav`,{type:'audio/wav'}));
-    }
+    // 1.0.33 (t315u): SetSod plays every file it gets at once. It used to get the ready dual file (its name has "นอม" →
+    // treated as the click lane → the whole song played a 2nd time) + each stem peak-normalised on its own
+    // (bleed boosted up to +12 dB) → doubled/echo and "drums/vocals still there". Now it gets exactly the
+    // two halves of the dual file: เพลง (as heard) + คลิก นอม — sample-identical to ⬇ ไฟล์พร้อมใช้.
     // Dual-mono ready file (L/R split) — mastered like the reference when 🔊/🎧 are on
     let report=null,dualFile=null;
     try{
@@ -660,12 +659,15 @@ async function makeDataNow(){
         dual=res.blob;report=res.report;
       }else dual=studio.makeDualMonoBlob(mono,guide.buf,nomSide,{targetPeak:0.97,maxGain:1.6});
       dualFile=new File([dual],`${title} (พร้อมใช้ ${sideLab}).wav`,{type:'audio/wav'});
-      out.push(dualFile);
+      const [chL,chR]=await studio.splitDualWav(dual);
+      const musicCh=nomSide==='R'?chL:chR,nomCh=nomSide==='R'?chR:chL;
+      out.push(new File([musicCh],`${title} (เพลง).wav`,{type:'audio/wav'}));
+      out.push(new File([nomCh],`${title} (คลิก นอม).wav`,{type:'audio/wav'}));
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.32',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.33',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);

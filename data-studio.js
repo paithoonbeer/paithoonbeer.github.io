@@ -1,6 +1,6 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
-import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.32';
-import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.32';
+import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.33';
+import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -77,7 +77,7 @@ export function createStudio(ui){
     renderArrange();renderTracks();
   }
   function setNomVol(v){
-    v=clamp(+v||0,0,200);
+    v=clamp(+v||0,0,300);
     state.nomVol=v;
     const ck=state.tracks.find(t=>t.stem==='click');
     if(ck){ck.vol=v;applyLiveMix();renderMixer()}
@@ -189,7 +189,7 @@ export function createStudio(ui){
         aL+=c*(xL-aL);aR+=c*(xR-aR);
         L[i]=aL*1.6;R[i]=aR*1.6;
       }
-      by.bass={L,R};
+      by.bass={L,R};by.__bassSynth=true; // = 1.6 × low end of the mix → its share of the mix is 1/1.6
     }catch(e){}
   }
   function loadStemChannels({title,src,channels,sampleRate,mix}){
@@ -199,7 +199,8 @@ export function createStudio(ui){
     // Data 1.0.29: no mix-complement gap-fill — it pasted the whole mix into every lane
     // (graphs looked like the mix, mix−stem data was wrong). Lanes now = real AI output.
     // Mild boost only when a stem is quiet end-to-end
-    for(const k of Object.keys(by))by[k]=peakNormLR(by[k],0.75);
+    // 1.0.33 (t315u): stems are kept at their TRUE level. The old peak-normalise (up to ×4 on quiet stems) made
+    // "mix − muted stem" subtract the wrong amount → drums/vocals stayed in (inverted) and the file sounded doubled.
     const sr=sampleRate||44100;
     // Keep original mix — mix-minus muted stems beats summing demucs parts for clean beds
     state.mixBuf=null;
@@ -222,9 +223,11 @@ export function createStudio(ui){
       const t=addAudioTrack(row.name,row.color);t.stem=row.key;
       if(row.ch&&row.ch.L){
         const b=bufFromLR(row.ch.L,row.ch.R,sr);const id=putBuf(b);
-        t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:row.key});
+        t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:row.key,mixScale:row.key==='bass'&&by.__bassSynth?1/1.6:null}); // null → fitted below
       }
     });
+    ensureMixScales(); // each stem's exact share of the mix (AI output is ~2–6 % off) → mute leaves ≈ −30 dB, not −24
+    for(const tr of state.tracks)for(const c of tr.clips)if(c.mixScale==null)c.mixScale=1;
     renderAll();
   }
 
@@ -354,6 +357,9 @@ export function createStudio(ui){
     return state.offset;
   }
   // Sample helper for pull mixer
+  /** 1.0.33: the ONE rule for what is heard (preview, ทำดาต้า, มิกซ์ดาวน์): gain of a music stem, 0 = silent */
+  function heardGain(tr,c){const anySolo=state.tracks.some(t=>t.solo&&t.type==='audio'&&t.stem!=='click'&&t.stem!=='countin');
+    if(tr.mute||(anySolo&&!tr.solo))return 0;return Math.max(0,(tr.vol!=null?+tr.vol:100)/100)*((c&&c.gain)||1)}
   function sampleJobAt(cl,t){
     const local=t-cl.start;
     if(local<0||local>=cl.dur)return null;
@@ -404,7 +410,7 @@ export function createStudio(ui){
         if(!mixMode)role='add';
         jobs.push({
           tr,L,R,sr:buf.sampleRate,start:c.start,offset:c.offset||0,dur:clipDur,
-          gain:c.gain||1,len:L.length,guide:isGuide,role
+          gain:c.gain||1,len:L.length,guide:isGuide,role,clip:c,scale:c.mixScale!=null?+c.mixScale:1
         });
       }
     }
@@ -425,6 +431,12 @@ export function createStudio(ui){
       const split=lrOn();
       const musicIsL=nomRight();
       const base=pull.from;
+      // 1.0.33 nom too quiet: a 13 ms click summed onto a mastered song was squashed by the soft limiter
+      // (music already ≈ full scale). Preview only: boost the guide and make headroom by dipping the
+      // music bed while the nom is audible. Export is mastered separately (music −11 LUFS / nom −0.5 dBFS).
+      for(const c of jobs)if(c.role==='sub')c._g=heardGain(c.tr,c.clip);
+      const nomOn=jobs.some(c=>c.guide&&!c.tr.mute&&(c.tr.vol||0)>0&&!(anySolo&&!c.tr.solo));
+      const nb=nomOn?NOM_PREVIEW_BOOST:1,dk=nomOn&&!split?NOM_PREVIEW_DUCK:1;
       for(let i=0;i<N;i++){
         const t=base+(pull.frame+i)/ctxSr;
         let mL=0,mR=0,gL=0,gR=0;
@@ -444,15 +456,14 @@ export function createStudio(ui){
             const pan=clamp(tr.pan||0,-1,1);
             const pl=Math.cos((pan+1)*Math.PI/4),pr=Math.sin((pan+1)*Math.PI/4);
             const xL=sL*vol*pl,xR=sR*vol*pr;
-            if(split){gL+=xL;gR+=xR}else{mL+=xL;mR+=xR}
+            gL+=xL;gR+=xR;
             continue;
           }
           if(cl.role==='sub'){
-            // Subtract stem when it should NOT be heard (mute, or not solo while others solo)
-            const shouldHear=!(tr.mute||(anySolo&&!tr.solo));
-            if(shouldHear)continue; // keep it in the bed
-            const vol=Math.max(0,(tr.vol||100)/100)*(cl.gain||1);
-            mL-=sL*vol;mR-=sR*vol;
+            // 1.0.33: bed = mix + Σ (heard gain − 1)·(stem at its true level) — mute = 0, solo, volume all exact
+            const d=(cl._g!=null?cl._g:heardGain(tr,cl.clip))-1;
+            if(d>-1e-6&&d<1e-6)continue;
+            mL+=sL*d*cl.scale;mR+=sR*d*cl.scale;
             continue;
           }
           // Legacy sum mode (no mixBuf)
@@ -464,10 +475,10 @@ export function createStudio(ui){
           mL+=sL*vol*pl;mR+=sR*vol*pr;
         }
         if(split){
-          const music=(mL+mR)*0.707,guide=(gL+gR)*0.707;
+          const music=(mL+mR)*0.707,guide=(gL+gR)*0.707; // nom alone on its side is already full-scale
           if(musicIsL){oL[i]=softLimit(music);oR[i]=softLimit(guide)}
           else{oL[i]=softLimit(guide);oR[i]=softLimit(music)}
-        }else{oL[i]=softLimit(mL);oR[i]=softLimit(mR)} // 1.0.32: music+nom summed to ~2.0 → hard clipping at the speaker
+        }else{oL[i]=softLimit(mL*dk+gL*nb);oR[i]=softLimit(mR*dk+gR*nb)} // 1.0.32: music+nom summed to ~2.0 → hard clipping at the speaker
       }
       pull.frame+=N;
     };
@@ -667,7 +678,7 @@ export function createStudio(ui){
     const {when,playFrom}=state._metroJob;
     const playT=playheadT();
     const until=playT+8;
-    const vol=(state.nomVol!=null?state.nomVol:140)/100*0.22;
+    const vol=(state.nomVol!=null?state.nomVol:140)/100*0.4; // 1.0.33: was 0.22 (too quiet)
     while(true){
       const b=state._metroJob.nextBeat;
       const t=b*bs;
@@ -879,7 +890,11 @@ export function createStudio(ui){
     state.markers.push(m);changed();return m;
   }
   function addCount(t,n){const m={id:uid(),kind:'count',t:snapClick(t!=null?t:playheadT()-musicStart()),n:+n===4?4:8,src:'manual'};mark();state.markers.push(m);changed();return m}
-  function moveCount(id,t){const m=state.markers.find(x=>x.id===id);if(!m)return;m.t=snapClick(t);changed()}
+  function moveCount(id,t){const m=state.markers.find(x=>x.id===id);if(!m)return;mark();
+    if(m.kind!=='count'){m.kind='count';m.n=8} // legacy pin → real count group once it's moved
+    m.t=snapClick(Math.max(0,t));
+    state.markers=state.markers.filter(x=>x===m||!(x.kind==='count'&&Math.abs(x.t-m.t)<1e-3)); // dropped onto another → merge
+    changed()}
   function deleteCount(id){mark();state.markers=state.markers.filter(x=>x.id!==id);changed()}
   function setMarkers(list){
     state.markers=(list||[]).filter(m=>m&&m.kind!=='end'&&isFinite(+m.t)).map(m=>m.kind==='count'
@@ -944,7 +959,9 @@ export function createStudio(ui){
     // 1.0.32: faint full-height band over every lane — the nom lane is often scrolled out of view (blocks looked like "nothing happened")
     {const ms0=musicStart(),H=Math.max(lanes.scrollHeight,lanes.clientHeight);
      for(const c of countSpans()){const d=document.createElement('div');d.className='cband';d.style.left=((ms0+c.start)*state.pxPerSec)+'px';
-       d.style.width=Math.max(8,(c.end-c.start)*state.pxPerSec)+'px';d.style.height=H+'px';d.innerHTML=`<b>🗣 ${c.n===4?'1 2 3 4':'1 · 2 · 1 2 3 4'}</b>`;lanes.appendChild(d)}}
+       d.style.width=Math.max(8,(c.end-c.start)*state.pxPerSec)+'px';d.style.height=H+'px';d.dataset.mid=c.m.id;
+       // 1.0.33: chip = drag handle (mouse + touch) · ✕ = remove
+       d.innerHTML=`<b class="cgrip" title="ลาก = ย้ายจุดนับ (ติดจังหวะนอม)">⠿ 🗣 ${c.n===4?'1 2 3 4':'1 · 2 · 1 2 3 4'}<i class="cdel" title="ลบจุดนับ" aria-label="ลบจุดนับ">✕</i></b>`;lanes.appendChild(d)}}
     const els=lanes.querySelectorAll('.lane');if(!els.length)return;
     let ti=state.tracks.findIndex(t=>t.stem==='click');if(ti<0)ti=els.length-1;
     const lane=els[ti];if(!lane)return;
@@ -1005,11 +1022,13 @@ export function createStudio(ui){
           clip.style.left=x+'px';clip.style.width=w+'px';clip.style.background=tr.color+'33';clip.style.borderColor=tr.color;
           clip.dataset.cid=c.id;clip.dataset.ti=ti;
           const cv=document.createElement('canvas');cv.className='cw';clip.appendChild(cv);
+          const wk=waveKey(c,tr.color,w),wu=waveImgCache.get(wk);
+          if(wu){const im=new Image();im.className='cw';im.alt='';im.decoding='async';im.draggable=false;im.src=wu;cv.replaceWith(im)}
           const lab=document.createElement('span');lab.className='clab';lab.textContent=c.name||tr.name;clip.appendChild(lab);
           const hL=document.createElement('i');hL.className='hndl L';clip.appendChild(hL);
           const hR=document.createElement('i');hR.className='hndl R';clip.appendChild(hR);
           lane.appendChild(clip);
-          requestAnimationFrame(()=>drawClipWave(cv,c,tr.color,1));
+          if(!wu)requestAnimationFrame(()=>{drawClipWave(cv,c,tr.color,1);waveToImg(cv,waveKey(c,tr.color,w))});
         });
       }else{
         // MIDI blocks overview
@@ -1065,6 +1084,23 @@ export function createStudio(ui){
     g.fillRect(Math.max(0,t)*state.pxPerSec-1,0,2,h);
   }
 
+  // 1.0.33 scroll jank: a big live <canvas> per clip (song length × px/s wide) is re-uploaded to the
+  // compositor on every scroll frame (Canvas2DResourceProvider::ProduceCanvasResource ≈ 50 ms/frame on a
+  // slow PC). Waveforms never change while shown, so we draw once, freeze to a cached PNG <img> (tiled and
+  // rastered once by the compositor) and reuse it on every re-render of the lanes.
+  const waveImgCache=new Map();
+  function waveKey(c,color,w){return [c.buf,(+c.offset||0).toFixed(4),(+c.dur||0).toFixed(4),Math.round(w),color,(c.peaks&&c.peaks.length)||0].join('|')}
+  function waveToImg(cv,key){
+    if(!cv||!cv.isConnected||!cv.width||!cv.toBlob)return;
+    try{cv.toBlob(b=>{
+      if(!b)return;const url=URL.createObjectURL(b);
+      waveImgCache.set(key,url);
+      if(waveImgCache.size>96){const k0=waveImgCache.keys().next().value;URL.revokeObjectURL(waveImgCache.get(k0));waveImgCache.delete(k0)}
+      if(!cv.isConnected)return;
+      const im=new Image();im.className='cw';im.alt='';im.draggable=false;im.src=url;
+      (im.decode?im.decode():Promise.resolve()).catch(()=>{}).then(()=>{if(cv.isConnected){im.style.cssText=cv.style.cssText;cv.replaceWith(im)}});
+    },'image/png')}catch(e){}
+  }
   function drawClipWave(cv,clip,color,waveZoom){
     const parent=cv.parentElement;if(!parent)return;
     const w=parent.clientWidth||Math.round(clip.dur*state.pxPerSec),h=parent.clientHeight||100;
@@ -1117,7 +1153,7 @@ export function createStudio(ui){
       const labBg=tr.color||'#85909b';
       el.classList.toggle('muted',!!tr.mute);
       el.innerHTML=`<div class="lab" style="background:${labBg}" title="${escAttr(tr.name)}">${tr.name}</div>
-        <div class="fader-wrap"><input class="fader" type="range" min="0" max="200" value="${tr.vol}" data-vol="${i}" title="ระดับฟัง ${escAttr(tr.name)} — ไม่มีผลกับไฟล์ดาต้า"></div>
+        <div class="fader-wrap"><input class="fader" type="range" min="0" max="200" value="${tr.vol}" data-vol="${i}" title="ระดับ ${escAttr(tr.name)} — ไฟล์ดาต้าได้ตามที่ได้ยิน"></div>
         <span class="fader-val">${tr.vol}${tr.mute?' ·ปิด':''}</span>`;
       box.appendChild(el);
     });
@@ -1396,22 +1432,40 @@ export function createStudio(ui){
         startPhDrag(e);
       });
     }
-    // count blocks on the nom lane: tap = remove · drag = move (snaps to nom clicks)
+    // count groups: drag the 🗣 chip on any lane (or the block on the nom lane, or anywhere inside a band while 🗣 is on)
+    // = move the whole 1-2-3-4 group, snapped live to the nom clicks · tap block/band in 🗣 mode = remove · ✕ = remove
+    let cntSwallowClick=0;
     wrap.addEventListener('pointerdown',e=>{
-      const cb=e.target.closest&&e.target.closest('.cblock');if(!cb||(e.button!=null&&e.button!==0))return;
+      if(e.button!=null&&e.button!==0)return;
+      const tg=e.target;
+      if(tg.closest&&tg.closest('.cdel')){e.preventDefault();e.stopPropagation();cntSwallowClick=performance.now();
+        const id=tg.closest('.cband')?.dataset.mid;if(id)deleteCount(id);return}
+      let id=null,tapDel=false;
+      const grip=tg.closest&&tg.closest('.cgrip'),cb=tg.closest&&tg.closest('.cblock:not(.intro)');
+      if(grip)id=grip.closest('.cband')?.dataset.mid;
+      else if(cb){id=cb.dataset.mid;tapDel=true}
+      else if(ui.countArmed?.()&&!phDrag){const hit=countAt(timeFromClientX(e.clientX)-musicStart());if(hit){id=hit.id;tapDel=true}}
+      if(!id)return;
+      const m=state.markers.find(x=>x.id===id);if(!m)return;
       e.preventDefault();e.stopPropagation();
-      const m=state.markers.find(x=>x.id===cb.dataset.mid);if(!m)return;
-      const x0=e.clientX,t0m=m.kind==='count'?m.t:Math.max(0,m.t-8*clickStep());let moved=false;
-      const mv=ev=>{const dx=ev.clientX-x0;if(Math.abs(dx)>5)moved=true;if(moved){cb.style.transform=`translateX(${dx}px)`}};
-      const up=ev=>{removeEventListener('pointermove',mv);removeEventListener('pointerup',up);
-        if(!moved){deleteCount(m.id);return}
-        const nt=t0m+(ev.clientX-x0)/state.pxPerSec;
-        if(m.kind!=='count'){m.kind='count';m.n=8}
-        moveCount(m.id,nt)};
-      addEventListener('pointermove',mv);addEventListener('pointerup',up);
+      const pid=e.pointerId;try{(grip||cb||wrap).setPointerCapture?.(pid)}catch(_){}
+      const x0=e.clientX,sl0=wrap.scrollLeft,t0m=m.kind==='count'?m.t:Math.max(0,m.t-8*clickStep());let moved=false,nt=t0m;
+      const els=()=>[...$('lanes').querySelectorAll(`.cband[data-mid="${id}"],.cblock[data-mid="${id}"]`)];
+      const live=els();live.forEach(el=>el.classList.add('cdrag'));
+      const mv=ev=>{if(ev.pointerId!==pid)return;const dx=ev.clientX-x0+(wrap.scrollLeft-sl0);if(Math.abs(dx)>5)moved=true;if(!moved)return;
+        nt=snapClick(Math.max(0,t0m+dx/state.pxPerSec));const px=(nt-t0m)*state.pxPerSec;
+        live.forEach(el=>{el.style.transform=`translateX(${px}px)`})};
+      const end=(ev,cancel)=>{if(ev.pointerId!==pid)return;removeEventListener('pointermove',mv);removeEventListener('pointerup',up);removeEventListener('pointercancel',cc);
+        live.forEach(el=>{el.classList.remove('cdrag');el.style.transform=''});cntSwallowClick=performance.now();
+        if(cancel)return;
+        if(!moved){if(tapDel)deleteCount(id);return}
+        if(Math.abs(nt-t0m)>1e-4)moveCount(id,nt);else renderCountBlocks()};
+      const up=ev=>end(ev,false),cc=ev=>end(ev,true);
+      addEventListener('pointermove',mv);addEventListener('pointerup',up);addEventListener('pointercancel',cc);
     },true);
     wrap.addEventListener('click',e=>{
       if(phDrag)return;
+      if(performance.now()-cntSwallowClick<400)return; // the click that ends a count drag/tap must not add a new count
       if(e.target.closest('.cblock'))return;
       if(ui.countArmed?.()){toggleCountAt(timeFromClientX(e.clientX)-musicStart(),ui.countN?.()||8);return}
       if(ui.tapArmed?.()){ui.onTapAt?.(tapDownbeat(timeFromClientX(e.clientX)-musicStart()));return}
@@ -1605,6 +1659,31 @@ export function createStudio(ui){
     setTimeout(()=>URL.revokeObjectURL(url),4000);
   }
   /** restore the hidden original mix: 1.0.31 bufs.__mix · older projects had a muted 'mix' track → adopt it and drop the row */
+  /** 1.0.33: projects saved ≤1.0.32 hold peak-normalised stems — recover each stem's true scale inside the mix
+   *  (least squares: mix ≈ Σ a_k·stem_k on a decimated mono copy) so mute = exact mix − stem. */
+  function ensureMixScales(){
+    try{
+      if(!state.mixBuf)return;
+      const rows=[];
+      for(const tr of state.tracks){if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
+        for(const c of tr.clips){if(c.mixScale==null&&state.buffers.get(c.buf))rows.push({c,b:state.buffers.get(c.buf)})}}
+      if(!rows.length)return;
+      const all=[];for(const tr of state.tracks){if(tr.type!=='audio'||!tr.stem||['click','countin','mix'].includes(tr.stem))continue;for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)all.push({c,b})}}
+      const mb=state.mixBuf,sr=mb.sampleRate,step=Math.max(4,Math.floor(mb.length/250000)),K=all.length;
+      const mono=(b,i)=>{const a=b.getChannelData(0),r=b.numberOfChannels>1?b.getChannelData(1):a;return 0.5*(a[i]+r[i])};
+      const AtA=Array.from({length:K},()=>new Float64Array(K)),Atb=new Float64Array(K),x=new Float64Array(K);
+      for(let i=0;i<mb.length;i+=step){const t=i/sr;let ok=true;
+        for(let k=0;k<K;k++){const {c,b}=all[k];const j=Math.round((t-(c.start||0)+(c.offset||0))*b.sampleRate);x[k]=j>=0&&j<b.length?mono(b,j):0}
+        const y=mono(mb,i);for(let a=0;a<K;a++){Atb[a]+=x[a]*y;for(let q=a;q<K;q++)AtA[a][q]+=x[a]*x[q]}}
+      for(let a=0;a<K;a++){for(let q=0;q<a;q++)AtA[a][q]=AtA[q][a];AtA[a][a]+=1e-6+AtA[a][a]*1e-4}
+      // Gaussian elimination
+      const M=AtA.map((r,i)=>[...r,Atb[i]]);
+      for(let i=0;i<K;i++){let p=i;for(let r=i+1;r<K;r++)if(Math.abs(M[r][i])>Math.abs(M[p][i]))p=r;[M[i],M[p]]=[M[p],M[i]];const d=M[i][i]||1e-12;
+        for(let r=0;r<K;r++){if(r===i)continue;const f=M[r][i]/d;for(let q=i;q<=K;q++)M[r][q]-=f*M[i][q]}}
+      all.forEach(({c},k)=>{const a=M[k][K]/(M[k][k]||1e-12);if(c.mixScale==null)c.mixScale=isFinite(a)?Math.max(0,Math.min(4,a)):1});
+      state.dirty=true;
+    }catch(e){}
+  }
   function adoptMix(){
     if(state.buffers.has('__mix')){state.mixBuf=state.buffers.get('__mix');state.buffers.delete('__mix')}
     const i=state.tracks.findIndex(t=>t.stem==='mix');
@@ -1625,7 +1704,7 @@ export function createStudio(ui){
         const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
         state.buffers.set(id,buf);
       }
-      adoptMix();
+      adoptMix();ensureMixScales();
       for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
       state.dirty=false;renderAll();ui.onProjectLoaded?.(proj);ui.toast?.('โหลดโปรเจกต์แล้ว');
     }catch(e){ui.toast?.('เปิดโปรเจกต์ไม่ได้: '+(e.message||e))}
@@ -1639,6 +1718,7 @@ export function createStudio(ui){
     if(sr>96000)sr=96000;
     return sr;
   }
+  let NOM_PREVIEW_BOOST=2.0,NOM_PREVIEW_DUCK=0.71; // +6 dB nom, −3 dB music bed while nom plays (preview only)
   function softLimit(x){
     const a=Math.abs(x);if(a<=0.95)return x;
     const s=x<0?-1:1;return s*(0.95+0.05*Math.tanh((a-0.95)/0.05*1.4));
@@ -1676,11 +1756,14 @@ export function createStudio(ui){
     ui.toast?.('กำลังมิกซ์ดาวน์…');
     const sr=nativeSr();
     const length=Math.ceil(dur()*sr)||sr;
+    // 1.0.33: music = exactly what is heard (mix − muted stems, solo, volume) — summing AI lanes ≠ the song
+    const musicBuf=await renderMusicMono(null,sr,0,length/sr,2);
     const off=new OfflineAudioContext(2,length,sr);
-    // schedule into offline — simplified dry mix
+    {const s0=off.createBufferSource();s0.buffer=musicBuf;s0.connect(off.destination);s0.start(0)}
     const anySolo=state.tracks.some(t=>t.solo);
     for(const tr of state.tracks){
-      if(tr.mute||(anySolo&&!tr.solo))continue;
+      if(tr.type==='audio'&&tr.stem&&tr.stem!=='click'&&tr.stem!=='countin')continue; // already in musicBuf
+      if(tr.mute||(anySolo&&!tr.solo&&tr.type!=='audio'))continue;
       const g=off.createGain();g.gain.value=tr.vol/100;g.connect(off.destination);
       if(tr.type==='audio'){
         for(const c of tr.clips){
@@ -1760,48 +1843,40 @@ export function createStudio(ui){
    * Prefer original-mix minus muted stems when available — much cleaner than
    * summing demucs parts (matches reference dual-mono packs like「เด๋อ」).
    */
-  async function renderMusicMono(tracks,sr,padLead,totalDur){
+  /** Music exactly as heard (1.0.33, t315u): with the original mix → mix + Σ (heard gain − 1)·stem·scale, sample-aligned
+   *  the same way the preview mixer aligns them (bed at the first stem's start); without it → Σ heard stems.
+   *  `tracks` is ignored for selection (kept for callers) — mute/solo/volume of the studio decide. */
+  async function renderMusicMono(tracks,sr,padLead,totalDur,channels){
     sr=sr||nativeSr();
-    const pad=Math.max(0,+padLead||0);
+    const pad=Math.max(0,+padLead||0),nch=channels===2?2:1;
     const length=Math.max(1,Math.ceil((totalDur||dur())*sr));
-    const mutedMusic=state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
-    const useMixMinus=!!(state.mixBuf&&mutedMusic.length&&mutedMusic.length<6);
-    const off=new OfflineAudioContext(1,length,sr);
+    const music=state.tracks.filter(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
+    const off=new OfflineAudioContext(nch,length,sr);
     const merge=off.createGain();merge.gain.value=1;merge.connect(off.destination);
-    function scheduleBuf(buf,gain,at){
-      if(!buf)return;
+    function sched(buf,gain,at,offset,d){
+      if(!buf||!(Math.abs(gain)>1e-6))return;
       const src=off.createBufferSource();src.buffer=buf;
-      const g=off.createGain();g.gain.value=gain;
-      src.connect(g);g.connect(merge);
-      const maxOff=Math.max(0,buf.duration-1e-4);
-      const dur0=Math.max(0.001,Math.min(buf.duration,maxOff));
-      try{src.start(at,0,dur0)}catch(e){}
+      const g=off.createGain();g.gain.value=gain;src.connect(g);g.connect(merge);
+      const maxOff=Math.max(0,buf.duration-1e-4),o=clamp(offset||0,0,maxOff);
+      const dd=Math.min(d!=null?Math.max(0.001,d):buf.duration,Math.max(0.001,buf.duration-o));
+      let t=at;let oo=o;if(t<0){oo+= -t;t=0}
+      try{src.start(t,oo,Math.max(0.001,dd-(oo-o)))}catch(e){}
     }
-    if(useMixMinus){
-      // Clean bed: original mix − each muted stem (phase-aligned demucs cancel)
-      scheduleBuf(state.mixBuf,1,pad);
-      for(const tr of mutedMusic){
-        for(const c of tr.clips){
+    const heard=music.some(tr=>tr.clips.some(c=>heardGain(tr,c)>0));
+    if(state.mixBuf&&music.length){
+      if(heard){
+        const mixStart=music[0].clips[0]?music[0].clips[0].start||0:0; // same rule as the preview bed
+        sched(state.mixBuf,1,pad+mixStart,0,null);
+        for(const tr of music)for(const c of tr.clips){
           const buf=state.buffers.get(c.buf);if(!buf)continue;
-          scheduleBuf(buf,-(tr.vol||100)/100,pad+(c.start||0));
+          const d=heardGain(tr,c)-1;if(Math.abs(d)<1e-6)continue;
+          sched(buf,d*(c.mixScale!=null?+c.mixScale:1),pad+(c.start||0),c.offset||0,c.dur);
         }
       }
-      // Also add any unmuted stem that isn't in the mix path? All music stems are in mix.
-      // If user lowered an unmuted stem's vol below 100, remix by scaling: skip for now (mute-centric).
     }else{
-      for(const tr of tracks){
-        if(!tr||tr.type!=='audio'||tr.mute||!tr.clips.length)continue;
-        if(tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
-        for(const c of tr.clips){
-          const buf=state.buffers.get(c.buf);if(!buf)continue;
-          const src=off.createBufferSource();src.buffer=buf;
-          const g=off.createGain();g.gain.value=(tr.vol||100)/100*(c.gain||1);
-          src.connect(g);g.connect(merge);
-          const maxOff=Math.max(0,buf.duration-1e-4);
-          const off0=clamp(c.offset||0,0,maxOff);
-          const dur0=Math.min(Math.max(0.001,c.dur||0),Math.max(0.001,buf.duration-off0));
-          try{src.start(pad,off0,dur0)}catch(e){}
-        }
+      for(const tr of music)for(const c of tr.clips){
+        const g=heardGain(tr,c);if(!(g>0))continue;
+        sched(state.buffers.get(c.buf),g,pad+(c.start||0),c.offset||0,c.dur);
       }
     }
     return await off.startRendering();
@@ -1812,6 +1887,22 @@ export function createStudio(ui){
    * nom side = click+count-in only; other side = mono music only.
    * side 'R' → L=music R=nom (most common); 'L' → opposite.
    */
+  /** 1.0.33: split a PCM16 stereo WAV into two mono PCM16 WAVs with the very same samples (L file, R file). */
+  async function splitDualWav(blob){
+    const ab=await blob.arrayBuffer(),dv=new DataView(ab);
+    let p=12,fmt=null,data=null;
+    while(p+8<=dv.byteLength){const id=String.fromCharCode(dv.getUint8(p),dv.getUint8(p+1),dv.getUint8(p+2),dv.getUint8(p+3)),sz=dv.getUint32(p+4,true);
+      if(id==='fmt ')fmt={ch:dv.getUint16(p+10,true),sr:dv.getUint32(p+12,true),bits:dv.getUint16(p+22,true)};
+      if(id==='data'){data={o:p+8,n:Math.min(sz,dv.byteLength-p-8)};break}
+      p+=8+sz+(sz&1)}
+    if(!fmt||!data||fmt.ch!==2||fmt.bits!==16)throw new Error('dual wav format');
+    const frames=data.n>>2,src=new Int16Array(ab,data.o,frames*2);
+    const one=c=>{const b=new ArrayBuffer(44+frames*2),v=new DataView(b),w=(o,t)=>{for(let i=0;i<4;i++)v.setUint8(o+i,t.charCodeAt(i))};
+      w(0,'RIFF');v.setUint32(4,36+frames*2,true);w(8,'WAVE');w(12,'fmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+      v.setUint32(24,fmt.sr,true);v.setUint32(28,fmt.sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,frames*2,true);
+      const o=new Int16Array(b,44,frames);for(let i=0;i<frames;i++)o[i]=src[2*i+c];return new Blob([b],{type:'audio/wav'})};
+    return[one(0),one(1)];
+  }
   function makeDualMonoBlob(musicMonoBuf,clickBuf,side,opt){
     opt=opt||{};
     const sr=clickBuf.sampleRate||musicMonoBuf.sampleRate||nativeSr();
@@ -2270,10 +2361,11 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    applyStemMutes,renderTrackWav,renderMusicMono,makeDualMonoBlob,makeExportClickBuf,
+    applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
+    setNomPreview(b,d){if(b!=null)NOM_PREVIEW_BOOST=+b;if(d!=null)NOM_PREVIEW_DUCK=+d;return[NOM_PREVIEW_BOOST,NOM_PREVIEW_DUCK]},
     addCount,toggleCountAt,moveCount,deleteCount,setMarkers,countSpans,snapClick,clickStep,tapDownbeat,tapNow,exportProjectFile,musicStart,renderStemsMono,makeRefDualBlob,autoEndT,
     async boot(){bind();
       // Preload spoken one–two–three–four for Data count-in
@@ -2300,7 +2392,7 @@ export function createStudio(ui){
             const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
             state.buffers.set(id,buf);
           }
-          adoptMix();
+          adoptMix();ensureMixScales();
           for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
           state.dirty=false;restored=true;renderAll();ui.onProjectLoaded?.(proj);
           ui.toast?.('โหลดโปรเจกต์ล่าสุด: '+(state.title||'Untitled'));
