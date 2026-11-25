@@ -1,6 +1,6 @@
 {
-  "build": 113,
-  "ver": "1.0.120",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b113-1.0.120/SetSod.apk",
-  "notes": "1.0.120: แก้ดาวน์โหลดอัปเดต APK พัง (ลิงก์ 404) + เปิดเบราว์เซอร์สำรอง · Data มิกเซอร์/คุณภาพเสียง"
+  "build": 114,
+  "ver": "1.0.121",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b114-1.0.121/SetSod.apk",
+  "notes": "1.0.121: เพลงที่ซ่อนจากคลัง: ปุ่ม 🗑 ลบออกจากรายการถาวร (ไม่ลบจากเซิร์ฟเวอร์) และลบไฟล์ในเครื่อง · กู้คืนจากหน้านี้ไม่ได้"
 }
