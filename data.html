@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.37">
+<meta name="bp-data" content="1.0.38">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -109,6 +109,10 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .playhead::before{content:'';position:absolute;left:11px;top:0;bottom:0;width:2px;background:var(--play);box-shadow:0 0 8px rgba(255,107,61,.5);pointer-events:none}
 .mixer-wrap{grid-column:1/-1;border-top:1px solid var(--line);background:#101419;display:flex;flex-direction:column;min-height:0}
 .mixer-fold{display:flex;align-items:center;gap:8px;width:100%;min-height:28px;padding:4px 10px;border:0;border-bottom:1px solid var(--line);background:#151a21;color:var(--mut);cursor:pointer;font:650 12px NotoThai,system-ui,sans-serif;text-align:left}
+.mixer-head{display:flex;align-items:stretch}.mixer-head .mixer-fold{flex:1;min-width:0}
+.maxcut{flex:none;display:inline-flex;align-items:center;gap:3px;padding:0 10px;border:0;border-left:1px solid var(--line);border-bottom:1px solid var(--line);background:#151a21;color:var(--mut);cursor:pointer;font:650 12px NotoThai,system-ui,sans-serif}
+.maxcut b{font:700 10px JetMono,monospace;letter-spacing:.02em}.maxcut:hover{color:var(--tx);background:#1a222c}
+.maxcut.on{background:#3a2a2a;color:#f88}.mixer-wrap.folded .maxcut{border-bottom:0}
 .mixer-fold:hover{color:var(--tx);background:#1a222c}
 .mixer-fold .chev{margin-left:auto;font-family:JetMono,monospace;color:var(--acc)}
 .mixer{display:flex;gap:10px;overflow-x:auto;padding:10px 8px 12px;max-height:min(48vh,380px);align-items:stretch}
@@ -283,7 +287,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <div class="lanes" id="lanes"><div class="playhead" id="playhead"></div></div>
     </div>
     <div class="mixer-wrap folded" id="mixerWrap">
-      <button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="false" title="หุบ/กางมิกเซอร์">ระดับเสียง (ไฟล์ดาต้าได้ตามที่ได้ยิน) <span class="chev" id="mixerChev">▸</span></button>
+      <div class="mixer-head"><button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="false" title="หุบ/กางมิกเซอร์">ระดับเสียง (ไฟล์ดาต้าได้ตามที่ได้ยิน) <span class="chev" id="mixerChev">▸</span></button><button type="button" class="maxcut" id="btnMaxCut" aria-pressed="false" title="ตัดแรงสุด — ทุกเลนที่ปิด (รวมเลนย่อย) ตัดเสียงที่หลงเหลือเต็ม 24 dB ทุกแถบ · กดอีกครั้ง = กลับไปใช้ค่าเดิมของแต่ละเลน · เลนที่เปิดอยู่ไม่โดน">✂<b>max</b></button></div>
       <div class="mixer" id="mixer"></div>
     </div>
   </div>
@@ -515,6 +519,7 @@ function restoreSong(){const t=songKey();if(!t)return false;let hit=false;
 function markerStatus(){const n=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;return n?`🗣 ${n} จุดนับ`:''}
 $('btnMuteClear').onclick=()=>{setMuteUI([]);applyRecipeMutes();saveRecipe()};
 // 1.0.37 (t320u): a chip changes only its own lane (and that lane's sub-lanes), never the others
+$('btnMaxCut').onclick=()=>{const on=studio.setMaxCut(!studio.getMaxCut());toast(on?'✂ ตัดแรงสุด: เลนที่ปิดทั้งหมดตัดเต็ม 24 dB':'✂ กลับไปใช้ค่าตัดเดิมของแต่ละเลน')};
 $('rMutes').onchange=e=>{const k=e.target?.dataset?.mute;if(k){studio.applyStemMutes(muteKeysFromUI(),{only:[k]});$('sRecipe').textContent=muteStatus()}else applyRecipeMutes();saveRecipe()};
 function muteStatus(){const m=studio.state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&!['click','countin','mix'].includes(t.stem)).map(t=>t.name||t.stem);return m.length?'ปิด: '+m.join(', '):'เปิดทุกแทร็กเสียง'}
 /** chips mirror the lanes: a chip is on when its lane (or all of its sub-lanes) is muted */
@@ -691,7 +696,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.37',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.38',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);

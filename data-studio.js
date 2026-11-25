@@ -205,7 +205,7 @@ export function createStudio(ui){
     // "mix − muted stem" subtract the wrong amount → drums/vocals stayed in (inverted) and the file sounded doubled.
     const sr=sampleRate||44100;
     // Keep original mix — mix-minus muted stems beats summing demucs parts for clean beds
-    state.mixBuf=null;
+    state.mixBuf=null;state.ghosts=[];
     try{
       if(mix&&mix.L){
         const R=mix.R&&mix.R.length===mix.L.length?mix.R:mix.L;
@@ -429,6 +429,7 @@ export function createStudio(ui){
   // Live mute/solo/vol — pull mixer reads tr.mute/vol/solo each quantum (no GainNode lag).
   function applyLiveMix(){
     scheduleHeard();
+    if(state.playing&&state._pull&&state._pull.rewind)state._pull.rewind(); // 1.0.38: hear the change now, not after the look-ahead
     // MIDI chains still use muteG if present
     if(!state.playing||!state.live)return;
     const a=ac(),t=a.currentTime;
@@ -498,14 +499,19 @@ export function createStudio(ui){
     // While user drags the red line, freeze displayed/seek time to the scrub target
     if(state._scrubUI!=null)return state._scrubUI;
     if(state.playing&&state._pull&&state._pull.alive){
-      return state._pull.from+(state._pull.frame/ac().sampleRate);
+      if(state._pull.playedT)return state._pull.playedT(); // 1.0.38 worklet: what is audible now, not what is mixed ahead
+      return state._pull.from+((state._pull.frame-state._pull.f0)/ac().sampleRate);
     }
     if(state.playing)return ac().currentTime-state.playT0+state.offset;
     return state.offset;
   }
   // Sample helper for pull mixer
   /* ---------- 1.0.35: clean mute (t317u) — "what you hear" render from the original mix by soft spectral masks ---------- */
-  function musicTracks(){return state.tracks.filter(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length)}
+  function musicTracks(){return state.tracks.filter(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length).concat(ghostTracks())}
+  /** 1.0.38 (t326u): an AI lane deleted with ✕ is still inside the original mix that every bed starts from — it used to
+   *  keep playing at full level and could never be muted again (M on every lane left it on). Its stem is kept as a
+   *  hidden, permanently silent lane ("ghost") so preview, ทำดาต้า and mixdown subtract it. Undo brings the lane back. */
+  function ghostTracks(){return (state.ghosts||[]).filter(g=>g&&g.clips&&g.clips.length&&!state.tracks.some(t=>t.id===g.id)&&g.clips.every(c=>state.buffers.has(c.buf)))}
   /** all stems line up 1:1 with the mix (fresh AI split / restored project) → the mask render applies */
   function canUnmix(){
     const mb=state.mixBuf;if(!mb)return false;const mt=musicTracks();if(!mt.length)return false;
@@ -513,8 +519,13 @@ export function createStudio(ui){
     return mt.every(t=>t.clips.length===1&&Math.abs((t.clips[0].start||0)-st0)<1e-6&&!(+t.clips[0].offset>0)&&(()=>{const b=state.buffers.get(t.clips[0].buf);return b&&b.sampleRate===mb.sampleRate&&Math.abs(b.length-mb.length)<=2}));
   }
   const eqKey=e=>eqFlat(e)?'':[+e.lo||0,+e.mid||0,+e.hi||0].join(',');
+  /** 1.0.38 ✂ ตัดแรงสุด: one switch — every muted lane (incl. fine sub-lanes) gets the full 24 dB extra cut; the lanes' own
+   *  cut values stay untouched underneath (switch off = back to them). Lanes that are heard are never affected. */
+  const MAXCUT={lo:24,mid:24,hi:24};
+  function cutOf(t){return state.maxCut&&heardGain(t,t.clips[0])<0.25?MAXCUT:t.cut}
+  function setMaxCut(on){state.maxCut=!!on;state.dirty=true;applyLiveMix();renderTracks();return state.maxCut}
   function heardKey(){
-    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(t.cut)).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF].join('/');
+    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(cutOf(t))).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF].join('/');
   }
   /** the clean render is needed when a lane is muted / below 25 % (extra cleaning) or an audible lane has EQ (1.0.37);
    *  otherwise mix + (g−1)·stem is exact */
@@ -535,7 +546,7 @@ export function createStudio(ui){
     job.p=(async()=>{
       ui.onUnmix?.(0);
       const out=await renderHeard({mix:{L:mb.getChannelData(0),R:mb.numberOfChannels>1?mb.getChannelData(1):mb.getChannelData(0)},sr:mb.sampleRate,startSec:from,target:job.T,
-        stems:mt.map(t=>{const b=state.buffers.get(t.clips[0].buf);return{L:b.getChannelData(0),R:b.numberOfChannels>1?b.getChannelData(1):b.getChannelData(0),g:heardGain(t,t.clips[0]),scale:t.clips[0].mixScale!=null?+t.clips[0].mixScale:1,eq:t.eq,cut:t.cut}}),
+        stems:mt.map(t=>{const b=state.buffers.get(t.clips[0].buf);return{L:b.getChannelData(0),R:b.numberOfChannels>1?b.getChannelData(1):b.getChannelData(0),g:heardGain(t,t.clips[0]),scale:t.clips[0].mixScale!=null?+t.clips[0].mixScale:1,eq:t.eq,cut:cutOf(t)}}),
         onProgress:p=>{if(state._heard===job)ui.onUnmix?.(p)},cancelled:()=>state._heard!==job});
       if(!out||state._heard!==job){return null}
       const b=ac().createBuffer(2,n,mb.sampleRate);b.copyToChannel(out.L,0);b.copyToChannel(out.R,1);
@@ -605,23 +616,25 @@ export function createStudio(ui){
         });
       }
     }
+    if(mixMode)for(const tr of ghostTracks())for(const c of tr.clips){ // 1.0.38: deleted AI lanes stay out of the bed
+      const buf=state.buffers.get(c.buf);if(!buf)continue;const L=buf.getChannelData(0),R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+      jobs.push({tr,L,R,sr:buf.sampleRate,start:c.start,offset:c.offset||0,dur:clipAbsDur(c,buf),gain:c.gain||1,len:L.length,guide:false,role:'sub',clip:c,scale:c.mixScale!=null?+c.mixScale:1});
+    }
     const keep=a.createConstantSource();keep.offset.value=0;
     try{keep.start()}catch(e){}
-    const sp=a.createScriptProcessor(2048,1,2);
-    const pull={from:playFrom,frame:0,alive:true,sp,keep,mixMode,hw:0,hj:null};
+    // 1.0.38: AudioWorklet output (mix ahead on the page, play on the audio thread) — ScriptProcessor fallback
+    const useWl=!!(state._wl&&state._wl.ready&&wlWanted());
+    const sp=useWl?null:a.createScriptProcessor(2048,1,2);
+    const pull={from:playFrom,frame:0,f0:0,alive:true,sp,keep,mixMode,hw:0,hj:null,wl:null};
     state._pull=pull;
     const lrOn=()=>!!state.listenLR;
     const nomRight=()=>(state.nomSide||'R')!=='L';
-    sp.onaudioprocess=e=>{
-      if(!state.playing||!pull.alive){pull.alive=false;return}
-      const oL=e.outputBuffer.getChannelData(0);
-      const oR=e.outputBuffer.getChannelData(1);
-      oL.fill(0);oR.fill(0);
+    const mixBlock=(oL,oR)=>{
       const ctxSr=a.sampleRate,N=oL.length;
       const anySolo=state.tracks.some(t=>t.solo);
       const split=lrOn();
       const musicIsL=nomRight();
-      const base=pull.from;
+      const base=pull.from-pull.f0/ctxSr; // stream frame f0 = song time pull.from (seek while playing re-bases)
       // 1.0.33 nom too quiet: a 13 ms click summed onto a mastered song was squashed by the soft limiter
       // (music already ≈ full scale). Preview only: boost the guide and make headroom by dipping the
       // music bed while the nom is audible. Export is mastered separately (music −11 LUFS / nom −0.5 dBFS).
@@ -688,8 +701,53 @@ export function createStudio(ui){
       }
       pull.frame+=N;
     };
-    sp.connect(masterBus);
-    state.nodes.push(sp,keep);
+    if(!useWl){
+      sp.onaudioprocess=e=>{
+        if(!state.playing||!pull.alive){pull.alive=false;return}
+        const oL=e.outputBuffer.getChannelData(0),oR=e.outputBuffer.getChannelData(1);
+        oL.fill(0);oR.fill(0);mixBlock(oL,oR);
+      };
+      sp.connect(masterBus);
+      state.nodes.push(sp,keep);
+      return;
+    }
+    const node=new AudioWorkletNode(a,'ssd-out',{numberOfInputs:0,numberOfOutputs:1,outputChannelCount:[2]});
+    const sr=a.sampleRate,CH=1024,LOOK=Math.round(0.5*sr);
+    const W=pull.wl={node,played:0,ct:a.currentTime,under:0,cuts:0};
+    const pump=()=>{
+      if(!state.playing||!pull.alive)return;
+      const est=W.played+Math.max(0,Math.round((a.currentTime-W.ct)*sr));
+      let k=0;
+      while(pull.frame<est+LOOK&&k++<64){
+        const f0=pull.frame,L=new Float32Array(CH),R=new Float32Array(CH);
+        mixBlock(L,R);node.port.postMessage({t:'chunk',f0,L,R},[L.buffer,R.buffer]);
+      }
+    };
+    node.port.onmessage=e=>{const m=e.data;if(m&&m.t==='pos'){W.played=m.p;W.ct=m.ct;W.under=m.under;pump()}};
+    /** re-mix from ≈30 ms ahead of what is playing now (mute/solo/vol/EQ/seek) — the queued look-ahead is dropped */
+    pull.rewind=(newFrom)=>{
+      if(!pull.alive)return;
+      const F=W.played+Math.max(0,Math.round((a.currentTime-W.ct)*sr))+Math.round(0.03*sr);
+      if(F>=pull.frame&&newFrom==null)return;
+      node.port.postMessage({t:'cut',from:F});W.cuts++;
+      if(newFrom!=null){pull.from=newFrom;pull.f0=F}
+      pull.frame=Math.max(0,F);pump();
+    };
+    pull.playedT=()=>{const p=W.played+Math.max(0,(a.currentTime-W.ct)*sr);return pull.from+(Math.min(p,pull.frame)-pull.f0)/sr};
+    pump();
+    node.connect(masterBus);
+    state.nodes.push({stop(){try{node.port.postMessage({t:'stop'})}catch(e){}},disconnect(){try{node.disconnect()}catch(e){}}},keep);
+  }
+  /* 1.0.38: load the output worklet once (AudioContext may start suspended — fine); unavailable → ScriptProcessor path */
+  function wlWanted(){try{return localStorage.getItem('ssd-mixer')!=='sp'}catch(e){return true}}
+  function warmWorklet(){
+    try{
+      if(state._wl)return state._wl.p;const a=ac();
+      if(!a.audioWorklet||typeof AudioWorkletNode==='undefined'){state._wl={ready:false,p:Promise.resolve(false)};return state._wl.p}
+      const w=state._wl={ready:false,p:null};
+      w.p=a.audioWorklet.addModule(new URL('./data-mixer-worklet.js?v=1.0.38',import.meta.url).href).then(()=>(w.ready=true)).catch(e=>{w.err=String(e);return false});
+      return w.p;
+    }catch(e){state._wl={ready:false,p:Promise.resolve(false),err:String(e)};return state._wl.p}
   }
   function softReseed(at){
     if(!state.playing||state._reseeding)return;
@@ -714,7 +772,7 @@ export function createStudio(ui){
     if(playT<1||playT>=dur()-0.5)return;
     // If mixer stopped advancing while clock would still move → force reseed
     if(state._pull&&!state._pull.alive){softReseed(playT);return}
-    if(playT-(state._lastReseed||0)>=RESEED_EVERY){softReseed(playT);return}
+    if(!state._pull?.wl&&playT-(state._lastReseed||0)>=RESEED_EVERY){softReseed(playT);return} // 1.0.38: the worklet path needs no periodic restart
     const an=state._meter;
     if(!an||!state._meterTd)return;
     an.getByteTimeDomainData(state._meterTd);
@@ -817,6 +875,7 @@ export function createStudio(ui){
   function startPlay(from,opt){
     stopPlay();
     const a=ac();if(a.state==='suspended')a.resume();
+    warmWorklet();
     state.offset=from!=null?from:state.offset;
     state.playOnly=null;
     if(opt&&opt.onlyTrackId){
@@ -915,8 +974,11 @@ export function createStudio(ui){
     const tr=state.tracks[i];if(!tr)return;
     if(!confirm('ลบแทร็ก "'+tr.name+'" ?'))return;
     mark();
+    // 1.0.38: an AI lane is part of the original mix → keep it as a silent ghost (its buffers stay) instead of letting it play forever
+    const ghost=!!(state.mixBuf&&tr.type==='audio'&&tr.stem&&!['click','countin','mix'].includes(tr.stem)&&tr.clips.length);
+    if(ghost){state.ghosts=(state.ghosts||[]).filter(g=>g.id!==tr.id);state.ghosts.push({id:tr.id,name:tr.name,stem:tr.stem,fineOf:tr.fineOf||null,type:'audio',mute:true,solo:false,vol:0,ghost:true,clips:tr.clips.map(c=>({...c,peaks:null}))})}
     // free buffers only used by this track's clips
-    const keep=new Set();
+    const keep=new Set();if(ghost)tr.clips.forEach(c=>keep.add(c.buf));
     state.tracks.forEach((t,ti)=>{if(ti===i)return;t.clips.forEach(c=>keep.add(c.buf))});
     tr.clips.forEach(c=>{if(!keep.has(c.buf))state.buffers.delete(c.buf)});
     state.tracks.splice(i,1);
@@ -1143,6 +1205,7 @@ export function createStudio(ui){
   function renderAll(){renderTracks();renderArrange();renderMixer();renderPiano();ui.onProject?.(state)}
 
   function renderTracks(){
+    {const mc=typeof document!=='undefined'&&document.getElementById('btnMaxCut');if(mc){mc.classList.toggle('on',!!state.maxCut);mc.setAttribute('aria-pressed',state.maxCut?'true':'false')}}
     const box=$('trackHeads');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'')+(tr.fineOf?' fine':'');el.dataset.i=i;if(tr.stem)el.dataset.stem=tr.stem;
@@ -1153,7 +1216,7 @@ export function createStudio(ui){
         <div class="tops">
           <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="${tr.stem==='click'?'ปิด/เปิดเสียงนอมตอนฟัง':'ปิดเครื่องนี้ (มีผลกับไฟล์ดาต้าด้วย)'}">M</button>
           <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
-          ${isMusicLane(tr)?`<button type="button" class="tb eqb ${(!eqFlat(tr.eq)||(tr.mute&&!eqFlat(tr.cut)))?'on':''}" data-eqo="${i}" title="${tr.mute?'ตัดเสียงที่หลงเหลือเพิ่ม (ต่ำ/กลาง/แหลม)':'EQ ต่ำ/กลาง/แหลม (ได้ทั้งตอนฟังและในไฟล์ดาต้า)'}">🎚</button>`:''}
+          ${isMusicLane(tr)?`<button type="button" class="tb eqb ${(!eqFlat(tr.eq)||(tr.mute&&(state.maxCut||!eqFlat(tr.cut))))?'on':''}" data-eqo="${i}" title="${tr.mute?'ตัดเสียงที่หลงเหลือเพิ่ม (ต่ำ/กลาง/แหลม)':'EQ ต่ำ/กลาง/แหลม (ได้ทั้งตอนฟังและในไฟล์ดาต้า)'}">🎚</button>`:''}
         </div>`;
       box.appendChild(el);
     });
@@ -1179,7 +1242,7 @@ export function createStudio(ui){
     const muted=heardGain(tr,tr.clips[0])<0.25,f=muted?'cut':'eq',vals={lo:0,mid:0,hi:0,...(tr[f]||{})};
     pop.dataset.field=f;pop.dataset.track=tr.id;
     pop.innerHTML=`<div class="eqh"><b>${muted?'✂':'🎚'} ${escAttr(tr.name)}</b><button type="button" class="tb" data-eqx title="ปิด">✕</button></div>
-      <div class="eqsub">${muted?'ปิดอยู่ — ลากเพื่อตัดเสียงที่ยังหลงเหลือเพิ่ม (ตอนฟัง = ไฟล์ดาต้า)':'ปรับเสียงเครื่องนี้ (ตอนฟัง = ไฟล์ดาต้า)'}</div>`+
+      <div class="eqsub">${muted?(state.maxCut?'✂ ตัดแรงสุดเปิดอยู่ — ตอนนี้ตัด 24 dB ทุกแถบ (ปิดปุ่มแล้วกลับมาใช้ค่าด้านล่าง)':'ปิดอยู่ — ลากเพื่อตัดเสียงที่ยังหลงเหลือเพิ่ม (ตอนฟัง = ไฟล์ดาต้า)'):'ปรับเสียงเครื่องนี้ (ตอนฟัง = ไฟล์ดาต้า)'}</div>`+
       EQB.map(([k,ic,lab])=>`<label class="eqr"><span title="${lab}">${ic} ${lab}</span><input type="range" data-field="${f}" data-band="${k}" min="${muted?0:-24}" max="${muted?24:12}" step="1" value="${+vals[k]||0}"><output>${muted?'−':(+vals[k]>0?'+':'')}${Math.abs(+vals[k]||0)} dB</output></label>`).join('')+
       `<div class="eqf"><button type="button" class="tb" data-eqreset>↺ รีเซ็ต</button></div>`;
     const b=document.querySelector(`#trackHeads [data-eqo="${state.tracks.indexOf(tr)}"]`);
@@ -1569,6 +1632,7 @@ export function createStudio(ui){
         const nomSel=document.getElementById('rNom');
         if(nomSel)state.nomSide=nomSel.value==='L'?'L':'R';
         // Mixer reads listenLR live — never restart playback
+        state._pull?.rewind?.();
       };
     }
     const nomSel=document.getElementById('rNom');
@@ -1577,6 +1641,7 @@ export function createStudio(ui){
       nomSel.addEventListener('change',()=>{
         state.nomSide=nomSel.value==='L'?'L':'R';
         // Live flag only — startPlay here caused freeze on every menu change
+        state._pull?.rewind?.();
       });
     }
     $('trackHeads').onchange=e=>{const rn=e.target.closest('[data-rn]');if(rn){state.tracks[+rn.dataset.rn].name=rn.value;renderMixer()}};
@@ -1837,8 +1902,8 @@ export function createStudio(ui){
     ui.onTransport?.(state);
     if(!(state.playing&&state._pull&&state._pull.alive))return want;
     // Retarget pull mixer in place (onaudioprocess reads pull.from)
-    state._pull.from=want;
-    state._pull.frame=0;
+    if(state._pull.rewind)state._pull.rewind(want); // 1.0.38 worklet: re-base the stream ≈30 ms ahead
+    else{state._pull.from=want;state._pull.frame=0;state._pull.f0=0}
     state.playT0=ac().currentTime;
     state._lastReseed=want;
     state._silentMs=0;
@@ -1869,7 +1934,7 @@ export function createStudio(ui){
   }
 
   function newProject(){
-    stopPlay();state.tracks=[];state.buffers.clear();state.mixBuf=null;state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;state.markers=[];
+    stopPlay();state.tracks=[];state.buffers.clear();state.mixBuf=null;state.ghosts=[];state.title='Untitled';state.bpm=120;state.t0=0;state.offset=0;state.dirty=false;state.markers=[];
     state.undo.length=0;state.redo.length=0;
     [['กลอง',COLS[0],'drums'],['เบส',COLS[1],'bass'],['กีตาร์',COLS[5],'guitar'],['คีย์บอร์ด',COLS[7],'keys'],['ดนตรีอื่นๆ',COLS[2],'other'],['ร้อง',COLS[3],'vocals']]
       .forEach(([n,c,k])=>{const t=addAudioTrack(n,c);t.stem=k});
@@ -1881,11 +1946,11 @@ export function createStudio(ui){
   async function saveProject(){
     const bufs={};
     // 1.0.32: Uint8Array (structured clone) — a plain number array of every byte blew up memory on long songs
-    const used=new Set();for(const t of state.tracks)for(const c of t.clips||[])used.add(c.buf);
+    const used=new Set();for(const t of state.tracks.concat(ghostTracks()))for(const c of t.clips||[])used.add(c.buf);
     const RAW={targetPeak:1e9,maxGain:1}; // 1.0.35: store TRUE levels (peak-normalising every stem on save broke mix − stem after reload)
     for(const [id,buf] of state.buffers){if(used.has(id))bufs[id]=bufToWavU8(buf,RAW)} // skip stale click buffers from every nom rebuild (was saved too → 95 MB for 30 s)
     if(state.mixBuf)bufs.__mix=bufToWavU8(state.mixBuf,RAW);
-    const proj={v:1,beatV:132,lvl:1,title:state.title,bpm:state.bpm,t0:saneT0(state.t0,state.bpm),markers:state.markers||[],recipe:state.recipe||null,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
+    const proj={v:1,beatV:132,lvl:1,title:state.title,bpm:state.bpm,t0:saneT0(state.t0,state.bpm),markers:state.markers||[],recipe:state.recipe||null,maxCut:!!state.maxCut,ghosts:ghostTracks(),tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
     const db=await idb();
     await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(proj,'current');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});
     state.dirty=false;ui.toast?.('บันทึกในเบราว์เซอร์แล้ว');
@@ -1941,7 +2006,7 @@ export function createStudio(ui){
         for(const [id,[o,l]] of Object.entries(proj.bufIndex||{}))proj.bufs[id]=new Uint8Array(ab,base+o,l)}
       else proj=JSON.parse(new TextDecoder().decode(new Uint8Array(ab)));
       if(!proj||typeof proj!=='object')throw new Error('ไฟล์ไม่ใช่โปรเจกต์ SetSod Data');
-      stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
+      stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
       const a=ac();
       for(const id of Object.keys(proj.bufs||{})){
         const raw=proj.bufs[id];
@@ -2099,7 +2164,7 @@ export function createStudio(ui){
     sr=sr||nativeSr();
     const pad=Math.max(0,+padLead||0),nch=channels===2?2:1;
     const length=Math.max(1,Math.ceil((totalDur||dur())*sr));
-    const music=state.tracks.filter(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
+    const music=musicTracks(); // incl. deleted AI lanes (ghosts, always silent)
     const off=new OfflineAudioContext(nch,length,sr);
     const merge=off.createGain();merge.gain.value=1;merge.connect(off.destination);
     function sched(buf,gain,at,offset,d){
@@ -2613,13 +2678,14 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
+    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setMaxCut,getMaxCut:()=>!!state.maxCut,mixerInfo:()=>{const p=state._pull;return{mode:p?(p.wl?'worklet':'scriptprocessor'):null,wlReady:!!(state._wl&&state._wl.ready),wlErr:state._wl?.err||null,under:p?.wl?p.wl.under:null,cuts:p?.wl?p.wl.cuts:null}},setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
     setNomPreview(b,d){if(b!=null)NOM_PREVIEW_BOOST=+b;if(d!=null)NOM_PREVIEW_DUCK=+d;return[NOM_PREVIEW_BOOST,NOM_PREVIEW_DUCK]},
     addCount,toggleCountAt,moveCount,deleteCount,setMarkers,countSpans,snapClick,clickStep,tapDownbeat,tapNow,exportProjectFile,musicStart,renderStemsMono,makeRefDualBlob,autoEndT,
     async boot(){bind();
+      try{warmWorklet()}catch(e){} // 1.0.38: audio-thread output ready before the first ▶
       // Preload spoken one–two–three–four for Data count-in
       try{loadCiVoices()}catch(e){}
       // scroll sync: track headers follow the lane vertical scroll
@@ -2637,7 +2703,7 @@ export function createStudio(ui){
         const db=await idb();
         const proj=await new Promise((ok,no)=>{const tx=db.transaction('projects','readonly');const g=tx.objectStore('projects').get('current');g.onsuccess=()=>ok(g.result);g.onerror=()=>no(g.error)});
         if(proj&&proj.tracks&&proj.bufs){
-          stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;if(proj.t0!=null)state.t0=+proj.t0||0;
+          stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
           const a=ac();
           for(const id of Object.keys(proj.bufs||{})){
             const raw=proj.bufs[id];const u8=raw instanceof Uint8Array?raw:new Uint8Array(raw);
