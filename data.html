@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.38">
+<meta name="bp-data" content="1.0.39">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -170,6 +170,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 .chip{display:inline-flex;cursor:pointer}.chip input{display:none}
 .chip i{font-style:normal;font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;color:var(--mut)}
 .chip input:checked+i{background:#3a2222;border-color:#a04848;color:#ffb0b0;text-decoration:line-through}
+.chip.part i{background:linear-gradient(90deg,#3a2222 50%,transparent 50%);border:1px dashed #a04848;color:#ffb0b0}
 .cblock{position:absolute;top:0;bottom:0;background:rgba(255,214,10,.14);border-left:2px solid #ffd60a;border-right:1px dashed rgba(255,214,10,.5);z-index:3;cursor:grab;touch-action:none}
 .cband{position:absolute;top:0;z-index:2;pointer-events:none;background:rgba(255,214,10,.07);border-left:2px solid rgba(255,214,10,.85)}
 .cband b{position:sticky;top:0;display:inline-block;margin:2px 0 0 4px;font-size:11px;color:#111;background:#ffd60a;border-radius:4px;padding:1px 6px}
@@ -520,10 +521,13 @@ function markerStatus(){const n=(studio.state.markers||[]).filter(m=>m.kind==='c
 $('btnMuteClear').onclick=()=>{setMuteUI([]);applyRecipeMutes();saveRecipe()};
 // 1.0.37 (t320u): a chip changes only its own lane (and that lane's sub-lanes), never the others
 $('btnMaxCut').onclick=()=>{const on=studio.setMaxCut(!studio.getMaxCut());toast(on?'✂ ตัดแรงสุด: เลนที่ปิดทั้งหมดตัดเต็ม 24 dB':'✂ กลับไปใช้ค่าตัดเดิมของแต่ละเลน')};
-$('rMutes').onchange=e=>{const k=e.target?.dataset?.mute;if(k){studio.applyStemMutes(muteKeysFromUI(),{only:[k]});$('sRecipe').textContent=muteStatus()}else applyRecipeMutes();saveRecipe()};
+$('rMutes').onchange=e=>{const k=e.target?.dataset?.mute;if(k){studio.applyStemMutes(muteKeysFromUI(),{only:[k]});syncChipsFromTracks();$('sRecipe').textContent=muteStatus()}else applyRecipeMutes();saveRecipe()};
 function muteStatus(){const m=studio.state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&!['click','countin','mix'].includes(t.stem)).map(t=>t.name||t.stem);return m.length?'ปิด: '+m.join(', '):'เปิดทุกแทร็กเสียง'}
 /** chips mirror the lanes: a chip is on when its lane (or all of its sub-lanes) is muted */
-function syncChipsFromTracks(){$('rMutes').querySelectorAll('input[data-mute]').forEach(inp=>{const k=inp.dataset.mute;const ls=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length&&(t.stem===k||t.fineOf===k));if(ls.length)inp.checked=ls.every(t=>t.mute)})}
+function syncChipsFromTracks(){$('rMutes').querySelectorAll('input[data-mute]').forEach(inp=>{const k=inp.dataset.mute;const ls=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length&&(t.stem===k||t.fineOf===k));if(!ls.length)return;
+  // 1.0.39 (t328u): some sub-lanes off, some on (e.g. นำ off, คอรัส on) → chip shows a partial state, not plain on/off
+  const n=ls.filter(t=>t.mute).length,part=n>0&&n<ls.length;inp.checked=n===ls.length;inp.indeterminate=part;inp.closest('.chip')?.classList.toggle('part',part);
+  inp.closest('.chip')?.setAttribute('title',part?'บางเลนย่อยปิดอยู่: '+ls.filter(t=>t.mute).map(t=>t.name).join(', ')+' · กด = ปิดทั้งหมด':'')})}
 
 function refreshGuides(){
   const hasMusic=studio.state.tracks.some(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
@@ -696,7 +700,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.38',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.39',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);

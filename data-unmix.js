@@ -1,4 +1,4 @@
-/* SetSod Data 1.0.37 — clean mute / solo / volume / per-lane EQ on AI stems (t317u, t320u).
+/* SetSod Data 1.0.39 — clean mute / solo / volume / per-lane EQ on AI stems (t317u, t320u).
  * Source = mix + Σ (G_k(f) − 1)·S_k   (1.0.33 "mix − muted stem", now per frequency: G = gain × lane EQ)
  * then a soft mask per STFT bin cleans what the AI lanes left behind of the stems that were turned off:
  *   keep = Σ G²·|S_k|²      cut = Σ w(G)·γ·cutMul_k(f)·|S_k|²      w = ((1−G)·max(0,1−4G))²  (0 from 25 % up)
@@ -6,9 +6,11 @@
  * 1.0.37: keep/cut are smoothed over 5 frames × 5 bins (≈58 ms × 108 Hz) and the mask has a floor (−14 dB) — the
  * per-bin mask of 1.0.35 flickered ("alien"/watery sound). A muted lane's 🎚 = how much MORE to remove per band, 0…24 dB
  * (γ × 10^(dB/20), floor × 10^(−dB/40): 24 dB → γ 48, floor −26 dB — stronger means more damage to the music in that band).
+ * 1.0.39 (t328u): by default the mask only cleans the residual (mix − Σ lanes) and the heard lanes are added back exactly
+ * (kept instruments/คอรัส keep their level, no watery sound); with ✂ extra cut / ✂max the mask may touch the kept lanes (old way).
  * All gains 1 and EQ flat → output = the mix exactly. Renders progressively from any start point (playhead first)
  * so playback can switch to it hop by hop; pure JS, yields every ~8 ms (keeps the audio thread fed). */
-export const UNMIX={N:2048,H:512,GAMMA:3,FLOOR:0.2,TF:5,FF:5};
+export const UNMIX={N:2048,H:512,GAMMA:3,FLOOR:0.2,TF:5,FF:5,RESID:1};
 const EQF={lo:180,mid:1200,hi:6000};
 /** 3-band lane EQ (dB) → dB at frequency f: low ≲180 Hz, mid around 1.2 kHz, high ≳6 kHz, smooth crossfades between (no phase) */
 export function eqDb(eq,f){
@@ -47,7 +49,7 @@ function fft(pl,re,im,inv){
  * @returns the target (or null if cancelled)
  */
 export async function renderHeard(o){
-  const N=o.N||UNMIX.N,H=o.H||UNMIX.H,GAMMA=o.gamma!=null?o.gamma:UNMIX.GAMMA,FLOOR=o.floor!=null?o.floor:UNMIX.FLOOR;
+  const RESID=o.resid!=null?!!o.resid:!!UNMIX.RESID,N=o.N||UNMIX.N,H=o.H||UNMIX.H,GAMMA=o.gamma!=null?o.gamma:UNMIX.GAMMA,FLOOR=o.floor!=null?o.floor:UNMIX.FLOOR;
   const TF=Math.max(1,o.tf||UNMIX.TF)|0,FF=Math.max(1,o.ff||UNMIX.FF)|0,TR=TF>>1,FR=FF>>1,sr=o.sr||44100;
   const mL=o.mix.L,mR=o.mix.R||o.mix.L,n=mL.length,st=o.stems.filter(s=>s&&s.L),K=st.length,B=N/2+1;
   const pl=fftPlan(N),win=new Float32Array(N);for(let i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
@@ -60,13 +62,13 @@ export async function renderHeard(o){
   const need=new Uint8Array(hops),cnt=new Uint8Array(hops);
   for(let h=0;h<hops;h++){let c=0;for(let f=h+1-R;f<=h+R;f++)if(f>=0&&f<frames)c++;need[h]=c}
   // per-stem per-bin gains (EQ) and removal weights
-  const G=[],C=[],FM=new Float32Array(B).fill(Infinity);let anyCut=false;
+  const G=[],C=[],FM=new Float32Array(B).fill(Infinity);let anyCut=false,anyExtra=false;
   for(let k=0;k<K;k++){
     const s=st[k],g=Math.max(0,+s.g||0),gk=new Float32Array(B),ck=new Float32Array(B);
     for(let q=0;q<B;q++){
       const f=q*sr/N,Gq=g*Math.pow(10,(g>0?eqDb(s.eq,f):0)/20);gk[q]=Gq;
       const w=(Math.max(0,1-Gq)*Math.max(0,1-Gq/0.25))**2;
-      if(w>0){const cd=Math.max(0,Math.min(24,eqDb(s.cut,f)));ck[q]=w*GAMMA*Math.pow(10,cd/20);FM[q]=Math.min(FM[q],Math.pow(10,-cd/40));anyCut=true}
+      if(w>0){const cd=Math.max(0,Math.min(24,eqDb(s.cut,f)));if(cd>0.01)anyExtra=true;ck[q]=w*GAMMA*Math.pow(10,cd/20);FM[q]=Math.min(FM[q],Math.pow(10,-cd/40));anyCut=true}
     }
     G.push(gk);C.push(ck);
   }
@@ -93,6 +95,16 @@ export async function renderHeard(o){
   const gainL=new Float32Array(B),gainR=new Float32Array(B);
   const boxF=(src,dst)=>{let acc=0;for(let q=0;q<Math.min(FR,B);q++)acc+=src[q];for(let q=0;q<B;q++){const add=q+FR,sub=q-FR-1;if(add<B)acc+=src[add];if(sub>=0)acc-=src[sub];const lo=Math.max(0,q-FR),hi=Math.min(B-1,q+FR);dst[q]=acc/(hi-lo+1)}};
   const sm1=new Float32Array(B);
+  /** packed L+iR spectrum → per-channel mask gains (gainL/gainR) → packed again */
+  function unpackGain(re,im){
+    for(let q=0;q<B;q++){
+      const q2=(N-q)%N;
+      const lr=0.5*(re[q]+re[q2])*gainL[q],li=0.5*(im[q]-im[q2])*gainL[q];
+      const rr=0.5*(im[q]+im[q2])*gainR[q],ri=-0.5*(re[q]-re[q2])*gainR[q];
+      const zr=lr-ri,zi=li+rr,zr2=lr+ri,zi2=-li+rr;
+      if(q===0||q===N/2){re[q]=zr;im[q]=zi}else{re[q]=zr;im[q]=zi;re[q2]=zr2;im[q2]=zi2}
+    }
+  }
   function doFrame(f){
     for(let d=-TR;d<=TR;d++){const x=f+d;if(x>=0&&x<frames)analyse(x)}
     tKL.fill(0);tKR.fill(0);tCL.fill(0);tCR.fill(0);let nT=0;
@@ -110,17 +122,21 @@ export async function renderHeard(o){
     const start=f*H-N/2,r=f%RS;
     for(let i=0;i<N;i++){const j=start+i;if(j>=0&&j<n){re[i]=mL[j]*win[i];im[i]=mR[j]*win[i]}else{re[i]=0;im[i]=0}}
     fft(pl,re,im,false);
+    if(RESID&&anyCut&&!anyExtra){ // ✂ extra cut / ✂max = opt-in: the mask may then reach into the kept lanes too (old way)
+      // 1.0.39 (t328u): the masks only clean what NO lane holds (residual = mix − Σ lanes); the lanes that are heard are added
+      // back untouched at G·S. The 1.0.35–1.0.38 mask also hit the kept lanes wherever a muted lane was loud (kick under the
+      // bass, lead under the chorus) → kept instruments −3…−6 dB and watery/phasey.
+      for(let k=0;k<K;k++){const a=sRe[r][k],b=sIm[r][k];for(let i=0;i<N;i++){re[i]-=a[i];im[i]-=b[i]}}
+      unpackGain(re,im);
+      for(let k=0;k<K;k++){const gk=G[k],a=sRe[r][k],b=sIm[r][k];
+        for(let q=0;q<=N/2;q++){const g=gk[q];if(g===0)continue;re[q]+=g*a[q];im[q]+=g*b[q];if(q>0&&q<N/2){const q2=N-q;re[q2]+=g*a[q2];im[q2]+=g*b[q2]}}}
+    }else{
     for(let k=0;k<K;k++){
       const gk=G[k],a=sRe[r][k],b=sIm[r][k];let flat=true;for(let q=0;q<B;q++)if(Math.abs(gk[q]-1)>1e-6){flat=false;break}
       if(flat)continue;
       for(let q=0;q<B;q++){const d=gk[q]-1;if(d===0)continue;re[q]+=d*a[q];im[q]+=d*b[q];if(q>0&&q<N/2){const q2=N-q;re[q2]+=d*a[q2];im[q2]+=d*b[q2]}}
     }
-    for(let q=0;q<B;q++){
-      const q2=(N-q)%N;
-      const lr=0.5*(re[q]+re[q2])*gainL[q],li=0.5*(im[q]-im[q2])*gainL[q];
-      const rr=0.5*(im[q]+im[q2])*gainR[q],ri=-0.5*(re[q]-re[q2])*gainR[q];
-      const zr=lr-ri,zi=li+rr,zr2=lr+ri,zi2=-li+rr;
-      if(q===0||q===N/2){re[q]=zr;im[q]=zi}else{re[q]=zr;im[q]=zi;re[q2]=zr2;im[q2]=zi2}
+    unpackGain(re,im);
     }
     fft(pl,re,im,true);
     for(let i=0;i<N;i++){const j=start+i;if(j<0||j>=n)continue;const w=win[i];outL[j]+=re[i]/N*w;outR[j]+=im[i]/N*w}

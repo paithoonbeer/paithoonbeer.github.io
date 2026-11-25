@@ -1,7 +1,7 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
 import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.33';
 import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
-import {renderHeard,UNMIX,eqFlat} from './data-unmix.js?v=1.0.37';
+import {renderHeard,UNMIX,eqFlat} from './data-unmix.js?v=1.0.39';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -525,7 +525,7 @@ export function createStudio(ui){
   function cutOf(t){return state.maxCut&&heardGain(t,t.clips[0])<0.25?MAXCUT:t.cut}
   function setMaxCut(on){state.maxCut=!!on;state.dirty=true;applyLiveMix();renderTracks();return state.maxCut}
   function heardKey(){
-    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(cutOf(t))).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF].join('/');
+    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(cutOf(t))).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF,UNMIX.RESID].join('/');
   }
   /** the clean render is needed when a lane is muted / below 25 % (extra cleaning) or an audible lane has EQ (1.0.37);
    *  otherwise mix + (g−1)·stem is exact */
