@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.34">
+<meta name="bp-data" content="1.0.35">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -345,6 +345,8 @@ const studio=createStudio({
   },
   onProjectLoaded(proj){if(window.__recipeReady)window.__applyProj?.(proj);else window.__pendProj=proj},
   onMarkers(list){window.__onMarkers?.(list)},
+  onUnmix(p){const el=document.getElementById('sRecipe');if(!el)return; // 1.0.35: clean-mute render progress
+    if(p<0)return;el.textContent=p>=1?'🎚 ตัดเสียงที่ปิดออกแบบสะอาดแล้ว (ฟัง = ไฟล์)':`🎚 กำลังตัดเสียงที่ปิดให้สะอาด… ${Math.round(p*100)}%`},
   onStemMute(stem,mute){window.__onStemMute?.(stem,mute)},
   onNomMute(mute){const c=document.getElementById('chkMetro');if(c){c.checked=!mute;c.dispatchEvent(new Event('change',{bubbles:true}))}},
   countArmed(){return !!window.__countArmed},
@@ -678,7 +680,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.34',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.35',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);

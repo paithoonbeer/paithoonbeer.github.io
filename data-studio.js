@@ -1,6 +1,7 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
 import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.33';
 import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
+import {renderHeard,UNMIX} from './data-unmix.js?v=1.0.35';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -195,7 +196,8 @@ export function createStudio(ui){
   function loadStemChannels({title,src,channels,sampleRate,mix}){
     mark();state.title=title||state.title;state.tracks=[];
     const by={};src.forEach((s,i)=>{by[s]=channels[i]});
-    fillQuietBass(by,mix);
+    // 1.0.35: no synthetic bass any more (it was 1.6 × the low end of the WHOLE mix → kick drum + everything
+    // low came back in the bass lane, and a muted kick stayed audible). The bass lane is the real AI output.
     // Data 1.0.29: no mix-complement gap-fill — it pasted the whole mix into every lane
     // (graphs looked like the mix, mix−stem data was wrong). Lanes now = real AI output.
     // Mild boost only when a stem is quiet end-to-end
@@ -223,11 +225,9 @@ export function createStudio(ui){
       const t=addAudioTrack(row.name,row.color);t.stem=row.key;
       if(row.ch&&row.ch.L){
         const b=bufFromLR(row.ch.L,row.ch.R,sr);const id=putBuf(b);
-        t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:row.key,mixScale:row.key==='bass'&&by.__bassSynth?1/1.6:null}); // null → fitted below
+        t.clips.push({id:uid(),buf:id,start:0,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:row.key,mixScale:1}); // AI stems sum to the mix at unit gain
       }
     });
-    ensureMixScales(); // each stem's exact share of the mix (AI output is ~2–6 % off) → mute leaves ≈ −30 dB, not −24
-    for(const tr of state.tracks)for(const c of tr.clips)if(c.mixScale==null)c.mixScale=1;
     renderAll();
   }
 
@@ -381,6 +381,7 @@ export function createStudio(ui){
   }
   // Live mute/solo/vol — pull mixer reads tr.mute/vol/solo each quantum (no GainNode lag).
   function applyLiveMix(){
+    scheduleHeard();
     // MIDI chains still use muteG if present
     if(!state.playing||!state.live)return;
     const a=ac(),t=a.currentTime;
@@ -456,6 +457,44 @@ export function createStudio(ui){
     return state.offset;
   }
   // Sample helper for pull mixer
+  /* ---------- 1.0.35: clean mute (t317u) — "what you hear" render from the original mix by soft spectral masks ---------- */
+  function musicTracks(){return state.tracks.filter(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length)}
+  /** all stems line up 1:1 with the mix (fresh AI split / restored project) → the mask render applies */
+  function canUnmix(){
+    const mb=state.mixBuf;if(!mb)return false;const mt=musicTracks();if(!mt.length)return false;
+    const st0=mt[0].clips[0].start||0;
+    return mt.every(t=>t.clips.length===1&&Math.abs((t.clips[0].start||0)-st0)<1e-6&&!(+t.clips[0].offset>0)&&(()=>{const b=state.buffers.get(t.clips[0].buf);return b&&b.sampleRate===mb.sampleRate&&Math.abs(b.length-mb.length)<=2}));
+  }
+  function heardKey(){
+    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+UNMIX.P+'/'+UNMIX.GAMMA;
+  }
+  /** only stems muted / turned below 25 % get the extra cleaning (data-unmix.js); above that mix + (g−1)·stem is exact */
+  function needsHeard(){return canUnmix()&&musicTracks().some(t=>heardGain(t,t.clips[0])<0.25-1e-6)}
+  function heardReady(){const h=state._heard;return needsHeard()&&h&&h.buf&&h.key===heardKey()?h.buf:null}
+  /** render (or reuse) the clean bed; resolves null when not needed / not possible */
+  async function ensureHeard(){
+    if(!needsHeard())return null;
+    const key=heardKey();
+    if(state._heard&&state._heard.key===key){if(state._heard.buf)return state._heard.buf;if(state._heard.p)return state._heard.p}
+    const mb=state.mixBuf,mt=musicTracks();
+    const job={key,buf:null,p:null};state._heard=job;
+    job.p=(async()=>{
+      ui.onUnmix?.(0);
+      const out=await renderHeard({mix:{L:mb.getChannelData(0),R:mb.numberOfChannels>1?mb.getChannelData(1):mb.getChannelData(0)},
+        stems:mt.map(t=>{const b=state.buffers.get(t.clips[0].buf);return{L:b.getChannelData(0),R:b.numberOfChannels>1?b.getChannelData(1):b.getChannelData(0),g:heardGain(t,t.clips[0]),scale:t.clips[0].mixScale!=null?+t.clips[0].mixScale:1}}),
+        onProgress:p=>ui.onUnmix?.(p),cancelled:()=>state._heard!==job});
+      if(!out||state._heard!==job){return null}
+      const b=ac().createBuffer(2,out.L.length,mb.sampleRate);b.copyToChannel(out.L,0);b.copyToChannel(out.R,1);
+      job.buf=b;ui.onUnmix?.(1);
+      if(state.playing)softReseed(playheadT()); // swap the clean bed in without stopping
+      return b;
+    })();
+    return job.p;
+  }
+  function scheduleHeard(){
+    // playing on a clean bed that no longer matches (M/S/fader changed) → back to mix − stem at once, clean bed follows
+    if(state.playing&&state._bedKey&&state._bedKey!==heardKey())softReseed(playheadT());
+    clearTimeout(state._heardT);state._heardT=setTimeout(()=>{if(needsHeard())ensureHeard().catch(()=>{});else ui.onUnmix?.(-1)},250)}
   /** 1.0.33: the ONE rule for what is heard (preview, ทำดาต้า, มิกซ์ดาวน์): gain of a music stem, 0 = silent */
   function heardGain(tr,c){const anySolo=state.tracks.some(t=>t.solo&&t.type==='audio'&&t.stem!=='click'&&t.stem!=='countin');
     if(tr.mute||(anySolo&&!tr.solo))return 0;return Math.max(0,(tr.vol!=null?+tr.vol:100)/100)*((c&&c.gain)||1)}
@@ -486,12 +525,16 @@ export function createStudio(ui){
         if(tr.type!=='audio'||!tr.stem||tr.stem==='click'||tr.stem==='countin'||tr.stem==='mix')continue;
         if(tr.clips[0]){mixStart=tr.clips[0].start||0;break}
       }
+      const hb=heardReady(); // 1.0.35: the clean "what you hear" render (mute/solo/volume) when it's ready
+      const bL=hb?hb.getChannelData(0):L,bR=hb?hb.getChannelData(1):R;
       jobs.push({
         tr:{mute:false,solo:false,vol:100,pan:0,stem:'__mixbed'},
-        L,R,sr:buf.sampleRate,start:mixStart,offset:0,dur:buf.duration,
-        gain:1,len:L.length,guide:false,role:'bed'
+        L:bL,R:bR,sr:buf.sampleRate,start:mixStart,offset:0,dur:buf.duration,
+        gain:1,len:bL.length,guide:false,role:'bed',heard:!!hb
       });
     }
+    const heardBed=jobs.length&&jobs[0].heard;
+    state._bedKey=heardBed?heardKey():null;
     for(const tr of state.tracks){
       if(tr.type!=='audio')continue;
       // Skip mix lane (display-only) — bed already uses mixBuf
@@ -504,6 +547,7 @@ export function createStudio(ui){
         if(c.start+clipDur<=playFrom+1e-4)continue;
         const L=buf.getChannelData(0);
         const R=buf.numberOfChannels>1?buf.getChannelData(1):L;
+        if(heardBed&&!isGuide)continue; // already in the clean bed
         let role='add';
         if(mixMode&&!isGuide)role='sub'; // subtract when this stem should be silent
         if(!mixMode)role='add';
@@ -1741,9 +1785,10 @@ export function createStudio(ui){
     const bufs={};
     // 1.0.32: Uint8Array (structured clone) — a plain number array of every byte blew up memory on long songs
     const used=new Set();for(const t of state.tracks)for(const c of t.clips||[])used.add(c.buf);
-    for(const [id,buf] of state.buffers){if(used.has(id))bufs[id]=bufToWavU8(buf)} // skip stale click buffers from every nom rebuild (was saved too → 95 MB for 30 s)
-    if(state.mixBuf)bufs.__mix=bufToWavU8(state.mixBuf);
-    const proj={v:1,beatV:132,title:state.title,bpm:state.bpm,t0:saneT0(state.t0,state.bpm),markers:state.markers||[],recipe:state.recipe||null,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
+    const RAW={targetPeak:1e9,maxGain:1}; // 1.0.35: store TRUE levels (peak-normalising every stem on save broke mix − stem after reload)
+    for(const [id,buf] of state.buffers){if(used.has(id))bufs[id]=bufToWavU8(buf,RAW)} // skip stale click buffers from every nom rebuild (was saved too → 95 MB for 30 s)
+    if(state.mixBuf)bufs.__mix=bufToWavU8(state.mixBuf,RAW);
+    const proj={v:1,beatV:132,lvl:1,title:state.title,bpm:state.bpm,t0:saneT0(state.t0,state.bpm),markers:state.markers||[],recipe:state.recipe||null,tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
     const db=await idb();
     await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(proj,'current');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});
     state.dirty=false;ui.toast?.('บันทึกในเบราว์เซอร์แล้ว');
@@ -1807,7 +1852,8 @@ export function createStudio(ui){
         const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
         state.buffers.set(id,buf);
       }
-      adoptMix();ensureMixScales();
+      adoptMix();if(proj.lvl!==1)for(const t of state.tracks)for(const c of t.clips||[])c.mixScale=null; // saved ≤1.0.34: stems were peak-normalised on save
+          ensureMixScales();
       for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
       state.dirty=false;renderAll();ui.onProjectLoaded?.(proj);ui.toast?.('โหลดโปรเจกต์แล้ว');
     }catch(e){ui.toast?.('เปิดโปรเจกต์ไม่ได้: '+(e.message||e))}
@@ -1968,7 +2014,10 @@ export function createStudio(ui){
       try{src.start(t,oo,Math.max(0.001,dd-(oo-o)))}catch(e){}
     }
     const heard=music.some(tr=>tr.clips.some(c=>heardGain(tr,c)>0));
-    if(state.mixBuf&&music.length){
+    const clean=heard&&needsHeard()?await ensureHeard():null; // 1.0.35: clean mute (soft masks) — same bed as the preview
+    if(clean){
+      sched(clean,1,pad+(music[0].clips[0].start||0),0,null);
+    }else if(state.mixBuf&&music.length){
       if(heard){
         const mixStart=music[0].clips[0]?music[0].clips[0].start||0:0; // same rule as the preview bed
         sched(state.mixBuf,1,pad+mixStart,0,null);
@@ -2466,7 +2515,7 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,makeDualMonoBlob,makeExportClickBuf,
+    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
@@ -2497,7 +2546,8 @@ export function createStudio(ui){
             const buf=await a.decodeAudioData(u8.buffer.slice(u8.byteOffset,u8.byteOffset+u8.byteLength));
             state.buffers.set(id,buf);
           }
-          adoptMix();ensureMixScales();
+          adoptMix();if(proj.lvl!==1)for(const t of state.tracks)for(const c of t.clips||[])c.mixScale=null; // saved ≤1.0.34: stems were peak-normalised on save
+          ensureMixScales();
           for(const tr of state.tracks)for(const c of tr.clips){const b=state.buffers.get(c.buf);if(b)c.peaks=peaksOf(b)}
           state.dirty=false;restored=true;renderAll();ui.onProjectLoaded?.(proj);
           ui.toast?.('โหลดโปรเจกต์ล่าสุด: '+(state.title||'Untitled'));
