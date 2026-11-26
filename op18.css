@@ -1676,3 +1676,8 @@ body.op18.live.op-maintbn.op-collapsed #livelist{
     white-space:nowrap !important;
   }
 }
+
+/* v1.0.126: obvious per-device vs band hide banner in the library header */
+#libhide126{display:none!important;width:100%;margin:6px 0 0;min-height:40px;border-radius:12px;font-size:13px;font-weight:700;gap:6px;align-items:center;justify-content:center}
+#libhide126.on:not([hidden]){display:flex!important;background:#2a2440;border:1px solid var(--op-line);color:var(--op-tx)}
+#libhide126.dev{background:#3a2e14;border-color:#e0a100}
