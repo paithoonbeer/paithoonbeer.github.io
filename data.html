@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.40">
+<meta name="bp-data" content="1.0.41">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -17,6 +17,7 @@
 html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font:13px/1.4 NotoThai,system-ui,sans-serif;overflow:hidden}
 button,input{font:inherit;color:inherit}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:30px;padding:4px 10px;border:1px solid var(--line);border-radius:7px;background:#1a2027;cursor:pointer}
+.btn[hidden]{display:none} /* 1.0.41: the hidden attribute lost to .btn{display} (↻ ลองแยกใหม่ showed before any song) */
 .btn:hover{border-color:#3d4a55}
 .btn:disabled{opacity:.4;cursor:default}
 .btn.pri{background:linear-gradient(180deg,var(--acc),var(--acc2));border-color:#1f6b4d;color:#04140e;font-weight:650}
@@ -261,6 +262,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
 
   <div class="recipe" id="recipe">
     <div class="drop" id="dropAi" title="ลากไฟล์เพลงมาวาง หรือคลิกเพื่อเลือก — แยก AI อัตโนมัติ">🎵 <b>ลากเพลงมาวาง</b> / คลิกเลือก<input id="fAi" type="file" accept="audio/*" hidden></div>
+    <button type="button" class="btn tog" id="btnHq" aria-pressed="false" hidden title="💎 คุณภาพสูง (BS-RoFormer) — แยกเสียงชัดกว่า เสียงรั่วน้อยกว่า · โหลดโมเดลครั้งแรก ~336 MB · ช้ากว่าปกติ · พีซีเท่านั้น">💎 HQ</button>
     <button class="btn" id="goAi" hidden>↻ ลองแยกใหม่</button>
     <span class="status" id="sAi"></span>
     <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างเหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับเข้าตอนต้นเพลง · 48k · −11 LUFS">⭐ แบบไฟล์ตัวอย่าง</button>
@@ -393,7 +395,7 @@ $('dropAi').addEventListener('click',e=>{if(e.target.closest('button,label,input
 
 async function startAi(){
   if(!aiFile||aiBusy||!desk){if(!desk)$('sAi').textContent='❌ ใช้พีซีเท่านั้น';return}
-  aiBusy=true;$('goAi').hidden=true;$('sAi').textContent='⏳ ถอดรหัส…';
+  aiBusy=true;$('goAi').hidden=true;$('goAi').textContent='↻ ลองแยกใหม่';$('sAi').textContent='⏳ ถอดรหัส…';
   try{
     // Data 1.0.29: htdemucs is trained at 44.1 kHz with a fixed 343980-sample window.
     // A default AudioContext decodes at the device rate (often 48 kHz on PCs) and the model
@@ -417,18 +419,21 @@ async function startAi(){
     const secIn=buf.duration;
     if(!(secIn>1))throw new Error('ไฟล์สั้นเกินไปหรือถอดรหัสไม่ครบ');
     $('sAi').textContent=`⏳ ไฟล์ ${fmtMmSs(secIn)} · เริ่มแยก…`;
-    const w=new Worker('stems-ai-worker.js');
+    const hq=useHq();const hqT0=performance.now(); // Data 1.0.41: 💎 HQ = BS-RoFormer-SW (same protocol / stem names)
+    const w=new Worker(hq?'stems-ai-hq-worker.js':'stems-ai-worker.js');window.__aiRun={hq,t0:hqT0};
     const d=await new Promise((ok,no)=>{
       const stems=[];let src=null;let nExp=0;
       w.onmessage=({data:m})=>{
-        if(m.t==='dl')$('sAi').textContent=`⏳ โหลดโมเดล ${(m.p*100|0)}%`;
-        else if(m.t==='ready')$('sAi').textContent=`⏳ กำลังแยก ${fmtMmSs(secIn)}…`;
+        if(m.t==='dl')$('sAi').textContent=`⏳ ${hq?'💎 ':''}โหลดโมเดล ${(m.p*100|0)}%${hq?` · ${(m.p*336|0)}/336 MB`:''}`;
+        else if(m.t==='ready'){$('sAi').textContent=`⏳ ${hq?'💎 ':''}กำลังแยก ${fmtMmSs(secIn)}…`;if(hq){try{if(!window.__aiRun.nocache)localStorage.setItem('ssd-hq-dl','1')}catch(e){}window.__aiRun.ep=m.ep;window.__aiRun.readyMs=performance.now()-hqT0}}
+        else if(m.t==='nocache')window.__aiRun.nocache=1;
+        else if(m.t==='prog'&&hq&&m.ms){const left=m.ms/1000*(1-m.p)/Math.max(m.p,1e-3);$('sAi').textContent=`⏳ 💎 แยก ${(m.p*100|0)}% · เหลือ ~${fmtMmSs(Math.round(left))}`}
         else if(m.t==='sepStart'){src=m.src;nExp=m.n;$('sAi').textContent=`⏳ แยก ${fmtMmSs(m.sec)}…`}
         else if(m.t==='prog')$('sAi').textContent=`⏳ แยก ${(m.p*100|0)}% · ${fmtMmSs(secIn)}`;
         else if(m.t==='stem'){stems[m.i]={L:m.L,R:m.R};$('sAi').textContent=`⏳ ได้สเต็ม ${m.name} (${stems.filter(Boolean).length}/${(src||[]).length||6})`}
         else if(m.t==='err'){w.terminate();no(new Error(m.m))}
         else if(m.t==='done'){
-          w.terminate();
+          w.terminate();window.__aiRun.ms=performance.now()-hqT0;
           if(!src)src=m.src;
           if(stems.filter(Boolean).length!==(src||[]).length){no(new Error('แยกไม่ครบสเต็ม — ลองใหม่'));return}
           if(nExp&&m.n&&m.n!==nExp){no(new Error('ความยาวสเต็มไม่ตรงต้นฉบับ'));return}
@@ -438,12 +443,13 @@ async function startAi(){
         }
       };
       w.onerror=e=>{w.terminate();no(e.error||e)};
-      w.postMessage({opt:{wasmOnly:!gpuF16,eps:gpuF16?['webgpu']:['wasm']},L,R,sr},[L.buffer,R.buffer]);
+      const opt=hq?{wasmOnly:!gpuF16,eps:gpuF16?['webgpu','wasm']:['wasm']}:{wasmOnly:!gpuF16,eps:gpuF16?['webgpu']:['wasm']};
+      w.postMessage({opt,L,R,sr},[L.buffer,R.buffer]);
     });
     if(Math.abs((d.outSec||0)-secIn)>0.5){
       toast(`⚠️ ความยาวหลังแยก ${fmtMmSs(d.outSec)} จากต้นฉบับ ${fmtMmSs(secIn)}`);
     }
-    $('sAi').textContent=`✅ แยกเสร็จ ${fmtMmSs(d.outSec||secIn)} — โหลดเข้าสตูดิโอแล้ว`;
+    $('sAi').textContent=`✅ ${hq?'💎 ':''}แยกเสร็จ ${fmtMmSs(d.outSec||secIn)} — โหลดเข้าสตูดิโอแล้ว`;
     studio.state.title=title;
     const pend=(studio.state.markers||[]).filter(m=>m.kind==='count'&&m.src==='manual').map(m=>({...m}));
     studio.setMarkers([]); // new song → its own markers (restored below if saved before)
@@ -469,6 +475,20 @@ async function startAi(){
   finally{aiBusy=false}
 }
 $('goAi').onclick=startAi;
+// Data 1.0.41 — 💎 HQ (BS-RoFormer-SW 6-stem) toggle: PC only, default off (htdemucs_6s), remembered; confirm before the 336 MB download
+const useHq=()=>desk&&$('btnHq').getAttribute('aria-pressed')==='true';
+function setHq(on){const b=$('btnHq');b.setAttribute('aria-pressed',on?'true':'false');b.classList.toggle('on',on);try{localStorage.setItem('ssd-hq',on?'1':'0')}catch(e){}}
+if(!desk)$('btnHq').style.display='none';else{$('btnHq').hidden=false;let v=null;try{v=localStorage.getItem('ssd-hq')}catch(e){}setHq(v==='1')}
+$('btnHq').onclick=async()=>{
+  if(aiBusy)return toast('รอให้แยกเพลงนี้เสร็จก่อน');
+  if(useHq()){setHq(false);toast('ใช้โหมดปกติ (เร็ว)');if(aiFile){$('goAi').hidden=false;$('goAi').textContent='↻ แยกใหม่โหมดปกติ'}return}
+  let cached=false;try{cached=localStorage.getItem('ssd-hq-dl')==='1'}catch(e){}
+  const gpu=gpuF16; // same rule as the normal split: WebGPU only on a real GPU with fp16 shaders, else CPU (WASM)
+  if(!cached&&!confirm('💎 โหมดคุณภาพสูง (BS-RoFormer)\n\n• โหลดโมเดลครั้งแรก ~336 MB (ครั้งเดียว เก็บไว้ในเครื่อง)\n• แยกเพลง 4 นาที: '+(gpu?'ประมาณ 2–10 นาที (ใช้การ์ดจอ · ขึ้นกับรุ่น)':'⚠️ เครื่องนี้ไม่มีการ์ดจอที่รองรับ (WebGPU) — ใช้ CPU อาจนาน 1 ชม.+ ต่อเพลง')+'\n• ระหว่างแยกจะบอกเวลาที่เหลือ\n• เสียงชัดกว่า เสียงรั่วน้อยกว่าโหมดปกติ\n\nเปิดใช้?'))return;
+  if(cached&&!gpu)toast('⚠️ ไม่มี WebGPU — โหมด 💎 ใช้ CPU จะช้ามาก');
+  setHq(true);toast('💎 เปิดโหมดคุณภาพสูง — เพลงถัดไปจะใช้โหมดนี้');
+  if(aiFile){$('goAi').hidden=false;$('goAi').textContent='↻ แยกใหม่ด้วย 💎'}
+};
 
 /* ---- สูตรดาต้าครบ (โปรไฟล์ · จังหวะ · ลูกเล่น · ส่งอัตโนมัติ) ---- */
 const DEF_PROFS=[
@@ -727,7 +747,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.40',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.41',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
