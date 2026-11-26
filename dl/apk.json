@@ -1,6 +1,6 @@
 {
-  "build": 119,
-  "ver": "1.0.126",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b119-1.0.126/SetSod.apk",
-  "notes": "1.0.126: คลัง: ประมาณ BPM จากเสียงให้เพลงที่ยังไม่มี (ช้า/กลาง/เร็ว) · ค้นหาข้ามแท็บและชิป · สมาชิกวงเดียวกันเห็นคลังชุดเดียวกัน (ซ่อนเฉพาะเครื่องจะบอกชัด) · ไม่ทับ BPM จริง"
+  "build": 120,
+  "ver": "1.0.127",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b120-1.0.127/SetSod.apk",
+  "notes": "1.0.127: แก้ลบเพลงแล้วถูกส่งเข้าวงใหม่เอง — จำเพลงที่ลบแล้วไม่ auto-upload จากไฟล์คู่ในเครื่อง · 24K Magic อยู่หมวดสากล"
 }
