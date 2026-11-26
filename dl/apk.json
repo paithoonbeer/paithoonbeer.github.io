@@ -1,6 +1,6 @@
 {
-  "build": 121,
-  "ver": "1.0.128",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b121-1.0.128/SetSod.apk",
-  "notes": "1.0.128: 🗑 ในคลัง = ซ่อนไปที่กู้คืนก่อน (ไฟล์ยังอยู่) · ลบถาวรทำที่ 👁 เท่านั้น · จัดหมวดสากลแล้วเห็นในแท็บสากลจริง · ซ่อนแถวเทายังไม่โหลดถ้ามีไฟล์คู่"
+  "build": 122,
+  "ver": "1.0.129",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b122-1.0.129/SetSod.apk",
+  "notes": "1.0.129: แก้จัดหมวดแล้วเด้งกลับสากลเอง — จำหมวดที่ตั้งไว้ ไม่ให้แคตตาล็อก/ซิงก์ทับ"
 }
