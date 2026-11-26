@@ -1,6 +1,6 @@
 {
-  "build": 117,
-  "ver": "1.0.124",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b117-1.0.124/SetSod.apk",
-  "notes": "1.0.124: คลัง: คืนชิปทั้งหมด/ของเก่า/ต้องฟังเช็ก/ในเครื่อง ใช้ร่วมกับแท็บช้า/กลาง/เร็ว/สากล · กรวยเปิด-ปิดแถวชิปได้"
+  "build": 118,
+  "ver": "1.0.125",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b118-1.0.125/SetSod.apk",
+  "notes": "1.0.125: คลัง: ค่าเริ่มต้นแสดงทุกเพลง (ชิปทั้งหมดไม่ซ่อนของเก่า/ต้องฟังเช็ก) · ชิปของเก่า/ต้องฟังเช็ก/ในเครื่องยังกรองได้"
 }
