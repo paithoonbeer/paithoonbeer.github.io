@@ -1,4 +1,4 @@
-/* SetSod Data 1.0.39 — clean mute / solo / volume / per-lane EQ on AI stems (t317u, t320u).
+/* SetSod Data 1.0.40 — clean mute / solo / volume / per-lane EQ on AI stems (t317u, t320u).
  * Source = mix + Σ (G_k(f) − 1)·S_k   (1.0.33 "mix − muted stem", now per frequency: G = gain × lane EQ)
  * then a soft mask per STFT bin cleans what the AI lanes left behind of the stems that were turned off:
  *   keep = Σ G²·|S_k|²      cut = Σ w(G)·γ·cutMul_k(f)·|S_k|²      w = ((1−G)·max(0,1−4G))²  (0 from 25 % up)
@@ -10,7 +10,7 @@
  * (kept instruments/คอรัส keep their level, no watery sound); with ✂ extra cut / ✂max the mask may touch the kept lanes (old way).
  * All gains 1 and EQ flat → output = the mix exactly. Renders progressively from any start point (playhead first)
  * so playback can switch to it hop by hop; pure JS, yields every ~8 ms (keeps the audio thread fed). */
-export const UNMIX={N:2048,H:512,GAMMA:3,FLOOR:0.2,TF:5,FF:5,RESID:1};
+export const UNMIX={N:2048,H:512,GAMMA:3,FLOOR:0.2,TF:5,FF:5,RESID:1,SOFT:1,SOFT_FLOOR:0.5,SOFT_EXP:0.5};
 const EQF={lo:180,mid:1200,hi:6000};
 /** 3-band lane EQ (dB) → dB at frequency f: low ≲180 Hz, mid around 1.2 kHz, high ≳6 kHz, smooth crossfades between (no phase) */
 export function eqDb(eq,f){
@@ -49,7 +49,7 @@ function fft(pl,re,im,inv){
  * @returns the target (or null if cancelled)
  */
 export async function renderHeard(o){
-  const RESID=o.resid!=null?!!o.resid:!!UNMIX.RESID,N=o.N||UNMIX.N,H=o.H||UNMIX.H,GAMMA=o.gamma!=null?o.gamma:UNMIX.GAMMA,FLOOR=o.floor!=null?o.floor:UNMIX.FLOOR;
+  const RESID=o.resid!=null?!!o.resid:!!UNMIX.RESID,SOFT=o.soft!=null?!!o.soft:!!UNMIX.SOFT,SOFT_FLOOR=o.softFloor!=null?+o.softFloor:UNMIX.SOFT_FLOOR,SOFT_EXP=o.softExp!=null?+o.softExp:UNMIX.SOFT_EXP,N=o.N||UNMIX.N,H=o.H||UNMIX.H,GAMMA=o.gamma!=null?o.gamma:UNMIX.GAMMA,FLOOR=o.floor!=null?o.floor:UNMIX.FLOOR;
   const TF=Math.max(1,o.tf||UNMIX.TF)|0,FF=Math.max(1,o.ff||UNMIX.FF)|0,TR=TF>>1,FR=FF>>1,sr=o.sr||44100;
   const mL=o.mix.L,mR=o.mix.R||o.mix.L,n=mL.length,st=o.stems.filter(s=>s&&s.L),K=st.length,B=N/2+1;
   const pl=fftPlan(N),win=new Float32Array(N);for(let i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
@@ -62,7 +62,7 @@ export async function renderHeard(o){
   const need=new Uint8Array(hops),cnt=new Uint8Array(hops);
   for(let h=0;h<hops;h++){let c=0;for(let f=h+1-R;f<=h+R;f++)if(f>=0&&f<frames)c++;need[h]=c}
   // per-stem per-bin gains (EQ) and removal weights
-  const G=[],C=[],FM=new Float32Array(B).fill(Infinity);let anyCut=false,anyExtra=false;
+  const G=[],C=[],FM=new Float32Array(B).fill(Infinity);let anyCut=false,anyExtra=false,anyHeard=false;
   for(let k=0;k<K;k++){
     const s=st[k],g=Math.max(0,+s.g||0),gk=new Float32Array(B),ck=new Float32Array(B);
     for(let q=0;q<B;q++){
@@ -70,9 +70,11 @@ export async function renderHeard(o){
       const w=(Math.max(0,1-Gq)*Math.max(0,1-Gq/0.25))**2;
       if(w>0){const cd=Math.max(0,Math.min(24,eqDb(s.cut,f)));if(cd>0.01)anyExtra=true;ck[q]=w*GAMMA*Math.pow(10,cd/20);FM[q]=Math.min(FM[q],Math.pow(10,-cd/40));anyCut=true}
     }
-    G.push(gk);C.push(ck);
+    if(g>0)anyHeard=true;G.push(gk);C.push(ck);
   }
   for(let q=0;q<B;q++)if(!isFinite(FM[q]))FM[q]=1;
+  // 1.0.40: every lane muted → nothing should be heard: no floor on the residual (it left the separation error at ≈ −30 dB)
+  if(!anyHeard)FM.fill(0);
   // ring of TF frames: stem spectra (packed L+iR) + keep/cut powers per channel
   const RS=TF,slotF=new Int32Array(RS).fill(-1);
   const sRe=[],sIm=[],kL=[],kR=[],cL=[],cR=[];
@@ -92,15 +94,15 @@ export async function renderHeard(o){
     }
   }
   const re=new Float32Array(N),im=new Float32Array(N),tKL=new Float32Array(B),tKR=new Float32Array(B),tCL=new Float32Array(B),tCR=new Float32Array(B);
-  const gainL=new Float32Array(B),gainR=new Float32Array(B);
+  const gainL=new Float32Array(B),gainR=new Float32Array(B),softL=new Float32Array(B),softR=new Float32Array(B),kRe=new Float32Array(N),kIm=new Float32Array(N);
   const boxF=(src,dst)=>{let acc=0;for(let q=0;q<Math.min(FR,B);q++)acc+=src[q];for(let q=0;q<B;q++){const add=q+FR,sub=q-FR-1;if(add<B)acc+=src[add];if(sub>=0)acc-=src[sub];const lo=Math.max(0,q-FR),hi=Math.min(B-1,q+FR);dst[q]=acc/(hi-lo+1)}};
   const sm1=new Float32Array(B);
   /** packed L+iR spectrum → per-channel mask gains (gainL/gainR) → packed again */
-  function unpackGain(re,im){
+  function unpackGain(re,im,gL,gR){gL=gL||gainL;gR=gR||gainR;
     for(let q=0;q<B;q++){
       const q2=(N-q)%N;
-      const lr=0.5*(re[q]+re[q2])*gainL[q],li=0.5*(im[q]-im[q2])*gainL[q];
-      const rr=0.5*(im[q]+im[q2])*gainR[q],ri=-0.5*(re[q]-re[q2])*gainR[q];
+      const lr=0.5*(re[q]+re[q2])*gL[q],li=0.5*(im[q]-im[q2])*gL[q];
+      const rr=0.5*(im[q]+im[q2])*gR[q],ri=-0.5*(re[q]-re[q2])*gR[q];
       const zr=lr-ri,zi=li+rr,zr2=lr+ri,zi2=-li+rr;
       if(q===0||q===N/2){re[q]=zr;im[q]=zi}else{re[q]=zr;im[q]=zi;re[q2]=zr2;im[q2]=zi2}
     }
@@ -130,6 +132,16 @@ export async function renderHeard(o){
       unpackGain(re,im);
       for(let k=0;k<K;k++){const gk=G[k],a=sRe[r][k],b=sIm[r][k];
         for(let q=0;q<=N/2;q++){const g=gk[q];if(g===0)continue;re[q]+=g*a[q];im[q]+=g*b[q];if(q>0&&q<N/2){const q2=N-q;re[q2]+=g*a[q2];im[q2]+=g*b[q2]}}}
+    }else if(RESID&&SOFT&&anyCut){
+      // 1.0.40 (t333u): ✂ extra cut / ✂max no longer runs the deep mask over the whole bed ("alien" sound). The residual
+      // (what no lane holds) gets the deep mask; the heard lanes only a SOFT one: gain^SOFT_EXP, never below SOFT_FLOOR
+      // (−6 dB), so the drum bleed inside them is turned down without the bubbling/watery musical noise.
+      for(let q=0;q<B;q++){softL[q]=Math.max(SOFT_FLOOR,Math.pow(gainL[q],SOFT_EXP));softR[q]=Math.max(SOFT_FLOOR,Math.pow(gainR[q],SOFT_EXP))}
+      kRe.fill(0);kIm.fill(0);
+      for(let k=0;k<K;k++){const gk=G[k],a=sRe[r][k],b=sIm[r][k];for(let i=0;i<N;i++){re[i]-=a[i];im[i]-=b[i]}
+        for(let q=0;q<=N/2;q++){const g=gk[q];if(g===0)continue;kRe[q]+=g*a[q];kIm[q]+=g*b[q];if(q>0&&q<N/2){const q2=N-q;kRe[q2]+=g*a[q2];kIm[q2]+=g*b[q2]}}}
+      unpackGain(re,im);unpackGain(kRe,kIm,softL,softR);
+      for(let i=0;i<N;i++){re[i]+=kRe[i];im[i]+=kIm[i]}
     }else{
     for(let k=0;k<K;k++){
       const gk=G[k],a=sRe[r][k],b=sIm[r][k];let flat=true;for(let q=0;q<B;q++)if(Math.abs(gk[q]-1)>1e-6){flat=false;break}

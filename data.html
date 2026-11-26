@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.39">
+<meta name="bp-data" content="1.0.40">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -240,12 +240,12 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <b>ไฟล์ส่งออก</b>
       <div class="row">
         <select id="rSr" title="sample rate"><option value="0">SR ตามไฟล์</option><option value="44100">44.1k</option><option value="48000" selected>48k</option></select>
-        <label class="chk" title="ฝั่งเพลง −11 LUFS กันพีคไม่แตก · นอมพีค −0.5 dBFS"><input type="checkbox" id="rLoud" checked> ดัง −11 LUFS</label>
+        <label class="chk" title="ฝั่งเพลงดังขึ้นได้ถึง −11 LUFS แต่ไม่บีบลิมิตเกิน 3 dB (เพลงไดนามิกกว้างจะเบากว่า −11 นิดหน่อย แต่ไม่แตก) · นอมพีค −0.5 dBFS"><input type="checkbox" id="rLoud" checked> ดัง ≤ −11 LUFS</label>
       </div>
       <div class="row rguide" id="rGuideBox">
-        <label class="chk" title="เสียงเพลงเบาๆ ในหูฝั่งนอม"><input type="checkbox" id="rGuide"> ไกด์เบาฝั่งนอม</label>
+        <label class="chk" title="เสียงต้นฉบับเบาๆ ในหูฝั่งนอม จากแทร็กที่ติ๊กข้างๆ (ไม่ขึ้นกับปุ่ม M — ติ๊ก ร้อง = มีเสียงร้องนำ+คอรัสในหูนอมด้วย แม้ปิดร้องนำไว้)"><input type="checkbox" id="rGuide"> ไกด์เบาฝั่งนอม</label>
         <label class="chk"><input type="checkbox" data-guide="drums"> กลอง</label><label class="chk"><input type="checkbox" data-guide="bass"> เบส</label><label class="chk"><input type="checkbox" data-guide="guitar" checked> กีตาร์</label><label class="chk"><input type="checkbox" data-guide="keys"> คีย์</label><label class="chk"><input type="checkbox" data-guide="other"> อื่นๆ</label><label class="chk"><input type="checkbox" data-guide="vocals" checked> ร้อง</label>
-        <label class="chk">ระดับ <input id="rGuideDb" type="number" min="-48" max="-12" step="1" value="-28"> dBFS</label>
+        <label class="chk" title="ความดังไกด์ในหูฝั่งนอม (ค่าเดิม −28 dBFS)">ระดับไกด์ <input id="rGuideDb" type="range" min="-40" max="-12" step="1" value="-28" style="width:120px;vertical-align:middle"> <b id="rGuideDbV">−28</b> dB</label><button type="button" class="btn" id="btnGuidePrev" title="ฟัง 8 วิ จากตำแหน่งเคอร์เซอร์: เพลงหูหนึ่ง ไกด์อีกหู ที่ระดับนี้ (เหมือนในไฟล์)">▶ ฟังไกด์</button>
       </div>
       <b>โปรไฟล์สูตร</b>
       <div class="row"><select id="rProf"><option value="">— เลือก —</option></select><button type="button" class="btn" id="btnProfSave">บันทึกเป็นโปรไฟล์</button><button type="button" class="btn" id="btnProfDel">ลบโปรไฟล์</button></div>
@@ -495,13 +495,13 @@ function applyRecipeMutes(opt){
 function guideKeysFromUI(){return [...$('rGuideBox').querySelectorAll('input[data-guide]:checked')].map(x=>x.dataset.guide)}
 function recipeState(){return{mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value,feel:$('rFeel').value||'normal',flourish:!!$('rFlourish').checked,
   rate:+$('rRate').value===2?2:1,accent:!!$('rAccent').checked,ciMode:$('rCiMode').value==='over'?'over':'pre',cues:true,endAuto:!!$('rEndAuto').checked,
-  sr:+$('rSr').value||0,loud:!!$('rLoud').checked,guide:{on:!!$('rGuide').checked,stems:guideKeysFromUI(),db:Math.max(-48,Math.min(-12,+$('rGuideDb').value||-28))}}}
+  sr:+$('rSr').value||0,loud:!!$('rLoud').checked,guide:{on:!!$('rGuide').checked,stems:guideKeysFromUI(),db:Math.max(-40,Math.min(-12,+$('rGuideDb').value||-28))}}}
 function syncNomOpt(){const r=recipeState();studio.state.recipe=r;studio.state.nomOpt={style:r.feel==='ref'?'ref':'normal',rate:r.rate,accent:r.accent,ciMode:r.ciMode,ci:r.ci,cues:r.cues,
   endT:undefined};return r}
 function applyRecipeState(o){if(!o)return;if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;
   if(o.rate)$('rRate').value=String(o.rate===2?2:1);if('accent' in o)$('rAccent').checked=!!o.accent;if(o.ciMode)$('rCiMode').value=o.ciMode==='over'?'over':'pre';if('cues' in o)$('rCues').checked=!!o.cues;if('endAuto' in o)$('rEndAuto').checked=!!o.endAuto;
   if(o.sr!=null)$('rSr').value=String([44100,48000].includes(+o.sr)?+o.sr:0);if('loud' in o)$('rLoud').checked=!!o.loud;
-  if(o.guide){$('rGuide').checked=!!o.guide.on;if(Array.isArray(o.guide.stems)){const g=new Set(o.guide.stems);$('rGuideBox').querySelectorAll('input[data-guide]').forEach(i=>i.checked=g.has(i.dataset.guide))}if(o.guide.db!=null)$('rGuideDb').value=String(o.guide.db)}
+  if(o.guide){$('rGuide').checked=!!o.guide.on;if(Array.isArray(o.guide.stems)){const g=new Set(o.guide.stems);$('rGuideBox').querySelectorAll('input[data-guide]').forEach(i=>i.checked=g.has(i.dataset.guide))}if(o.guide.db!=null)$('rGuideDb').value=String(Math.max(-40,Math.min(-12,+o.guide.db)));showGuideDb()}
   syncIntroUI();syncNomOpt();applyRecipeMutes();refreshGuides()}
 function syncIntroUI(){const ci=+$('rCi').value||0,mode=$('rCiMode').value;$('rIntro').value=ci?(mode==='pre'?'pre':'over')+Math.min(2,ci):'0'}
 /* per-song memory (title → recipe + markers) so each song keeps its own มิวต์/นอม/หมุด */
@@ -574,6 +574,33 @@ $('btnProfDel').onclick=()=>{
   saveProfiles(loadProfiles().filter(p=>p.id!==id));fillProfSelect();toast('ลบแล้ว')};
 ['rNom','rSr','rLoud','rGuide','rGuideDb'].forEach(id=>{const el=$(id);if(el)el.onchange=saveRecipe});
 $('rGuideBox').addEventListener('change',saveRecipe);
+/* 1.0.40 (t339u): guide level slider (−40…−12 dB, default −28) + 8 s preview of exactly what ทำดาต้า puts in the files */
+function showGuideDb(){const v=$('rGuideDbV');if(v)v.textContent=String(+$('rGuideDb').value).replace('-','−')}
+$('rGuideDb').addEventListener('input',showGuideDb);showGuideDb();
+let _guidePrev=null;
+$('btnGuidePrev').onclick=async()=>{
+  const b=$('btnGuidePrev');
+  if(_guidePrev){try{_guidePrev.stop()}catch(e){}_guidePrev=null;b.textContent='▶ ฟังไกด์';return}
+  const r=recipeState();
+  if(!r.guide.stems.length){toast('ติ๊กแทร็กไกด์ก่อน (เช่น ร้อง / กีตาร์)');return}
+  b.disabled=true;b.textContent='⏳';
+  try{
+    if(studio.state.playing)$('btnPlay')?.click();
+    const sr=studio.nativeSr(),dur=Math.max(1,...studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length).map(t=>t.clips.reduce((m,c)=>Math.max(m,c.dur||0),0)));
+    const at=Math.max(0,Math.min(dur-1,+studio.state.offset||0)),len=Math.min(8,dur-at);
+    const g=await studio.renderStemsMono(r.guide.stems,sr,0,dur);if(!g){toast('ไม่มีแทร็กไกด์');return}
+    const gx=g.getChannelData(0);let q=0;for(let i=0;i<gx.length;i++)q+=gx[i]*gx[i];
+    const gr=Math.pow(10,(r.guide.db-10*Math.log10(q/Math.max(1,gx.length)+1e-20))/20); // same rule as the export (masterNom)
+    const m=await studio.renderMusicMono(null,sr,0,dur);const mx=m.getChannelData(0);
+    let pk=0;for(let i=0;i<mx.length;i++){const v=Math.abs(mx[i]);if(v>pk)pk=v}const mg=pk>1e-6?Math.min(1.6,0.97/pk):1; // like the file without 🔊
+    const a=new (window.AudioContext||window.webkitAudioContext)(),n=Math.floor(len*sr),i0=Math.floor(at*sr);
+    const out=a.createBuffer(2,n,sr),nomCh=r.nom==='L'?0:1,L=out.getChannelData(nomCh),M=out.getChannelData(1-nomCh);
+    for(let i=0;i<n;i++){L[i]=Math.max(-1,Math.min(1,(gx[i0+i]||0)*gr));M[i]=Math.max(-1,Math.min(1,(mx[i0+i]||0)*mg))}
+    const src=a.createBufferSource();src.buffer=out;src.connect(a.destination);src.onended=()=>{if(_guidePrev===src){_guidePrev=null;b.textContent='▶ ฟังไกด์'}try{a.close()}catch(e){}};
+    window.__guidePrev={sr,at,len,gainDb:20*Math.log10(gr),db:r.guide.db,nomCh,rmsGuideDb:(()=>{let s2=0;for(let i=0;i<n;i++)s2+=L[i]*L[i];return 10*Math.log10(s2/Math.max(1,n)+1e-20)})()};
+    src.start();_guidePrev=src;b.textContent='■ หยุด';
+  }catch(e){toast('❌ '+(e.message||e));b.textContent='▶ ฟังไกด์'}finally{b.disabled=false}
+};
 ['rFeel','rFlourish','rRate','rAccent','rEndAuto'].forEach(id=>{const el=$(id);if(el)el.onchange=()=>{saveRecipe();refreshGuides()}});
 $('rIntro').onchange=()=>{const v=$('rIntro').value;$('rCi').value=v==='0'?'0':v.slice(-1);$('rCiMode').value=v.startsWith('pre')?'pre':'over';saveRecipe();refreshGuides()};
 syncIntroUI();
@@ -700,7 +727,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.39',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.40',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);

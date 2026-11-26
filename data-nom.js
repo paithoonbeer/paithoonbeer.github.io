@@ -104,18 +104,21 @@ export function truePeak(x,thr){
 export function tpTrim(y,ceilDb){const c=Math.pow(10,ceilDb/20),tp=truePeak(y);if(tp>c){const g=c/tp;for(let i=0;i<y.length;i++)y[i]*=g}return y}
 export function rmsDb(x){let q=0;for(let i=0;i<x.length;i++)q+=x[i]*x[i];return 10*Math.log10(q/Math.max(1,x.length)+1e-20)}
 export function peakAbs(x){let p=0;for(let i=0;i<x.length;i++){const a=x[i]<0?-x[i]:x[i];if(a>p)p=a}return p}
-/** Music side: gain to target LUFS, then limit to tpDb; one correction pass. */
-export function masterMusic(x,sr,target,tpDb){
+/** Music side: gain toward target LUFS, then limit to tpDb.
+ * 1.0.40 (t331u "เสียงแตกๆ"): the old version pushed gain until the LIMITED output reached the target (up to +12 dB
+ * extra) → 9–18 dB of peak limiting on every song (even clean multitracks) = crackle/distortion on every transient.
+ * Now the gain is capped so the loudest 0.01 % of samples need at most GR_BUDGET dB of limiting; the file may end up
+ * a bit quieter than the target on dynamic songs, but it stays clean (measured: crackle frames 26–93 % → <0.5 %). */
+export const GR_BUDGET=3;
+export function masterMusic(x,sr,target,tpDb,opt){
+  const budget=opt&&opt.grBudget!=null?+opt.grBudget:GR_BUDGET;
   let g=Math.pow(10,(target-lufs(x,sr))/20);if(!isFinite(g))g=1;
-  const lim=(v)=>{const o=limit(v,sr,tpDb);tpTrim(o.y,tpDb);return o};
-  let y=x.map(v=>v*g),r=lim(y);
-  // limiting eats loudness on dynamic mixes → push gain up until the limited output hits target (max 4 passes, +12 dB total)
-  let after=lufs(r.y,sr),extra=0;
-  for(let k=0;k<4&&after<target-0.2&&extra<12;k++){
-    extra=Math.min(12,extra+(target-after));
-    const gg=g*Math.pow(10,extra/20);y=x.map(v=>v*gg);r=lim(y);after=lufs(r.y,sr);
-  }
-  return{y:r.y,grDb:r.grDb,lufs:after};
+  const n=x.length,step=Math.max(1,Math.floor(n/400000)),a=new Float32Array(Math.ceil(n/step));
+  for(let i=0,j=0;i<n;i+=step,j++){const v=x[i];a[j]=v<0?-v:v}
+  a.sort();const p=a[Math.min(a.length-1,Math.floor(a.length*0.9999))];
+  if(p>1e-6){const cap=Math.pow(10,(tpDb+budget)/20)/p;if(g>cap)g=cap}
+  const r=limit(x.map(v=>v*g),sr,tpDb);tpTrim(r.y,tpDb);
+  return{y:r.y,grDb:r.grDb,lufs:lufs(r.y,sr),gainDb:20*Math.log10(g)};
 }
 /** Nom side: click/voice to peakDb, optional guide bed at guideDb RMS, final limit at peakDb. */
 export function masterNom(nom,sr,peakDb,guide,guideDb){
