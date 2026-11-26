@@ -1,6 +1,6 @@
 {
-  "build": 120,
-  "ver": "1.0.127",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b120-1.0.127/SetSod.apk",
-  "notes": "1.0.127: แก้ลบเพลงแล้วถูกส่งเข้าวงใหม่เอง — จำเพลงที่ลบแล้วไม่ auto-upload จากไฟล์คู่ในเครื่อง · 24K Magic อยู่หมวดสากล"
+  "build": 121,
+  "ver": "1.0.128",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b121-1.0.128/SetSod.apk",
+  "notes": "1.0.128: 🗑 ในคลัง = ซ่อนไปที่กู้คืนก่อน (ไฟล์ยังอยู่) · ลบถาวรทำที่ 👁 เท่านั้น · จัดหมวดสากลแล้วเห็นในแท็บสากลจริง · ซ่อนแถวเทายังไม่โหลดถ้ามีไฟล์คู่"
 }
