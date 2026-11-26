@@ -1,6 +1,6 @@
 {
-  "build": 114,
-  "ver": "1.0.121",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b114-1.0.121/SetSod.apk",
-  "notes": "1.0.121: เพลงที่ซ่อนจากคลัง: ปุ่ม 🗑 ลบออกจากรายการถาวร (ไม่ลบจากเซิร์ฟเวอร์) และลบไฟล์ในเครื่อง · กู้คืนจากหน้านี้ไม่ได้"
+  "build": 115,
+  "ver": "1.0.122",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b115-1.0.122/SetSod.apk",
+  "notes": "1.0.122: คลัง: แท็บช้า/กลาง/เร็ว/สากลตาม BPM (ไม่มี BPM ใช้หมวดเดิม) · สากลตามหมวด · แตะแท็บเดิมอีกครั้งเพื่อดูทุกเพลง · เอาแท็บนอมและชิปหมวดออก"
 }
