@@ -1,6 +1,6 @@
 {
-  "build": 122,
-  "ver": "1.0.129",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b122-1.0.129/SetSod.apk",
-  "notes": "1.0.129: แก้จัดหมวดแล้วเด้งกลับสากลเอง — จำหมวดที่ตั้งไว้ ไม่ให้แคตตาล็อก/ซิงก์ทับ"
+  "build": 123,
+  "ver": "1.0.130",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b123-1.0.130/SetSod.apk",
+  "notes": "1.0.130: แก้ทำดาต้าแล้วส่งเข้า SetSod แต่ไม่เห็นเพลง — เก็บคิวไว้ถ้าแท็บคลังยังไม่เปิด · ยกเลิกซ่อนถ้าเคยลบชื่อเดิม · เปิดคลังโชว์เพลงใหม่ทันที"
 }
