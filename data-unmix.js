@@ -210,12 +210,15 @@ export async function denoiseBed(L,R,sr,opt){
   const nL=new Float32Array(B),nR=new Float32Array(B),minL=new Float32Array(B).fill(Infinity),minR=new Float32Array(B).fill(Infinity);
   for(let f=0;f<frames;f++){const o=f*B;for(let q=0;q<B;q++){if(pL[o+q]<minL[q])minL[q]=pL[o+q];if(pR[o+q]<minR[q])minR[q]=pR[o+q]}}
   for(let q=0;q<B;q++){let a=0,b=0;for(let i=0;i<nTake;i++){const o=order[i]*B+q;a+=pL[o];b+=pR[o]}nL[q]=Math.max(a/nTake,minL[q]*1.4);nR[q]=Math.max(b/nTake,minR[q]*1.4)}
-  // detect lossy brick-wall (energy cliff) — hard-gate bins above it (hiss / empty ultrasonics)
+  // detect lossy brick-wall (energy cliff) — hard-gate bins above it (hiss / empty ultrasonics).
+  // 1.0.44: only look ≥12 kHz and compare to a local shelf (~2 kHz below), not the loud 2–8 kHz midband —
+  // otherwise pop beds (BLVCKHEART etc.) falsely brick at ~8 kHz and kill musical highs.
   const avg=new Float32Array(B);for(let q=0;q<B;q++){let s=0;for(let f=0;f<frames;f++)s+=pL[f*B+q]+pR[f*B+q];avg[q]=s/frames}
   let brick=B; // bin index of first "empty" zone
-  {const mid=Math.max(2,Math.floor(8000*N/sr)),hi=Math.min(B-2,Math.floor(18000*N/sr));
-    let base=0,nb=0;for(let q=Math.floor(2000*N/sr);q<mid;q++){base+=avg[q];nb++}base=(base/Math.max(1,nb))+1e-30;
-    for(let q=mid;q<hi;q++){if(avg[q]<base*0.04&&avg[q+1]<base*0.04){brick=q;break}}}
+  {const lo=Math.max(2,Math.floor(12000*N/sr)),hi=Math.min(B-2,Math.floor(19000*N/sr)),back=Math.max(1,Math.floor(2000*N/sr));
+    let peak=0;for(let q=0;q<B;q++)if(avg[q]>peak)peak=avg[q];peak+=1e-30;
+    for(let q=lo;q<hi;q++){const shelf=avg[Math.max(0,q-back)]+1e-30;
+      if(avg[q]<shelf*0.03&&avg[q+1]<shelf*0.03&&avg[q]<peak*2e-4){brick=q;break}}}
   // pass 2: Wiener gains + OLA rewrite
   const outL=new Float32Array(n),outR=new Float32Array(n),wsum=new Float32Array(n);
   for(let f=0;f<frames;f++){
