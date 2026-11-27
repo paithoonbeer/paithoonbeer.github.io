@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.44">
+<meta name="bp-data" content="1.0.45">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -115,6 +115,14 @@ select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:imag
 .maxcut b{font:700 10px JetMono,monospace;letter-spacing:.02em}.maxcut:hover{color:var(--tx);background:#1a222c}
 .maxcut.on{background:#3a2a2a;color:#f88}.mixer-wrap.folded .maxcut{border-bottom:0}
 .deepclean.on{background:#1e3a2a;color:#8f8}
+.chpill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;border:1px solid var(--line);background:#151a21;color:var(--mut);font:650 11px NotoThai,system-ui,sans-serif;white-space:nowrap}
+.chpill b{font:700 10px JetMono,monospace;color:var(--acc)}
+.chpill.stereo b{color:#7ab}.chpill.mono b{color:#8c8}
+.set-save{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+.set-save .dirt{font:600 11px NotoThai,system-ui,sans-serif;color:#c96}
+.set-save .dirt[hidden]{display:none}
+.btn.setpri{background:#1e3a2a;color:#9e9;border:1px solid #2a5a3c}
+.btn.setpri:disabled{opacity:.45;cursor:default}
 .mixer-fold:hover{color:var(--tx);background:#1a222c}
 .mixer-fold .chev{margin-left:auto;font-family:JetMono,monospace;color:var(--acc)}
 .mixer{display:flex;gap:10px;overflow-x:auto;padding:10px 8px 12px;max-height:min(48vh,380px);align-items:stretch}
@@ -241,9 +249,16 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       </div>
       <b>ไฟล์ส่งออก</b>
       <div class="row">
+        <label class="chk" title="รูปแบบไฟล์ที่ได้หลังทำดาต้า — โมโน = ใช้บ่อยกับสายเดี่ยว/FOH · สเตอริโอ dual-mono = หูข้างหนึ่งเพลง อีกข้างนอม (แนะนำ IEM)">รูปแบบ
+          <select id="rOutFmt">
+            <option value="mono">โมโน (เพลงโมโน + นอมโมโน)</option>
+            <option value="dual" selected>สเตอริโอ dual-mono (เพลง|นอม)</option>
+          </select>
+        </label>
         <select id="rSr" title="sample rate"><option value="0">SR ตามไฟล์</option><option value="44100">44.1k</option><option value="48000" selected>48k</option></select>
         <label class="chk" title="ฝั่งเพลงดังขึ้นได้ถึง −11 LUFS แต่ไม่บีบลิมิตเกิน 3 dB (เพลงไดนามิกกว้างจะเบากว่า −11 นิดหน่อย แต่ไม่แตก) · นอมพีค −0.5 dBFS"><input type="checkbox" id="rLoud" checked> ดัง ≤ −11 LUFS</label>
       </div>
+      <p class="credits" id="outFmtHint">ส่งเข้า SetSod เป็นไฟล์โมโนแยก (เพลง + นอม) เสมอ · เลือกสเตอริโอ = มีไฟล์พร้อมใช้ L/R เพิ่มสำหรับหูฟัง</p>
       <div class="row rguide" id="rGuideBox">
         <label class="chk" title="เสียงต้นฉบับเบาๆ ในหูฝั่งนอม จากแทร็กที่ติ๊กข้างๆ (ไม่ขึ้นกับปุ่ม M — ติ๊ก ร้อง = มีเสียงร้องนำ+คอรัสในหูนอมด้วย แม้ปิดร้องนำไว้)"><input type="checkbox" id="rGuide"> ไกด์เบาฝั่งนอม</label>
         <label class="chk"><input type="checkbox" data-guide="drums"> กลอง</label><label class="chk"><input type="checkbox" data-guide="bass"> เบส</label><label class="chk"><input type="checkbox" data-guide="guitar" checked> กีตาร์</label><label class="chk"><input type="checkbox" data-guide="keys"> คีย์</label><label class="chk"><input type="checkbox" data-guide="other"> อื่นๆ</label><label class="chk"><input type="checkbox" data-guide="vocals" checked> ร้อง</label>
@@ -254,6 +269,11 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <b>ไทม์ไลน์</b>
       <div class="row"><label class="chk"><input type="checkbox" id="chkSnap" checked> สแนปคลิป</label></div>
       <p class="credits">แยกเสียงในเครื่องนี้ (MIT): HT-Demucs 6s · DrumSep v2 (inagoy / Gridshift) สำหรับปุ่ม ✂ แยกละเอียดที่เลนกลอง · UVR-MDX-NET KARA 2 (Ultimate Vocal Remover) สำหรับเลนร้อง — เครดิตผู้พัฒนาโมเดล</p>
+      <div class="set-save">
+        <button type="button" class="btn setpri" id="btnSetSave" disabled title="ยืนยันการตั้งค่าที่แก้ไว้">💾 บันทึกการตั้งค่า</button>
+        <button type="button" class="btn" id="btnSetRevert" disabled title="คืนค่าที่บันทึกไว้ล่าสุด">ยกเลิก</button>
+        <span class="dirt" id="setDirty" hidden>ยังไม่บันทึก</span>
+      </div>
       <select id="rCi" hidden><option value="0">0</option><option value="1" selected>1</option><option value="2">2</option></select>
       <select id="rCiMode" hidden><option value="pre">pre</option><option value="over" selected>over</option></select>
       <input type="checkbox" id="rCues" checked hidden>
@@ -279,6 +299,8 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <label class="chip"><input type="checkbox" data-mute="vocals"><i>ร้อง</i></label>
       <button type="button" class="btn icon sm" id="btnMuteClear" title="เปิดทุกเครื่อง">↺</button>
     </div>
+    <span class="chpill" id="chPill" title="ต้นทาง = ไฟล์ที่ลากเข้า · ส่งออก = รูปแบบที่ตั้งใน ⚙"><b>—</b> <span id="chPillTxt">ยังไม่มีไฟล์</span></span>
+    <button type="button" class="btn setpri" id="btnSetSaveBar" hidden disabled title="ยืนยันการตั้งค่าที่แก้ไว้">💾 บันทึก</button>
     <button type="button" class="btn pri" id="btnMakeData">ทำดาต้า → ส่ง SetSod</button>
     <span class="status" id="sRecipe">ลากเพลงมาวางเพื่อเริ่ม</span>
   </div>
@@ -377,7 +399,7 @@ window.__DATAV=DATAV;
 
 /* AI split → load as tracks */
 const $=id=>document.getElementById(id);
-let aiFile=null,aiBusy=false;
+let aiFile=null,aiBusy=false,_srcCh=0;
 const AUD=/\.(mp3|wav|m4a|aac|flac|ogg)$/i;
 ['dragenter','dragover','drop'].forEach(ev=>document.addEventListener(ev,e=>{try{if([...e.dataTransfer.types||[]].includes('Files'))e.preventDefault()}catch(_){}}));
 function bindDrop(el,fn){let n=0;
@@ -415,6 +437,7 @@ async function startAi(){
     // Copy channels — worker transfers detach the originals
     const L=Float32Array.from(buf.getChannelData(0));
     const R=buf.numberOfChannels>1?Float32Array.from(buf.getChannelData(1)):L.slice();
+    _srcCh=buf.numberOfChannels||1;
     const title=aiFile.name.replace(/\.[^.]+$/,'');
     const sr=buf.sampleRate||44100;
     const secIn=buf.duration;
@@ -468,10 +491,10 @@ async function startAi(){
       setBpmField(g.bpm);
       document.getElementById('chkMetro').checked=true;studio.state.metro=true;syncMetroBtn();
       if(pend.length&&!(studio.state.markers||[]).length){studio.setMarkers(pend);for(const m of pend)studio.moveCount(m.id,m.t);toast('จัดจุดนับ '+pend.length+' จุดให้ตรงจังหวะเพลงแล้ว')}
-      applyRecipeMutes();refreshGuides();
+      applyRecipeMutes();refreshGuides();updateChPill();
       if(!pend.length)beatToast(g);
       $('sRecipe').textContent=`พร้อม · ${title} · ${fmtMmSs(d.outSec||secIn)} · นอม ${fmtBpm(g.bpm)} BPM`;
-    }catch(e){applyRecipeMutes();toast('ได้แทร็กแล้ว — กด 🎯 จับจังหวะ หรือพิมพ์ BPM');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
+    }catch(e){applyRecipeMutes();updateChPill();toast('ได้แทร็กแล้ว — กด 🎯 จับจังหวะ หรือพิมพ์ BPM');$('sRecipe').textContent='พร้อมทำดาต้า · '+title}
   }catch(e){$('sAi').textContent='❌ '+(e.message||e);$('goAi').hidden=!aiFile}
   finally{aiBusy=false}
 }
@@ -516,14 +539,16 @@ function applyRecipeMutes(opt){
 function guideKeysFromUI(){return [...$('rGuideBox').querySelectorAll('input[data-guide]:checked')].map(x=>x.dataset.guide)}
 function recipeState(){return{mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value,feel:$('rFeel').value||'normal',flourish:!!$('rFlourish').checked,
   rate:+$('rRate').value===2?2:1,accent:!!$('rAccent').checked,ciMode:$('rCiMode').value==='over'?'over':'pre',cues:true,endAuto:!!$('rEndAuto').checked,
+  outFmt:$('rOutFmt')?.value==='mono'?'mono':'dual',
   sr:+$('rSr').value||0,loud:!!$('rLoud').checked,guide:{on:!!$('rGuide').checked,stems:guideKeysFromUI(),db:Math.max(-40,Math.min(-12,+$('rGuideDb').value||-28))}}}
 function syncNomOpt(){const r=recipeState();studio.state.recipe=r;studio.state.nomOpt={style:r.feel==='ref'?'ref':'normal',rate:r.rate,accent:r.accent,ciMode:r.ciMode,ci:r.ci,cues:r.cues,
   endT:undefined};return r}
 function applyRecipeState(o){if(!o)return;if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;
   if(o.rate)$('rRate').value=String(o.rate===2?2:1);if('accent' in o)$('rAccent').checked=!!o.accent;if(o.ciMode)$('rCiMode').value=o.ciMode==='over'?'over':'pre';if('cues' in o)$('rCues').checked=!!o.cues;if('endAuto' in o)$('rEndAuto').checked=!!o.endAuto;
+  if(o.outFmt&&$('rOutFmt'))$('rOutFmt').value=o.outFmt==='mono'?'mono':'dual';
   if(o.sr!=null)$('rSr').value=String([44100,48000].includes(+o.sr)?+o.sr:0);if('loud' in o)$('rLoud').checked=!!o.loud;
   if(o.guide){$('rGuide').checked=!!o.guide.on;if(Array.isArray(o.guide.stems)){const g=new Set(o.guide.stems);$('rGuideBox').querySelectorAll('input[data-guide]').forEach(i=>i.checked=g.has(i.dataset.guide))}if(o.guide.db!=null)$('rGuideDb').value=String(Math.max(-40,Math.min(-12,+o.guide.db)));showGuideDb()}
-  syncIntroUI();syncNomOpt();applyRecipeMutes();refreshGuides()}
+  syncIntroUI();syncNomOpt();applyRecipeMutes();refreshGuides();updateOutFmtHint();updateChPill()}
 function syncIntroUI(){const ci=+$('rCi').value||0,mode=$('rCiMode').value;$('rIntro').value=ci?(mode==='pre'?'pre':'over')+Math.min(2,ci):'0'}
 /* per-song memory (title → recipe + markers) so each song keeps its own มิวต์/นอม/หมุด */
 function songKey(){return (studio.state.title||'').trim().slice(0,120)}
@@ -582,20 +607,54 @@ function saveProfiles(list){try{localStorage.setItem('ssd-profiles',JSON.stringi
 function fillProfSelect(){const sel=$('rProf'),cur=sel.value,list=loadProfiles();
   sel.innerHTML='<option value="">— เลือกโปรไฟล์ —</option>'+list.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   if(cur&&[...sel.options].some(o=>o.value===cur))sel.value=cur}
-function saveRecipe(){syncNomOpt();try{localStorage.setItem('ssd-recipe',JSON.stringify(recipeState()))}catch(e){}saveSong()}
+/* 1.0.45: settings are draft until 💾 บันทึกการตั้งค่า — live preview / ทำดาต้า use last saved */
+let _setDirty=false;
+function saveRecipe(){syncNomOpt();try{localStorage.setItem('ssd-recipe',JSON.stringify(recipeState()))}catch(e){}saveSong();_setDirty=false;paintSetDirty()}
+function paintSetDirty(){
+  const d=$('setDirty'),b=$('btnSetSave'),r=$('btnSetRevert'),bar=$('btnSetSaveBar');
+  if(d)d.hidden=!_setDirty;if(b)b.disabled=!_setDirty;if(r)r.disabled=!_setDirty;
+  if(bar){bar.hidden=!_setDirty;bar.disabled=!_setDirty}}
+function markSetDirty(){_setDirty=true;paintSetDirty()}
+function commitSettings(msg){
+  saveRecipe();refreshGuides();updateOutFmtHint();updateChPill();
+  toast(msg||'💾 บันทึกการตั้งค่าแล้ว');
+  $('sRecipe').textContent='ตั้งค่าบันทึกแล้ว · '+(($('rOutFmt')?.value==='mono')?'โมโน':'dual-mono');
+}
+function updateOutFmtHint(){
+  const h=$('outFmtHint'),fmt=$('rOutFmt')?.value||'dual';if(!h)return;
+  h.textContent=fmt==='mono'
+    ?'โหมดโมโน: ส่งเข้า SetSod เป็นไฟล์โมโนแยก (เพลง + นอม) · ไม่สร้างไฟล์พร้อมใช้สเตอริโอ — เหมาะสายเดี่ยว/FOH'
+    :'โหมดสเตอริโอ dual-mono: ข้างหนึ่งเพลงโมโน อีกข้างนอม · ส่ง SetSod เป็นโมโนแยก + มีปุ่ม ⬇ ไฟล์พร้อมใช้ (แนะนำ IEM)';
+}
+function updateChPill(){
+  const pill=$('chPill'),txt=$('chPillTxt');if(!pill||!txt)return;
+  const mb=studio.state.mixBuf;const src=mb?(mb.numberOfChannels>1?'สเตอริโอ':'โมโน'):(_srcCh>1?'สเตอริโอ':_srcCh===1?'โมโน':'—');
+  if(mb)_srcCh=mb.numberOfChannels||1;
+  const fmt=$('rOutFmt')?.value==='mono'?'โมโน':'dual-mono';
+  pill.classList.toggle('mono',fmt==='โมโน'||src==='โมโน');
+  pill.classList.toggle('stereo',fmt!=='โมโน'&&src==='สเตอริโอ');
+  pill.querySelector('b').textContent=src==='—'?'?':(src==='โมโน'?'1ch':'2ch');
+  txt.textContent=src==='—'?'ยังไม่มีไฟล์':`ต้นทาง ${src} · ส่งออก ${fmt}`;
+}
 try{const raw=localStorage.getItem('ssd-recipe');if(raw)applyRecipeState(JSON.parse(raw))}catch(e){}
-fillProfSelect();
+fillProfSelect();paintSetDirty();updateOutFmtHint();updateChPill();
 $('rProf').onchange=()=>{const id=$('rProf').value;if(!id)return;const p=loadProfiles().find(x=>x.id===id);if(p){applyRecipeState(p);saveRecipe();$('sRecipe').textContent='โปรไฟล์: '+p.name}};
 $('btnProfSave').onclick=()=>{
   const name=prompt('ชื่อโปรไฟล์','สูตรของฉัน');if(!name)return;
   const list=loadProfiles();const id='u'+Date.now().toString(36);
-  list.push({id,name:name.slice(0,40),...recipeState()});saveProfiles(list);fillProfSelect();$('rProf').value=id;toast('บันทึกโปรไฟล์แล้ว');$('sRecipe').textContent='โปรไฟล์: '+name};
+  list.push({id,name:name.slice(0,40),...recipeState()});saveProfiles(list);fillProfSelect();$('rProf').value=id;saveRecipe();toast('บันทึกโปรไฟล์แล้ว');$('sRecipe').textContent='โปรไฟล์: '+name};
 $('btnProfDel').onclick=()=>{
   const id=$('rProf').value;if(!id){toast('เลือกโปรไฟล์ก่อน');return}
   if(!confirm('ลบโปรไฟล์นี้?'))return;
   saveProfiles(loadProfiles().filter(p=>p.id!==id));fillProfSelect();toast('ลบแล้ว')};
-['rNom','rSr','rLoud','rGuide','rGuideDb'].forEach(id=>{const el=$(id);if(el)el.onchange=saveRecipe});
-$('rGuideBox').addEventListener('change',saveRecipe);
+const SET_DRAFT_IDS=['rNom','rSr','rLoud','rGuide','rGuideDb','rFeel','rFlourish','rRate','rAccent','rEndAuto','rOutFmt','chkSnap','chkListenLR','nomVol'];
+SET_DRAFT_IDS.forEach(id=>{const el=$(id);if(el)el.addEventListener('change',()=>{markSetDirty();if(id==='rOutFmt'){updateOutFmtHint();updateChPill()}})});
+['rGuideDb','nomVol'].forEach(id=>{const el=$(id);if(el)el.addEventListener('input',markSetDirty)});
+$('rGuideBox').addEventListener('change',markSetDirty);
+$('btnSetSave').onclick=()=>commitSettings();
+$('btnSetSaveBar').onclick=()=>commitSettings();
+$('btnSetRevert').onclick=()=>{try{const raw=localStorage.getItem('ssd-recipe');if(raw)applyRecipeState(JSON.parse(raw));else applyRecipeState({outFmt:'dual',nom:'R',sr:48000,loud:true,feel:'ref',rate:2,accent:true,endAuto:true,ci:1,ciMode:'over',guide:{on:false,stems:[],db:-28}})}catch(e){}
+  _setDirty=false;paintSetDirty();toast('คืนค่าที่บันทึกไว้แล้ว')};
 /* 1.0.40 (t339u): guide level slider (−40…−12 dB, default −28) + 8 s preview of exactly what ทำดาต้า puts in the files */
 function showGuideDb(){const v=$('rGuideDbV');if(v)v.textContent=String(+$('rGuideDb').value).replace('-','−')}
 $('rGuideDb').addEventListener('input',showGuideDb);showGuideDb();
@@ -623,17 +682,16 @@ $('btnGuidePrev').onclick=async()=>{
     src.start();_guidePrev=src;b.textContent='■ หยุด';
   }catch(e){toast('❌ '+(e.message||e));b.textContent='▶ ฟังไกด์'}finally{b.disabled=false}
 };
-['rFeel','rFlourish','rRate','rAccent','rEndAuto'].forEach(id=>{const el=$(id);if(el)el.onchange=()=>{saveRecipe();refreshGuides()}});
-$('rIntro').onchange=()=>{const v=$('rIntro').value;$('rCi').value=v==='0'?'0':v.slice(-1);$('rCiMode').value=v.startsWith('pre')?'pre':'over';saveRecipe();refreshGuides()};
+$('rIntro').onchange=()=>{const v=$('rIntro').value;$('rCi').value=v==='0'?'0':v.slice(-1);$('rCiMode').value=v.startsWith('pre')?'pre':'over';markSetDirty()};
 syncIntroUI();
 /* ⭐ one-tap preset = measured reference file */
 $('btnRefPreset').onclick=()=>{
   const P=REF_PRESET;
-  applyRecipeState({feel:P.style,rate:P.rate,accent:P.accent,ciMode:P.ciMode,ci:P.ci,cues:P.cues,endAuto:P.endAuto,sr:P.sr,loud:P.loud,flourish:false,nom:'R',
+  applyRecipeState({feel:P.style,rate:P.rate,accent:P.accent,ciMode:P.ciMode,ci:P.ci,cues:P.cues,endAuto:P.endAuto,sr:P.sr,loud:P.loud,flourish:false,nom:'R',outFmt:'dual',
     guide:{on:P.guide.on,stems:P.guide.stems,db:P.guide.db}});
   saveRecipe();
   const nm=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
-  toast('ตั้งแบบไฟล์ตัวอย่างแล้ว · บี๊บทุก 2 จังหวะ · 48k · −11 LUFS'+(nm?'':' · กด 🗣 แล้วคลิกตรงที่อยากให้นับ'));
+  toast('ตั้งแบบไฟล์ตัวอย่างแล้ว · บี๊บทุก 2 จังหวะ · 48k · −11 LUFS · dual-mono'+(nm?'':' · กด 🗣 แล้วคลิกตรงที่อยากให้นับ'));
   $('sRecipe').textContent='แบบไฟล์ตัวอย่าง'+(nm?' · '+markerStatus():'');
 };
 /* 🗣 count tool: armed → click the timeline = count there (snaps to the nom click) · click a count = remove · drag = move */
@@ -711,6 +769,7 @@ async function sendStemsToSetsod(files,meta){
 
 async function makeDataNow(){
   if(!desk){toast('ใช้พีซีเท่านั้น');return}
+  if(_setDirty){toast('กด 💾 บันทึกการตั้งค่าก่อน แล้วค่อยทำดาต้า');const m=$('mnuSet');if(m)m.open=true;return}
   // 1.0.33 (t315u): the studio's M/S/volume ARE the recipe — never re-apply the chips over them (that un-muted stems)
   // 1.0.34: also snapshot mute/solo/vol so refreshGuides → applyRecipeMutes cannot unmute a sub-stem (กระเดื่อง etc. have no chip)
   const keptMix=studio.state.tracks.map(t=>({id:t.id,mute:!!t.mute,solo:!!t.solo,vol:t.vol,stem:t.stem}));
@@ -746,8 +805,9 @@ async function makeDataNow(){
     // treated as the click lane → the whole song played a 2nd time) + each stem peak-normalised on its own
     // (bleed boosted up to +12 dB) → doubled/echo and "drums/vocals still there". Now it gets exactly the
     // two halves of the dual file: เพลง (as heard) + คลิก นอม — sample-identical to ⬇ ไฟล์พร้อมใช้.
-    // Dual-mono ready file (L/R split) — mastered like the reference when 🔊/🎧 are on
+    // Always build dual internally so mono halves match; outFmt chooses what to keep/download
     let report=null,dualFile=null;
+    const wantDual=r.outFmt!=='mono';
     try{
       const sideLab=nomSide==='R'?'L=เพลง R=นอม':'L=นอม R=เพลง';
       let dual;
@@ -756,24 +816,26 @@ async function makeDataNow(){
         const res=studio.makeRefDualBlob(mono,guide.buf,nomSide,{loud:r.loud,lufs:-11,tpDb:-1,clickPeakDb:-0.5,guideBuf:gbuf,guideDb:r.guide.db});
         dual=res.blob;report=res.report;
       }else dual=studio.makeDualMonoBlob(mono,guide.buf,nomSide,{targetPeak:0.97,maxGain:1.6});
-      dualFile=new File([dual],`${title} (พร้อมใช้ ${sideLab}).wav`,{type:'audio/wav'});
+      if(wantDual)dualFile=new File([dual],`${title} (พร้อมใช้ ${sideLab}).wav`,{type:'audio/wav'});
       const [chL,chR]=await studio.splitDualWav(dual);
       const musicCh=nomSide==='R'?chL:chR,nomCh=nomSide==='R'?chR:chL;
-      out.push(new File([musicCh],`${title} (เพลง).wav`,{type:'audio/wav'}));
-      out.push(new File([nomCh],`${title} (คลิก นอม).wav`,{type:'audio/wav'}));
+      out.push(new File([musicCh],`${title} (เพลง · โมโน).wav`,{type:'audio/wav'}));
+      out.push(new File([nomCh],`${title} (คลิก นอม · โมโน).wav`,{type:'audio/wav'}));
     }catch(e){console.warn('dual-mono',e)}
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.41',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.45',outFmt:r.outFmt||'dual',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
     const feelTh={normal:'ปกติ',ref:'บี๊บ',rock:'ร็อค',samcha:'สามช่า',slow:'ช้า'}[feel]||feel;
     const mb=(out.reduce((a,f)=>a+(f.size||0),0)/1e6).toFixed(1);
     const sEl=$('sRecipe');
-    sEl.textContent=`ส่ง ${out.length} ไฟล์ · นอม${nomSide==='R'?'ขวา':'ซ้าย'}${r.rate===2?' ทุก 2 จังหวะ':''} · ${r.ciMode==='over'?'นับทับอินโทร':'นับก่อนเพลง'} ${ci} · ${feelTh} · ${Math.round(sr/100)/10}k${report&&report.lufs!=null?' · '+report.lufs.toFixed(1)+' LUFS':''} · ${markerStatus()} (~${mb}MB) `;
-    if(dualFile){const a=document.createElement('a');a.className='btn';a.id='dlDual';a.textContent='⬇ ไฟล์พร้อมใช้';a.download=dualFile.name;a.href=URL.createObjectURL(dualFile);sEl.appendChild(a)}
+    const fmtLab=wantDual?'สเตอริโอ dual-mono':'โมโน ×2';
+    sEl.textContent=`ส่ง ${out.length} ไฟล์ (${fmtLab}) · นอม${nomSide==='R'?'ขวา':'ซ้าย'}${r.rate===2?' ทุก 2 จังหวะ':''} · ${r.ciMode==='over'?'นับทับอินโทร':'นับก่อนเพลง'} ${ci} · ${feelTh} · ${Math.round(sr/100)/10}k${report&&report.lufs!=null?' · '+report.lufs.toFixed(1)+' LUFS':''} · ${markerStatus()} (~${mb}MB) `;
+    if(dualFile){const a=document.createElement('a');a.className='btn';a.id='dlDual';a.textContent='⬇ ไฟล์พร้อมใช้ (สเตอริโอ)';a.download=dualFile.name;a.href=URL.createObjectURL(dualFile);sEl.appendChild(a)}
+    updateChPill();
   }catch(e){toast('❌ '+(e.message||e));$('sRecipe').textContent='❌ ส่งไม่สำเร็จ'}
   finally{$('btnMakeData').disabled=false}
 }
