@@ -1282,10 +1282,18 @@ export function createStudio(ui){
     let ti=state.tracks.findIndex(t=>t.stem==='click');if(ti<0)ti=els.length-1;
     const lane=els[ti];if(!lane)return;
     const ms=musicStart(),no=state.nomOpt||{},st=clickStep(),t0=saneT0(state.t0,state.bpm),pace=countPaceNorm(no.countPace);
-    if(no.ciMode==='over'&&(+no.ci||0)>0&&state.tracks.some(t=>t.stem==='click')){
+    if((+no.ci||0)>0&&state.tracks.some(t=>t.stem==='click'||t.stem==='countin')){
+      const pre=no.ciMode==='pre';
       const b=document.createElement('div');b.className='cblock intro';
-      b.style.left=((ms+t0)*state.pxPerSec)+'px';b.style.width=Math.max(8,countSlots(8,pace)*(+no.ci)*st*state.pxPerSec)+'px';
-      b.innerHTML=`<b>🗣 นับเข้า ×${+no.ci}${countPaceLab(pace)?' · '+countPaceLab(pace):''}</b>`;b.title='นับเข้าอัตโนมัติ — เปลี่ยนที่ "นับเข้า" / จังหวะนับ';lane.appendChild(b);
+      if(pre){
+        // before-song pad: count lane sits at timeline 0 … musicStart
+        b.style.left='0px';b.style.width=Math.max(8,ms*state.pxPerSec)+'px';
+        b.innerHTML=`<b>🗣 ก่อนเพลง ×${+no.ci}${countPaceLab(pace)?' · '+countPaceLab(pace):''}</b>`;
+      }else{
+        b.style.left=((ms+t0)*state.pxPerSec)+'px';b.style.width=Math.max(8,countSlots(8,pace)*(+no.ci)*st*state.pxPerSec)+'px';
+        b.innerHTML=`<b>🗣 นับเข้า ×${+no.ci}${countPaceLab(pace)?' · '+countPaceLab(pace):''}</b>`;
+      }
+      b.title='นับเข้าอัตโนมัติ — เปลี่ยนที่ "นับเข้า" / จังหวะนับ';lane.appendChild(b);
     }
     for(const c of countSpans()){
       const b=document.createElement('div');b.className='cblock';b.dataset.mid=c.m.id;
@@ -2555,17 +2563,17 @@ export function createStudio(ui){
     return true;
   }
   // Loud spoken 1–2–3–4 count-in for ci bars (before music). Returns AudioBuffer.
-  function makeCountInBuf(bars,bpm,sr){
+  // 1.0.49: pace stretches word spacing (0.5/1/2/4) so pad matches syncGuideTracks ciSec.
+  function makeCountInBuf(bars,bpm,sr,pace){
     bars=Math.max(0,Math.min(4,+bars||0));sr=sr||nativeSr();bpm=Math.max(40,Math.min(240,+bpm||120));
     if(!bars)return null;
-    const spb=60/bpm,sec=bars*4*spb,n=Math.max(1,Math.ceil(sec*sr));
+    const p=countPaceNorm(pace),spb=60/bpm,beatSp=spb*p,nWords=bars*4,sec=nWords*beatSp,n=Math.max(1,Math.ceil(sec*sr));
     const L=new Float32Array(n),R=new Float32Array(n);
     const hasVoice=CI_WORDS.some(w=>CI_VOICE[w]);
-    for(let bi=0;bi<bars*4;bi++){
-      const at=Math.floor(bi*spb*sr),b4=bi%4,word=CI_WORDS[b4];
+    for(let i=0;i<nWords;i++){
+      const at=Math.floor(i*beatSp*sr),b4=i%4,word=CI_WORDS[b4];
       let spoke=false;
       if(hasVoice)spoke=mixVoiceAt(L,R,at,word,sr,b4===0?1.05:0.95);
-      // Soft click under the word (or alone if samples missing) so the beat stays clear
       if(b4===0)hitAt(L,R,at,sr,2100,spoke?0.28:1.0,16);
       else hitAt(L,R,at,sr,1550,spoke?0.16:0.7,11);
     }
@@ -2636,6 +2644,7 @@ export function createStudio(ui){
     const feel=opts.feel||'normal',flourish=!!opts.flourish;
     const metroOn=opts.metroOn!=null?!!opts.metroOn:!!state.metro;
     const preview=opts.preview!==false; // default: studio-safe click
+    const pace=countPaceNorm(state.nomOpt&&state.nomOpt.countPace);
     opts._wasPlaying=!!state.playing;
     // Pause mixer before ripping guide tracks out from under it
     if(state.playing){
@@ -2643,9 +2652,11 @@ export function createStudio(ui){
       stopPlay();
       opts._wasPlaying=true;
     }
+    // Keep absolute music position when the pre-roll pad grows/shrinks (1.0.49)
+    const oldPad=musicStart();
     state.bpm=bpm;state.t0=t0;
     const sr=nativeSr();
-    const spb=60/bpm,ciSec=ci*4*spb;
+    const spb=60/bpm,ciSec=ci*4*spb*pace;
 
     // Drop previous guide tracks
     state.tracks=state.tracks.filter(t=>t.stem!=='click'&&t.stem!=='countin');
@@ -2661,9 +2672,14 @@ export function createStudio(ui){
         c.start=ciSec;
       }
     }
+    // Shift playhead with the pad so "ตัววิ่ง" stays on the same music spot
+    if(oldPad!==ciSec){
+      if(state.offset>=oldPad)state.offset=Math.max(0,state.offset+(ciSec-oldPad));
+      else if(ciSec>0&&state.offset<ciSec)state.offset=0; // sit in the count-in when re-enabling pre
+    }
 
     if(ci>0){
-      const cib=makeCountInBuf(ci,bpm,sr);
+      const cib=makeCountInBuf(ci,bpm,sr,pace);
       if(cib){
         const id=putBuf(cib);
         const t=addAudioTrack('นับเข้า', '#ffd60a');t.stem='countin';t.vol=110;t.mute=false;

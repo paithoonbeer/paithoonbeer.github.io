@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.48">
+<meta name="bp-data" content="1.0.49">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -684,7 +684,13 @@ $('btnGuidePrev').onclick=async()=>{
     src.start();_guidePrev=src;b.textContent='■ หยุด';
   }catch(e){toast('❌ '+(e.message||e));b.textContent='▶ ฟังไกด์'}finally{b.disabled=false}
 };
-$('rIntro').onchange=()=>{const v=$('rIntro').value;$('rCi').value=v==='0'?'0':v.slice(-1);$('rCiMode').value=v.startsWith('pre')?'pre':'over';markSetDirty()};
+// 1.0.49: นับเข้า is transport UI — apply immediately (shift music / rebuild count lane). Don't wait for 💾.
+$('rIntro').onchange=()=>{
+  const v=$('rIntro').value;$('rCi').value=v==='0'?'0':v.slice(-1);$('rCiMode').value=v.startsWith('pre')?'pre':'over';
+  syncNomOpt();markSetDirty();refreshGuides();
+  const lab=v==='0'?'ไม่นับ':v.startsWith('pre')?('ก่อนเพลง '+v.slice(-1)+' ห้อง'):('ต้นเพลง '+v.slice(-1)+' รอบ');
+  $('sRecipe').textContent='นับเข้า: '+lab+(v.startsWith('pre')?' · เลื่อนเพลงตามห้องนับ':'');
+};
 $('rCountPace').onchange=()=>{const raw=+$('rCountPace').value,p=(raw===.5||raw===0.5||raw===2||raw===4)?raw:1;syncNomOpt();
   try{for(const m of studio.state.markers||[])if(m.kind==='count')m.pace=p;studio.setMarkers(studio.state.markers)}catch(e){}
   markSetDirty();refreshGuides();$('sRecipe').textContent='จังหวะนับ: '+(p===.5||p===0.5?'เร็ว (2×)':p===2?'ช้า (½)':p===4?'ช้ามาก (¼)':'ทุกจังหวะ (ตามนอม)')};
@@ -801,7 +807,8 @@ async function makeDataNow(){
     const out=[];
     const musicDur=Math.max(1,...music.map(tr=>tr.clips.reduce((m,c)=>Math.max(m,(c.dur||0)),0)));
     try{await studio.loadCiVoices()}catch(e){}
-    const pad=r.ciMode==='pre'?ci*4*60/bpm:0,total=pad+musicDur;
+    const padPace=(r.countPace===.5||r.countPace===0.5||r.countPace===2||r.countPace===4)?r.countPace:1;
+    const pad=r.ciMode==='pre'?ci*4*(60/bpm)*padPace:0,total=pad+musicDur;
     // music bed first (needed for auto end-of-click)
     const mono=await studio.renderMusicMono(music,sr,pad,total); // exactly what is heard (mute/solo/volume)
     const endT=r.endAuto?studio.autoEndT(mono,t0,bpm,r.rate,pad):undefined;
