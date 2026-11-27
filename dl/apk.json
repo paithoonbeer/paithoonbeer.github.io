@@ -1,6 +1,6 @@
 {
-  "build": 127,
-  "ver": "1.0.134",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b127-1.0.134/SetSod.apk",
-  "notes": "1.0.134: 🎧 นอมซ้าย/ขวาที่ตั้งเองไม่ถูกซิงก์ทับกลับแล้ว — ตั้งนอมขวาแล้วค้างนอมขวา (LIVE/คลาวด์เก่าทับไม่ได้)"
+  "build": 128,
+  "ver": "1.0.135",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b128-1.0.135/SetSod.apk",
+  "notes": "1.0.135: 🎧 แก้เด้งกลับนอม (เช่น งานเต้นรำ) — คีย์เพลงไม่เลื่อนตามฝั่งที่แก้ · LIVE/คลาวด์/คลังอ่าน META ทั้ง id และชื่อไฟล์ · ไม่ทับนอมที่ตั้งเอง"
 }
