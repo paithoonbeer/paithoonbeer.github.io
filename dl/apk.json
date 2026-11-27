@@ -1,6 +1,6 @@
 {
-  "build": 126,
-  "ver": "1.0.133",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b126-1.0.133/SetSod.apk",
-  "notes": "1.0.133: 🌗 เฟดเข้า/ออกอัตโนมัติชัดขึ้น — เฟดออกตอนใกล้จบจริง (ไม่ใช่กดแล้วเบาทันที) · ใช้ได้ทั้งสตูดิโอและ Dual · อยากเฟดทันทีกดปุ่ม 🔉 เฟด"
+  "build": 127,
+  "ver": "1.0.134",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b127-1.0.134/SetSod.apk",
+  "notes": "1.0.134: 🎧 นอมซ้าย/ขวาที่ตั้งเองไม่ถูกซิงก์ทับกลับแล้ว — ตั้งนอมขวาแล้วค้างนอมขวา (LIVE/คลาวด์เก่าทับไม่ได้)"
 }
