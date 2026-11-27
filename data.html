@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.41">
+<meta name="bp-data" content="1.0.42">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -684,11 +684,27 @@ $('btnLockBeat')?.addEventListener('click',()=>{
 $('btnT0L')?.addEventListener('click',()=>{const t0=studio.nudgeNom(-0.01);saveRecipe();toast('นอมเร็วขึ้น 10ms · t0='+t0.toFixed(3)+'s')});
 $('btnT0R')?.addEventListener('click',()=>{const t0=studio.nudgeNom(0.01);saveRecipe();toast('นอมช้าลง 10ms · t0='+t0.toFixed(3)+'s')});
 
+function openBeerDb(){return new Promise((ok,no)=>{const r=indexedDB.open('beerplayer',1);
+  r.onupgradeneeded=()=>{const d=r.result;if(!d.objectStoreNames.contains('files'))d.createObjectStore('files',{keyPath:'name'});if(!d.objectStoreNames.contains('kv'))d.createObjectStore('kv',{keyPath:'k'});if(!d.objectStoreNames.contains('prefs'))d.createObjectStore('prefs',{keyPath:'id'})};
+  r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
+async function queueStemsPending130(title,files,meta){
+  // v1.0.42 / app 1.0.130: if SetSod tab is closed, park blobs in shared IDB so the library can drain on focus
+  const db=await openBeerDb();const stamp=Date.now();const refs=[];
+  for(let i=0;i<files.length;i++){const f=files[i];const name='pendstem:'+stamp+':'+i;
+    const blob=f instanceof Blob?f:new Blob([await f.arrayBuffer()],{type:(f&&f.type)||'audio/wav'});
+    await new Promise((ok,no)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').put({name,blob,size:blob.size,added:Date.now(),src:'pendstem'});tx.oncomplete=()=>ok();tx.onerror=()=>no(tx.error)});
+    refs.push({name,fileName:(f&&f.name)||('stem'+i+'.wav')})}
+  const prev=await new Promise(ok=>{const tx=db.transaction('kv','readonly');const q=tx.objectStore('kv').get('stems-pending');q.onsuccess=()=>ok(q.result);q.onerror=()=>ok(null)});
+  const list=Array.isArray(prev&&prev.v)?prev.v.slice():[];list.push({title,meta:meta||{},files:refs,ts:stamp});
+  await new Promise((ok,no)=>{const tx=db.transaction('kv','readwrite');tx.objectStore('kv').put({k:'stems-pending',v:list.slice(-5)});tx.oncomplete=()=>ok();tx.onerror=()=>no(tx.error)});
+}
 async function sendStemsToSetsod(files,meta){
-  const bc=new BroadcastChannel('bp-stems');let ok=false;
+  const title=studio.state.title;const bc=new BroadcastChannel('bp-stems');let ok=false;
   bc.onmessage=e=>{if(e.data?.t==='ack'){ok=true;toast('ส่งเข้า SetSod แล้ว');$('sRecipe').textContent='ส่งแล้ว · เปิดคลังใน SetSod'}}
-  bc.postMessage({t:'stems',title:studio.state.title,files,meta:meta||{}});
-  setTimeout(()=>{if(!ok)toast('เปิดแท็บ SetSod ไว้ แล้วกดส่งอีกครั้ง')},1800);
+  bc.postMessage({t:'stems',title,files,meta:meta||{}});
+  setTimeout(async()=>{if(ok)return;
+    try{await queueStemsPending130(title,files,meta||{});toast('เก็บไว้รอแล้ว — เปิด/กลับไปแท็บ SetSod เพลงจะขึ้นเอง');$('sRecipe').textContent='รอแท็บ SetSod · กลับไปคลังแล้วเพลงจะขึ้น'}
+    catch(e){toast('เปิดแท็บ SetSod ไว้ แล้วกดส่งอีกครั้ง')}},1800);
 }
 
 async function makeDataNow(){
