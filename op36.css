@@ -462,3 +462,31 @@ body.live #stusave{display:none!important}
   }
   #op-dualui .dd-mxplug svg{width:14px;height:14px}
 }
+
+
+/* 1.0.143: นอม badge was in the same flex row as the deck title. On a narrow
+   iPhone deck (~176–204px) the A/B badge + two 30px head buttons leave ~40–66px
+   for the title once the chip sits beside it, so long names collapse to 2–3
+   characters. Safari also needs flex-basis 0 / overflow hidden to ellipsize.
+   Desktop and wide Fold decks keep the chip next to the title. */
+#op-dualui .dd-meta{min-width:0;flex:1 1 0%;overflow:hidden}
+#op-dualui .dd-trow{min-width:0;width:100%;overflow:hidden}
+#op-dualui .dd-trow .dd-title{flex:1 1 0%;min-width:0;max-width:100%}
+@container deck (max-width: 280px){
+  #op-dualui .dd-in{grid-template-rows:36px var(--p) 30px 30px 12px;--p:min(46cqw,calc(100cqh - 144px))}
+  #op-dualui .dd-head{align-items:flex-start}
+  #op-dualui .dd-meta{
+    display:grid;
+    grid-template-columns:auto minmax(0,1fr);
+    grid-template-areas:"title title" "ck artist";
+    column-gap:5px;
+    row-gap:1px;
+    min-width:0;
+    overflow:hidden;
+  }
+  #op-dualui .dd-trow{display:contents;overflow:visible;width:auto}
+  #op-dualui .dd-title{grid-area:title;min-width:0;max-width:none;flex:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #op-dualui .dd-ck{grid-area:ck;align-self:center}
+  #op-dualui .dd-artist{grid-area:artist;min-width:0}
+  #op-dualui .dd-meta:has(.dd-ck[hidden]){grid-template-areas:"title title" "artist artist"}
+}
