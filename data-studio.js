@@ -426,6 +426,9 @@ export function createStudio(ui){
       }catch(e){}
     }
   }
+  // 1.0.50: นอม/นับเข้า = guide — Solo on a music lane must NOT silence them (DAW click stays on).
+  function isGuideStem(s){return s==='click'||s==='countin'}
+  function musicSoloOn(){return state.tracks.some(t=>t.solo&&t.type==='audio'&&!isGuideStem(t.stem))}
   // Live mute/solo/vol — pull mixer reads tr.mute/vol/solo each quantum (no GainNode lag).
   function applyLiveMix(){
     scheduleHeard();
@@ -433,10 +436,10 @@ export function createStudio(ui){
     // MIDI chains still use muteG if present
     if(!state.playing||!state.live)return;
     const a=ac(),t=a.currentTime;
-    const anySolo=state.tracks.some(x=>x.solo);
+    const anySolo=musicSoloOn();
     for(const tr of state.tracks){
       const L=state.live.get(tr.id);if(!L||!L.muteG)continue;
-      const silent=tr.mute||(anySolo&&!tr.solo);
+      const silent=isGuideStem(tr.stem)?!!tr.mute:(tr.mute||(anySolo&&!tr.solo));
       const vol=Math.max(0,(tr.vol||0)/100);
       try{
         L.volG.gain.cancelScheduledValues(t);
@@ -573,7 +576,10 @@ export function createStudio(ui){
     state._wantKey=needsHeard()?heardKey():null;
     clearTimeout(state._heardT);state._heardT=setTimeout(()=>{if(needsHeard())ensureHeard().catch(()=>{});else ui.onUnmix?.(-1)},200)}
   /** 1.0.33: the ONE rule for what is heard (preview, ทำดาต้า, มิกซ์ดาวน์): gain of a music stem, 0 = silent */
-  function heardGain(tr,c){const anySolo=state.tracks.some(t=>t.solo&&t.type==='audio'&&t.stem!=='click'&&t.stem!=='countin');
+  function heardGain(tr,c){
+    // Guides ignore music Solo latch — only their own Mute turns them off (1.0.50)
+    if(isGuideStem(tr.stem)){if(tr.mute)return 0;return Math.max(0,(tr.vol!=null?+tr.vol:100)/100)*((c&&c.gain)||1)}
+    const anySolo=musicSoloOn();
     if(tr.mute||(anySolo&&!tr.solo))return 0;return Math.max(0,(tr.vol!=null?+tr.vol:100)/100)*((c&&c.gain)||1)}
   function sampleJobAt(cl,t){
     const local=t-cl.start;
@@ -644,7 +650,7 @@ export function createStudio(ui){
     const nomRight=()=>(state.nomSide||'R')!=='L';
     const mixBlock=(oL,oR)=>{
       const ctxSr=a.sampleRate,N=oL.length;
-      const anySolo=state.tracks.some(t=>t.solo);
+      const anySolo=musicSoloOn();
       const split=lrOn();
       const musicIsL=nomRight();
       const base=pull.from-pull.f0/ctxSr; // stream frame f0 = song time pull.from (seek while playing re-bases)
@@ -656,7 +662,8 @@ export function createStudio(ui){
       const hl=mixMode?heardLive():null;
       if(hl&&(!pull.hj||(pull.hj.T!==hl.T&&pull.hw<=0)))pull.hj={T:hl.T,job:{L:hl.T.L,R:hl.T.R,sr:hl.sr,start:hl.start,offset:0,dur:hl.T.n/hl.sr,len:hl.T.n}}; // a new render takes over only after the old one faded out
       const hj=pull.hj,hOn=!!(hl&&hj&&hj.T===hl.T),hStep=1/(0.12*ctxSr);const gStep=1/(0.03*ctxSr);
-      const nomOn=jobs.some(c=>c.guide&&!c.tr.mute&&(c.tr.vol||0)>0&&!(anySolo&&!c.tr.solo));
+      // 1.0.50: nom/count stay on during music Solo (only their own Mute silences them)
+      const nomOn=jobs.some(c=>c.guide&&!c.tr.mute&&(c.tr.vol||0)>0);
       const nb=nomOn?NOM_PREVIEW_BOOST:1,dk=nomOn&&!split?NOM_PREVIEW_DUCK:1;
       for(let i=0;i<N;i++){
         const t=base+(pull.frame+i)/ctxSr;
@@ -671,8 +678,7 @@ export function createStudio(ui){
             continue;
           }
           if(cl.guide){
-            const silent=tr.mute||(anySolo&&!tr.solo);
-            if(silent)continue;
+            if(tr.mute)continue;
             const vol=Math.max(0,(tr.vol||0)/100)*(cl.gain||1);
             const pan=clamp(tr.pan||0,-1,1);
             const pl=Math.cos((pan+1)*Math.PI/4),pr=Math.sin((pan+1)*Math.PI/4);
@@ -920,7 +926,7 @@ export function createStudio(ui){
       const chain=makeTrackChain(tr);
       try{chain.input.gain.value=1}catch(e){}
       const muteG=a.createGain();
-      const anySolo=state.tracks.some(t=>t.solo);
+      const anySolo=musicSoloOn();
       const silent=tr.mute||(anySolo&&!tr.solo);
       muteG.gain.value=silent?0:Math.max(0,(tr.vol||0)/100);
       chain.dry.connect(muteG);muteG.connect(master);
@@ -1233,7 +1239,7 @@ export function createStudio(ui){
           <button type="button" class="tb del" data-deltr="${i}" title="ลบแทร็กนี้">✕</button></div>
         <div class="tops">
           <button type="button" class="tb ${tr.mute?'on':''}" data-m="${i}" title="${tr.stem==='click'?'ปิด/เปิดเสียงนอมตอนฟัง':'ปิดเครื่องนี้ (มีผลกับไฟล์ดาต้าด้วย)'}">M</button>
-          <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่">S</button>
+          <button type="button" class="tb ${tr.solo?'on':''}" data-s="${i}" title="โซโล่เลนนี้ · นอม/นับเข้ายังดัง · ปิดเสียงเลนใช้ปุ่ม M">S</button>
           ${isMusicLane(tr)?`<button type="button" class="tb eqb ${(!eqFlat(tr.eq)||(tr.mute&&(state.maxCut||!eqFlat(tr.cut))))?'on':''}" data-eqo="${i}" title="${tr.mute?'ตัดเสียงที่หลงเหลือเพิ่ม (ต่ำ/กลาง/แหลม)':'EQ ต่ำ/กลาง/แหลม (ได้ทั้งตอนฟังและในไฟล์ดาต้า)'}">🎚</button>`:''}
         </div>`;
       box.appendChild(el);
@@ -1636,7 +1642,8 @@ export function createStudio(ui){
       const wz=e.target.closest('[data-wz]');if(wz){setTrackWaveZoom(+wz.dataset.wz,+wz.dataset.d);return}
       const m=e.target.closest('[data-m]');if(m){const i=+m.dataset.m,trm=state.tracks[i];
         toggleLaneMute(i);return}
-      const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+      const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();
+        try{ui.toast?.(state.tracks[i].solo?'🎙 โซโล่「'+state.tracks[i].name+'」· นอม/นับยังดัง · ปิดเสียงเลนกด M':'ปิดโซโล่แล้ว',1800)}catch(x){}return}
       const th=e.target.closest('.thead');if(th&&!e.target.closest('input,button')){
         state.sel.track=+th.dataset.i;
         // Don't renderAll while playing — selection class only
@@ -1696,7 +1703,8 @@ export function createStudio(ui){
     };
     $('mixer').onclick=e=>{
       const m=e.target.closest('[data-m]');if(m){toggleLaneMute(+m.dataset.m);return}
-      const s=e.target.closest('[data-s]');if(s){mark();state.tracks[+s.dataset.s].solo=!state.tracks[+s.dataset.s].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();return}
+      const s=e.target.closest('[data-s]');if(s){mark();const i=+s.dataset.s;state.tracks[i].solo=!state.tracks[i].solo;if(state.playOnly)state.playOnly=null;applyLiveMix();renderTracks();renderMixer();
+        try{ui.toast?.(state.tracks[i].solo?'🎙 โซโล่「'+state.tracks[i].name+'」· นอม/นับยังดัง · ปิดเสียงเลนกด M':'ปิดโซโล่แล้ว',1800)}catch(x){}return}
     };
 
     // arrange interactions + draggable red playhead
