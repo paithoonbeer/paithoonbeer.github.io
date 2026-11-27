@@ -1,6 +1,6 @@
 {
-  "build": 131,
-  "ver": "1.0.138",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b131-1.0.138/SetSod.apk",
-  "notes": "1.0.138: ⏱ เวลารวมลิสต์คืนนี้แม่นขึ้น — ประมาณจากเพลงที่รู้ความยาวแล้ว + เติมเวลาจากไฟล์ในเครื่อง (ไม่โชว์ ~23 นาทีทั้งลิสต์ทั้งที่ยังไม่รู้ครบ)"
+  "build": 132,
+  "ver": "1.0.139",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b132-1.0.139/SetSod.apk",
+  "notes": "1.0.139: 🔊 SFX ป็อปอัปในโซนเด็ค/กำลังเล่น — ไม่บังลิสต์เพลง · กดปุ่ม SFX ที่แถบครอสเฟด (หรือชิป SFX)"
 }
