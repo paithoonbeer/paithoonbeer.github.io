@@ -8,10 +8,12 @@ export const REF_PRESET={style:'ref',rate:2,accent:false,ciMode:'over',ci:1,cues
   sr:48000,loud:true,lufs:-11,tpDb:-1,clickPeakDb:-0.5,guide:{on:false,stems:['guitar','vocals'],db:-28}};
 // counting unit = click → 8 clicks before a marker
 export const CUE_PATTERN=['one',null,'two',null,'one','two','three','four'];
-/** 1.0.47: stretch a cue pattern for slow (½) counting — insert a null after every slot so words span 2× clicks. */
-export function stretchCue(pat,pace){if(+pace!==2)return pat;const out=[];for(const w of pat){out.push(w);out.push(null)}return out}
+/** Normalize count pace: 0.5=เร็ว(2×) · 1=ทุกจังหวะ · 2=ช้า(½) · 4=ช้ามาก(¼). */
+export function countPaceNorm(v){const p=+v;return (p===.5||p===0.5||p===2||p===4)?p:1}
+/** 1.0.47/48: stretch a cue pattern — pace 2/4 insert nulls so words span more clicks; 0.5 keeps pattern (grid step handles speed in live). */
+export function stretchCue(pat,pace){const p=countPaceNorm(pace);if(p<=1)return pat;const gap=Math.round(p)-1,out=[];for(const w of pat){out.push(w);for(let i=0;i<gap;i++)out.push(null)}return out}
 /** Slots (clicks) a count of n words occupies at the given pace. */
-export function countSlots(n,pace){return (+n===4?4:8)*(+pace===2?2:1)}
+export function countSlots(n,pace){const words=+n===4?4:8,p=countPaceNorm(pace);return Math.max(1,Math.round(words*p))}
 
 /** ref beep: fast attack (2 ms), two partials with a slight downward glide, hard cut at ~240 ms (3 ms fade). */
 export function beepAt(L,R,at,sr,amp,accent){
@@ -44,14 +46,14 @@ export const COUNT4=['one','two','three','four'];
     legacy {kind:'section',t} = 8-click count ENDING right before t (1.0.30 pins); 'end' ignored. */
 export function cueWords(grid,markers,t0,bpm,rate,opt){
   opt=opt||{};const words=new Map();
-  const defPace=+opt.pace===2?2:1;
+  const defPace=countPaceNorm(opt.pace);
   const put=(startIdx,pat)=>{for(let j=0;j<pat.length;j++){const w=pat[j];const i=startIdx+j;if(w&&i>=0&&i<grid.length)words.set(i,w)}};
-  // count over the intro first: ci cycles from the first click (1.0.47: pace stretches each cycle)
+  // count over the intro first: ci cycles from the first click (1.0.47/48: pace stretches each cycle)
   if(opt.ciMode==='over'){const pat=stretchCue(CUE_PATTERN,defPace),span=pat.length;for(let c=0;c<(opt.ci|0);c++)put(span*c,pat)}
   if(opt.cues!==false)for(const m of markers||[]){
     if(!m||!isFinite(m.t))continue;
     const k=markerClickIdx(m.t,t0,bpm,rate);
-    const pace=+m.pace===2?2:(+m.pace===1?1:defPace);
+    const pace=m.pace!=null?countPaceNorm(m.pace):defPace;
     if(m.kind==='count')put(k,stretchCue((+m.n===4)?COUNT4:CUE_PATTERN,pace));
     else if(m.kind==='section')put(k-countSlots(8,pace),stretchCue(CUE_PATTERN,pace));
   }
