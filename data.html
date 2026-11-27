@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.46">
+<meta name="bp-data" content="1.0.47">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -287,7 +287,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button class="btn" id="goAi" hidden>↻ ลองแยกใหม่</button>
     <span class="status" id="sAi"></span>
     <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างเหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับเข้าตอนต้นเพลง · 48k · −11 LUFS">⭐ แบบไฟล์ตัวอย่าง</button>
-    <span class="cnt"><button type="button" class="btn" id="btnCount" aria-pressed="false" title="เปิดแล้วคลิกบนไทม์ไลน์ตรงไหน = นับตรงนั้น (ตามนอมของเพลง) · คลิกที่ช่องนับ = ลบ · ลาก = ย้าย">🗣 นับ 1-2-3-4</button><select id="rCountN" title="แบบการนับ"><option value="8" title="one · two · one two three four">8 ครั้ง</option><option value="4" title="one two three four">4 ครั้ง</option></select></span>
+    <span class="cnt"><button type="button" class="btn" id="btnCount" aria-pressed="false" title="เปิดแล้วคลิกบนไทม์ไลน์ตรงไหน = นับตรงนั้น (ตามนอมของเพลง) · คลิกที่ช่องนับ = ลบ · ลาก = ย้าย">🗣 นับ 1-2-3-4</button><select id="rCountN" title="แบบการนับ"><option value="8" title="one · two · one two three four">8 ครั้ง</option><option value="4" title="one two three four">4 ครั้ง</option></select><select id="rCountPace" title="จังหวะการนับตามห้องเพลง — ช้า = กินเวลา 2 เท่า (เหมาะเพลงช้า)"><option value="1" selected>ตามจังหวะ</option><option value="2">ช้า (½)</option></select></span>
     <label class="chk">นับเข้า <select id="rIntro"><option value="0">ไม่นับ</option><option value="over1" selected>ต้นเพลง 1 รอบ</option><option value="over2">ต้นเพลง 2 รอบ</option><option value="pre1">ก่อนเพลง 1 ห้อง</option><option value="pre2">ก่อนเพลง 2 ห้อง</option></select></label>
     <div class="rmutes" id="rMutes" title="ฝั่งเพลงไม่เอาเครื่องไหน (จำแยกต่อเพลง) — ตรงกับปุ่ม M ที่หัวแทร็ก">
       <span>ปิด:</span>
@@ -386,6 +386,7 @@ const studio=createStudio({
   onNomMute(mute){const c=document.getElementById('chkMetro');if(c){c.checked=!mute;c.dispatchEvent(new Event('change',{bubbles:true}))}},
   countArmed(){return !!window.__countArmed},
   countN(){return +(document.getElementById('rCountN')?.value)||8},
+  countPace(){return +(document.getElementById('rCountPace')?.value)===2?2:1},
   tapArmed(){return !!window.__tapArmed},
   onTapAt(r){window.__onTapAt?.(r)},
   onProject(st){document.getElementById('sOut').textContent=`${st.title} · BPM ${Math.round((st.bpm||0)*100)/100}${st.dirty?' · ยังไม่บันทึก':''} · Space เล่น/หยุด · T แตะจังหวะ 1`},
@@ -539,13 +540,14 @@ function applyRecipeMutes(opt){
 function guideKeysFromUI(){return [...$('rGuideBox').querySelectorAll('input[data-guide]:checked')].map(x=>x.dataset.guide)}
 function recipeState(){return{mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value,feel:$('rFeel').value||'normal',flourish:!!$('rFlourish').checked,
   rate:+$('rRate').value===2?2:1,accent:!!$('rAccent').checked,ciMode:$('rCiMode').value==='over'?'over':'pre',cues:true,endAuto:!!$('rEndAuto').checked,
-  outFmt:$('rOutFmt')?.value==='mono'?'mono':'dual',
+  outFmt:$('rOutFmt')?.value==='mono'?'mono':'dual',countPace:+$('rCountPace')?.value===2?2:1,
   sr:+$('rSr').value||0,loud:!!$('rLoud').checked,guide:{on:!!$('rGuide').checked,stems:guideKeysFromUI(),db:Math.max(-40,Math.min(-12,+$('rGuideDb').value||-28))}}}
 function syncNomOpt(){const r=recipeState();studio.state.recipe=r;studio.state.nomOpt={style:r.feel==='ref'?'ref':'normal',rate:r.rate,accent:r.accent,ciMode:r.ciMode,ci:r.ci,cues:r.cues,
-  endT:undefined};return r}
+  countPace:r.countPace,endT:undefined};return r}
 function applyRecipeState(o){if(!o)return;if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;
   if(o.rate)$('rRate').value=String(o.rate===2?2:1);if('accent' in o)$('rAccent').checked=!!o.accent;if(o.ciMode)$('rCiMode').value=o.ciMode==='over'?'over':'pre';if('cues' in o)$('rCues').checked=!!o.cues;if('endAuto' in o)$('rEndAuto').checked=!!o.endAuto;
   if(o.outFmt&&$('rOutFmt'))$('rOutFmt').value=o.outFmt==='mono'?'mono':'dual';
+  if(o.countPace!=null&&$('rCountPace'))$('rCountPace').value=+o.countPace===2?'2':'1';
   if(o.sr!=null)$('rSr').value=String([44100,48000].includes(+o.sr)?+o.sr:0);if('loud' in o)$('rLoud').checked=!!o.loud;
   if(o.guide){$('rGuide').checked=!!o.guide.on;if(Array.isArray(o.guide.stems)){const g=new Set(o.guide.stems);$('rGuideBox').querySelectorAll('input[data-guide]').forEach(i=>i.checked=g.has(i.dataset.guide))}if(o.guide.db!=null)$('rGuideDb').value=String(Math.max(-40,Math.min(-12,+o.guide.db)));showGuideDb()}
   syncIntroUI();syncNomOpt();applyRecipeMutes();refreshGuides();updateOutFmtHint();updateChPill()}
@@ -683,6 +685,10 @@ $('btnGuidePrev').onclick=async()=>{
   }catch(e){toast('❌ '+(e.message||e));b.textContent='▶ ฟังไกด์'}finally{b.disabled=false}
 };
 $('rIntro').onchange=()=>{const v=$('rIntro').value;$('rCi').value=v==='0'?'0':v.slice(-1);$('rCiMode').value=v.startsWith('pre')?'pre':'over';markSetDirty()};
+$('rCountPace').onchange=()=>{const p=+$('rCountPace').value===2?2:1;syncNomOpt();
+  try{for(const m of studio.state.markers||[])if(m.kind==='count')m.pace=p;studio.setMarkers(studio.state.markers)}catch(e){}
+  markSetDirty();refreshGuides();$('sRecipe').textContent=p===2?'จังหวะนับ: ช้า (½) — เหมาะเพลงช้า':'จังหวะนับ: ตามจังหวะห้อง/นอม'};
+$('rCountN').onchange=()=>{$('sRecipe').textContent=+$('rCountN').value===4?'แบบนับ: 1 2 3 4':'แบบนับ: 1 · 2 · 1 2 3 4'};
 syncIntroUI();
 /* ⭐ one-tap preset = measured reference file */
 $('btnRefPreset').onclick=()=>{

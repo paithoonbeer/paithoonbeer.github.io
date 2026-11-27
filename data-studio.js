@@ -1,5 +1,5 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
-import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.40';
+import {beepAt,clickGrid,cueWords,countSlots,stretchCue,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.47';
 import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
 import {renderHeard,denoiseBed,UNMIX,UNMIX_CLEAN,UNMIX_DEFAULT,eqFlat} from './data-unmix.js?v=1.0.46';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -1157,35 +1157,38 @@ export function createStudio(ui){
     return Math.round(t0*10000)/10000;
   }
   function clickStep(){const r=state.nomOpt&&state.nomOpt.rate===2?2:1;return 60/(state.bpm||120)*r}
+  /** 1.0.47: count pace — 1 = ตามจังหวะห้อง/นอม, 2 = ช้า (½) กินคลิก 2 เท่า */
+  function countPaceOf(m){if(m&&(+m.pace===2||+m.pace===1))return +m.pace;const p=state.nomOpt&&state.nomOpt.countPace;return +p===2?2:1}
   function snapClick(t){const st=clickStep(),t0=saneT0(state.t0,state.bpm);const k=Math.max(0,Math.round((t-t0)/st));return Math.round((t0+k*st)*10000)/10000}
-  function countLen(m){return (+m.n===4?4:8)*clickStep()}
+  function countLen(m){return countSlots(+m?.n===4?4:8,countPaceOf(m))*clickStep()}
   function sortMarkers(){state.markers.sort((a,b)=>a.t-b.t)}
   function countAt(t){return state.markers.find(m=>m.kind==='count'&&t>=m.t-clickStep()*0.5&&t<m.t+countLen(m)-clickStep()*0.5)||null}
   function changed(){state.dirty=true;sortMarkers();renderArrange();renderCountBlocks();ui.onMarkers?.(state.markers)}
   /** Tap on the timeline (song time): remove the count under it, else add one starting on the nearest nom click. */
-  function toggleCountAt(t,n){
+  function toggleCountAt(t,n,pace){
     const hit=countAt(t);mark();
     if(hit){state.markers=state.markers.filter(m=>m!==hit);changed();return null}
-    const m={id:uid(),kind:'count',t:snapClick(t),n:+n===4?4:8,src:'manual'};
+    const m={id:uid(),kind:'count',t:snapClick(t),n:+n===4?4:8,pace:+pace===2?2:1,src:'manual'};
     state.markers=state.markers.filter(x=>!(x.kind==='count'&&Math.abs(x.t-m.t)<1e-3));
     state.markers.push(m);changed();return m;
   }
-  function addCount(t,n){const m={id:uid(),kind:'count',t:snapClick(t!=null?t:playheadT()-musicStart()),n:+n===4?4:8,src:'manual'};mark();state.markers.push(m);changed();return m}
+  function addCount(t,n,pace){const m={id:uid(),kind:'count',t:snapClick(t!=null?t:playheadT()-musicStart()),n:+n===4?4:8,pace:+pace===2?2:1,src:'manual'};mark();state.markers.push(m);changed();return m}
   function moveCount(id,t){const m=state.markers.find(x=>x.id===id);if(!m)return;mark();
-    if(m.kind!=='count'){m.kind='count';m.n=8} // legacy pin → real count group once it's moved
+    if(m.kind!=='count'){m.kind='count';m.n=8;if(!m.pace)m.pace=1} // legacy pin → real count group once it's moved
     m.t=snapClick(Math.max(0,t));
     state.markers=state.markers.filter(x=>x===m||!(x.kind==='count'&&Math.abs(x.t-m.t)<1e-3)); // dropped onto another → merge
     changed()}
   function deleteCount(id){mark();state.markers=state.markers.filter(x=>x.id!==id);changed()}
   function setMarkers(list){
     state.markers=(list||[]).filter(m=>m&&m.kind!=='end'&&isFinite(+m.t)).map(m=>m.kind==='count'
-      ?{id:m.id||uid(),kind:'count',t:+m.t,n:+m.n===4?4:8,src:m.src||'manual'}
+      ?{id:m.id||uid(),kind:'count',t:+m.t,n:+m.n===4?4:8,pace:+m.pace===2?2:1,src:m.src||'manual'}
       :{id:m.id||uid(),kind:'section',t:+m.t,src:m.src||'manual'}); // legacy 1.0.30 pin → 8-click count before it
     sortMarkers();renderArrange();renderCountBlocks();
   }
   /** count spans in song time (legacy 'section' = 8 clicks before its t) */
   function countSpans(){const st=clickStep();return state.markers.filter(m=>m.kind==='count'||m.kind==='section').map(m=>{
-    const start=m.kind==='count'?m.t:Math.max(0,m.t-8*st);return{m,start,end:start+(m.kind==='count'?countLen(m):8*st),n:m.kind==='count'?(+m.n===4?4:8):8}})}
+    const pace=countPaceOf(m),slots=countSlots(m.kind==='count'?(+m.n===4?4:8):8,pace);
+    const start=m.kind==='count'?m.t:Math.max(0,m.t-slots*st);return{m,start,end:start+slots*st,n:m.kind==='count'?(+m.n===4?4:8):8,pace}})}
   function drawMarkers(g){
     g.font='bold 10px NotoThai,sans-serif';const ms=musicStart();
     for(const c of countSpans()){
@@ -1273,20 +1276,20 @@ export function createStudio(ui){
      for(const c of countSpans()){const d=document.createElement('div');d.className='cband';d.style.left=((ms0+c.start)*state.pxPerSec)+'px';
        d.style.width=Math.max(8,(c.end-c.start)*state.pxPerSec)+'px';d.style.height=H+'px';d.dataset.mid=c.m.id;
        // 1.0.33: chip = drag handle (mouse + touch) · ✕ = remove
-       d.innerHTML=`<b class="cgrip" title="ลาก = ย้ายจุดนับ (ติดจังหวะนอม)">⠿ 🗣 ${c.n===4?'1 2 3 4':'1 · 2 · 1 2 3 4'}<i class="cdel" title="ลบจุดนับ" aria-label="ลบจุดนับ">✕</i></b>`;lanes.appendChild(d)}}
+       d.innerHTML=`<b class="cgrip" title="ลาก = ย้ายจุดนับ (ติดจังหวะนอม)">⠿ 🗣 ${c.n===4?'1 2 3 4':'1 · 2 · 1 2 3 4'}${c.pace===2?' · ช้า':''}<i class="cdel" title="ลบจุดนับ" aria-label="ลบจุดนับ">✕</i></b>`;lanes.appendChild(d)}}
     const els=lanes.querySelectorAll('.lane');if(!els.length)return;
     let ti=state.tracks.findIndex(t=>t.stem==='click');if(ti<0)ti=els.length-1;
     const lane=els[ti];if(!lane)return;
-    const ms=musicStart(),no=state.nomOpt||{},st=clickStep(),t0=saneT0(state.t0,state.bpm);
+    const ms=musicStart(),no=state.nomOpt||{},st=clickStep(),t0=saneT0(state.t0,state.bpm),pace=+no.countPace===2?2:1;
     if(no.ciMode==='over'&&(+no.ci||0)>0&&state.tracks.some(t=>t.stem==='click')){
       const b=document.createElement('div');b.className='cblock intro';
-      b.style.left=((ms+t0)*state.pxPerSec)+'px';b.style.width=Math.max(8,8*(+no.ci)*st*state.pxPerSec)+'px';
-      b.innerHTML=`<b>🗣 นับเข้า ×${+no.ci}</b>`;b.title='นับเข้าอัตโนมัติ — เปลี่ยนที่ "นับเข้า"';lane.appendChild(b);
+      b.style.left=((ms+t0)*state.pxPerSec)+'px';b.style.width=Math.max(8,countSlots(8,pace)*(+no.ci)*st*state.pxPerSec)+'px';
+      b.innerHTML=`<b>🗣 นับเข้า ×${+no.ci}${pace===2?' · ช้า':''}</b>`;b.title='นับเข้าอัตโนมัติ — เปลี่ยนที่ "นับเข้า" / จังหวะนับ';lane.appendChild(b);
     }
     for(const c of countSpans()){
       const b=document.createElement('div');b.className='cblock';b.dataset.mid=c.m.id;
       b.style.left=((ms+c.start)*state.pxPerSec)+'px';b.style.width=Math.max(8,(c.end-c.start)*state.pxPerSec)+'px';
-      b.innerHTML=`<b>🗣 ${c.n===4?'one two three four':'one · two · one two three four'}</b>`;b.title='แตะ = ลบ · ลาก = ย้าย';
+      b.innerHTML=`<b>🗣 ${c.n===4?'one two three four':'one · two · one two three four'}${c.pace===2?' · ช้า':''}</b>`;b.title='แตะ = ลบ · ลาก = ย้าย';
       lane.appendChild(b);
     }
   }
@@ -1742,7 +1745,7 @@ export function createStudio(ui){
       rulerWrap.style.cursor='ew-resize';
       rulerWrap.addEventListener('pointerdown',e=>{
         if(e.button!=null&&e.button!==0)return;
-        if(ui.countArmed?.()){e.preventDefault();e.stopPropagation();const t=timeFromClientX(e.clientX)-musicStart();toggleCountAt(t,ui.countN?.()||8);return}
+        if(ui.countArmed?.()){e.preventDefault();e.stopPropagation();const t=timeFromClientX(e.clientX)-musicStart();toggleCountAt(t,ui.countN?.()||8,ui.countPace?.()||1);return}
         if(ui.tapArmed?.()){e.preventDefault();e.stopPropagation();ui.onTapAt?.(tapDownbeat(timeFromClientX(e.clientX)-musicStart()));return}
         startPhDrag(e);
       });
@@ -1772,7 +1775,7 @@ export function createStudio(ui){
       const m=state.markers.find(x=>x.id===id);if(!m)return;
       e.preventDefault();e.stopPropagation();
       const pid=e.pointerId;try{(grip||cb||wrap).setPointerCapture?.(pid)}catch(_){}
-      const x0=e.clientX,sl0=wrap.scrollLeft,t0m=m.kind==='count'?m.t:Math.max(0,m.t-8*clickStep());let moved=false,nt=t0m;
+      const x0=e.clientX,sl0=wrap.scrollLeft,t0m=m.kind==='count'?m.t:Math.max(0,m.t-countSlots(8,countPaceOf(m))*clickStep());let moved=false,nt=t0m;
       const els=()=>[...$('lanes').querySelectorAll(`.cband[data-mid="${id}"],.cblock[data-mid="${id}"]`)];
       const live=els();live.forEach(el=>el.classList.add('cdrag'));
       const mv=ev=>{if(ev.pointerId!==pid)return;const dx=ev.clientX-x0+(wrap.scrollLeft-sl0);if(Math.abs(dx)>5)moved=true;if(!moved)return;
@@ -1790,7 +1793,7 @@ export function createStudio(ui){
       if(phDrag)return;
       if(performance.now()-cntSwallowClick<400)return; // the click that ends a count drag/tap must not add a new count
       if(e.target.closest('.cblock'))return;
-      if(ui.countArmed?.()){toggleCountAt(timeFromClientX(e.clientX)-musicStart(),ui.countN?.()||8);return}
+      if(ui.countArmed?.()){toggleCountAt(timeFromClientX(e.clientX)-musicStart(),ui.countN?.()||8,ui.countPace?.()||1);return}
       if(ui.tapArmed?.()){ui.onTapAt?.(tapDownbeat(timeFromClientX(e.clientX)-musicStart()));return}
       if(e.target.closest('.clip,.hndl,.mblock,#playhead'))return;
       const t=timeFromClientX(e.clientX);
@@ -2264,19 +2267,21 @@ export function createStudio(ui){
     const ciMode=opt.ciMode==='over'?'over':'pre';
     const ci=Math.max(0,Math.min(4,+(opt.ci||0)|0));
     const style=opt.style||'normal',flourish=!!opt.flourish,t0=Math.max(0,+opt.t0||0);
-    const rate=opt.rate===2?2:1,accent=opt.accent!==false;
-    const spb=60/bpm,ciSec=ciMode==='pre'?ci*4*spb:0,total=ciSec+Math.max(0.5,+musicDur||1);
+    const rate=opt.rate===2?2:1,accent=opt.accent!==false,pace=+opt.countPace===2?2:1;
+    const spb=60/bpm,ciSec=ciMode==='pre'?ci*4*spb*pace:0,total=ciSec+Math.max(0.5,+musicDur||1);
     const endT=Math.min(+musicDur||1,opt.endT!=null&&isFinite(opt.endT)?+opt.endT:Infinity); // song-time click stop
     const n=Math.max(1,Math.ceil(total*sr));
     const L=new Float32Array(n),R=new Float32Array(n);
     const hasVoice=CI_WORDS.some(w=>CI_VOICE[w]);
     // —— count-in (baked, pre-roll — old เด๋อ mode) ——
     // 2 bars: bar1 "one … two …" (beats 1+3), bar2 "one two three four" — like reference เด๋อ
-    if(ciMode==='pre')for(let bi=0;bi<ci*4;bi++){
-      const at=Math.floor(bi*spb*sr),b4=bi%4,bar=Math.floor(bi/4);
+    // 1.0.47: pace=2 → slow half-time (words every 2 beats, pre-roll lasts 2×)
+    if(ciMode==='pre')for(let bi=0;bi<ci*4*pace;bi++){
+      const at=Math.floor(bi*spb*sr),step=Math.floor(bi/pace),b4=step%4,bar=Math.floor(step/4);
+      const onBeat=pace===1||bi%pace===0;if(!onBeat)continue;
       const word=CI_WORDS[b4];
       let speak=true;
-      if(ci>=2&&bar===0&&(b4===1||b4===3))speak=false; // half-time first bar
+      if(ci>=2&&bar===0&&(b4===1||b4===3)&&pace===1)speak=false; // half-time first bar (only when already on beat grid)
       let spoke=false;
       if(speak&&hasVoice)spoke=mixVoiceAt(L,R,at,word,sr,b4===0?1.15:1.0);
       // Louder transient clicks like reference「เด๋อ」nom channel
@@ -2290,7 +2295,7 @@ export function createStudio(ui){
     if(style==='ref'||style==='normal'){
       // Data 1.0.30: generic grid — rate (every beat / every 2 beats) · accent on/off · spoken cues
       const grid=clickGrid(t0,bpm,rate,endT);
-      const words=cueWords(grid,opt.markers,t0,bpm,rate,{cues:!!opt.cues,ciMode,ci});
+      const words=cueWords(grid,opt.markers,t0,bpm,rate,{cues:!!opt.cues,ciMode,ci,pace});
       grid.forEach((t,k)=>{
         const at=Math.floor((ciSec+t)*sr);if(at>=n)return;
         const acc=accent&&k%4===0,w=words.get(k);
@@ -2335,7 +2340,7 @@ export function createStudio(ui){
   function previewNomOpt(){
     const o=state.nomOpt||{};
     return{style:o.style==='ref'?'ref':'normal',rate:o.rate===2?2:1,accent:o.accent!==false,ciMode:o.ciMode==='pre'?'pre':'over',
-      ci:o.ciMode==='over'?(o.ci|0):0,cues:!!o.cues,markers:state.markers,endT:o.endT};
+      ci:o.ciMode==='over'?(o.ci|0):0,cues:!!o.cues,markers:state.markers,endT:o.endT,countPace:+o.countPace===2?2:1};
   }
   /** Mono sum of chosen stems (for the quiet guide bed on the nom side), regardless of mute. */
   async function renderStemsMono(keys,sr,padLead,totalDur){
