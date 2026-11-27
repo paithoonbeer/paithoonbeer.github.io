@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.53">
+<meta name="bp-data" content="1.0.54">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -59,13 +59,11 @@ body{display:flex;flex-direction:column;height:100vh}
 .recipe{display:flex;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line);background:#10151b;flex-wrap:wrap;min-width:0;max-width:100%}
 .recipe .btn.pri{flex:0 1 auto;max-width:100%}
 .recipe b{font-size:12px;color:var(--acc)}
-.recipe .rmutes{display:flex;gap:8px;flex-wrap:wrap;align-items:center;color:var(--mut);font-size:11px}
 .recipe .rlead{display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--mut)}
 .recipe .rlead .lb{min-height:28px;min-width:30px;padding:2px 6px;font-size:15px;line-height:1}
 .recipe .rlead .lb.on{background:#2c3a22;border-color:#7fb04a;box-shadow:0 0 0 1px #7fb04a inset}
 .recipe .rlead .lb.push.on{background:#3a2c18;border-color:#e0a040;box-shadow:0 0 0 1px #e0a040 inset}
 .recipe .rlead select{min-height:28px;font-size:12px}
-.recipe .rmutes .btn{min-height:26px;font-size:11px;padding:2px 8px}
 select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2385909b'/%3E%3C/svg%3E") no-repeat right 6px center;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:3px 20px 3px 6px}
 .recipe select{background-color:#0c0f14;border:1px solid var(--line);border-radius:6px;padding:3px 20px 3px 6px;color:var(--tx)}
 .recipe .rnom2{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;min-width:0;max-width:100%}
@@ -291,20 +289,10 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button type="button" class="btn tog" id="btnHq" aria-pressed="false" hidden title="💎 คุณภาพสูง (BS-RoFormer) — แยกเสียงชัดกว่า เสียงรั่วน้อยกว่า · โหลดโมเดลครั้งแรก ~336 MB · ช้ากว่าปกติ · พีซีเท่านั้น">💎 HQ</button>
     <button class="btn" id="goAi" hidden>↻ ลองแยกใหม่</button>
     <span class="status" id="sAi"></span>
-    <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างเหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับเข้าตอนต้นเพลง · 48k · −11 LUFS">⭐ แบบไฟล์ตัวอย่าง</button>
+    <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างเหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับเข้าตอนต้นเพลง · 48k · −11 LUFS">📄 แบบไฟล์ตัวอย่าง</button>
     <span class="cnt"><button type="button" class="btn" id="btnCount" aria-pressed="false" title="เปิดแล้วคลิกบนไทม์ไลน์ตรงไหน = นับตรงนั้น (ตามนอมของเพลง) · คลิกที่ช่องนับ = ลบ · ลาก = ย้าย">🗣 นับ 1-2-3-4</button><select id="rCountN" title="แบบการนับ"><option value="8" title="one · two · one two three four">8 ครั้ง</option><option value="4" title="one two three four">4 ครั้ง</option></select><select id="rCountPace" title="จังหวะนับเทียบกับจังหวะนอม — ทุกจังหวะ / เร็ว / ช้า / ช้ามาก"><option value="1" selected>ทุกจังหวะ (ตามนอม)</option><option value="0.5">เร็ว (2×)</option><option value="2">ช้า (½)</option><option value="4">ช้ามาก (¼)</option></select></span>
     <label class="chk">นับเข้า <select id="rIntro"><option value="0">ไม่นับ</option><option value="over1" selected>ต้นเพลง 1 รอบ</option><option value="over2">ต้นเพลง 2 รอบ</option><option value="pre1">ก่อนเพลง 1 ห้อง</option><option value="pre2">ก่อนเพลง 2 ห้อง</option></select></label>
-    <div class="rmutes" id="rMutes" title="ฝั่งเพลงไม่เอาเครื่องไหน (จำแยกต่อเพลง) — ตรงกับปุ่ม M ที่หัวแทร็ก">
-      <span>ปิด:</span>
-      <label class="chip"><input type="checkbox" data-mute="drums"><i>กลอง</i></label>
-      <label class="chip"><input type="checkbox" data-mute="bass"><i>เบส</i></label>
-      <label class="chip"><input type="checkbox" data-mute="guitar"><i>กีตาร์</i></label>
-      <label class="chip"><input type="checkbox" data-mute="keys"><i>คีย์</i></label>
-      <label class="chip"><input type="checkbox" data-mute="other"><i>อื่นๆ</i></label>
-      <label class="chip"><input type="checkbox" data-mute="vocals"><i>ร้อง</i></label>
-      <button type="button" class="btn icon sm" id="btnMuteClear" title="เปิดทุกเครื่อง">↺</button>
-    </div>
-    <div class="rlead" id="rLead" title="Data 1.0.53 — ⭐ เสียงเด่นของเพลงนี้ (จำแยกต่อเพลง)">
+    <div class="rlead" id="rLead" title="Data 1.0.54 — ⭐ เสียงเด่นของเพลงนี้ (จำแยกต่อเพลง)">
       <span title="⭐ เสียงเด่น: เลนที่เลือกดังขึ้น +3 dB · กดซ้ำ = ยกเลิก">⭐</span>
       <button type="button" class="btn lb" data-lead="vocals" title="⭐ ร้องเด่น">🎤</button>
       <button type="button" class="btn lb" data-lead="guitar" title="⭐ กีตาร์เด่น">🎸</button>
@@ -542,8 +530,11 @@ const DEF_PROFS=[
   {id:'samcha',name:'สามช่าเต็มวง',mute:[],nom:'R',ci:1,feel:'samcha',flourish:1},
   {id:'slow',name:'เพลงช้า',mute:[],nom:'R',ci:1,feel:'slow',flourish:0}
 ];
-function muteKeysFromUI(){return [...$('rMutes').querySelectorAll('input[data-mute]:checked')].map(x=>x.dataset.mute)}
-function setMuteUI(keys){const set=new Set(keys||[]);$('rMutes').querySelectorAll('input[data-mute]').forEach(inp=>{inp.checked=set.has(inp.dataset.mute)})}
+/* 1.0.54: mute chips row removed — family keys live in recipeMutes, applied to lanes; user toggles via track M / 📢 / ✂🎸 */
+const MUTE_FAMS=['drums','bass','guitar','keys','other','vocals'];
+let recipeMutes=[];
+function muteKeysFromUI(){return recipeMutes.slice()}
+function setMuteUI(keys){recipeMutes=[...new Set((keys||[]).filter(Boolean))]}
 function applyRecipeMutes(opt){
   const keys=muteKeysFromUI();
   studio.applyStemMutes(keys,opt);
@@ -553,8 +544,8 @@ function applyRecipeMutes(opt){
   const ci=studio.state.tracks.find(t=>t.stem==='countin');
   if(ci)ci.mute=false;
   studio.applyLiveMix?.();
-  $('sRecipe').textContent=keys.length?'ปิด: '+keys.join(', '):'เปิดทุกแทร็กเสียง';
   applyLeadPush();
+  $('sRecipe').textContent=muteStatus();
 }
 /* ===== Data 1.0.53 (MUS-14) ⭐ เสียงเด่น · 🎼 แนวเพลง · ✂🎸 ตัดโซโล่ · 📢 ดันสู้วง — saved per song in the recipe ===== */
 const LP={lead:'',genre:'',cutSolo:false,push:false,pushPrev:null};
@@ -578,7 +569,7 @@ function applyLeadPush(){
   const ld=T.find(t=>t.stem==='lead');if(ld&&LP.push)ld.mute=true;
   studio.setPush(LP.push);
   try{studio.refreshLanes()}catch(e){}
-  syncChipsFromTracks();
+  syncMutesFromTracks();
 }
 function fineIdx(stem){return studio.state.tracks.findIndex(t=>t.type==='audio'&&t.stem===stem&&!t.fineOf&&t.clips.length)}
 async function ensureSoloCut(){
@@ -647,18 +638,13 @@ function restoreSong(){const t=songKey();if(!t)return false;let hit=false;
   const r=loadSongMap('ssd-recipe-by-title')[t];if(r){applyRecipeState(r);hit=true}
   const m=loadSongMap('ssd-markers-by-title')[t];if(Array.isArray(m)&&m.length){studio.setMarkers(m);hit=true}
   syncNomOpt();return hit}
+window.restoreSong=restoreSong;
 function markerStatus(){const n=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;return n?`🗣 ${n} จุดนับ`:''}
-$('btnMuteClear').onclick=()=>{setMuteUI([]);applyRecipeMutes();saveRecipe()};
-// 1.0.37 (t320u): a chip changes only its own lane (and that lane's sub-lanes), never the others
 $('btnMaxCut').onclick=()=>{const on=studio.setMaxCut(!studio.getMaxCut());toast(on?'✂ ตัดแรงสุด: เลนที่ปิดทั้งหมดตัดเต็ม 24 dB (🧹 ยังเปิด/ปิดแยกได้)':'✂ กลับไปใช้ค่าตัดเดิมของแต่ละเลน')};
 $('btnDeepClean').onclick=()=>{const on=studio.setDeepClean(!studio.getDeepClean());toast(on?'🧹 สะอาด: กรอง noise/เศษ AI (ไม่บังคับ ✂max — รอแถบ % แล้วฟังเทียบ)':'🧹 ปิดโหมดสะอาด — กลับค่าตัดปกติ')};
-$('rMutes').onchange=e=>{const k=e.target?.dataset?.mute;if(k){studio.applyStemMutes(muteKeysFromUI(),{only:[k]});syncChipsFromTracks();$('sRecipe').textContent=muteStatus()}else applyRecipeMutes();saveRecipe()};
 function muteStatus(){const m=studio.state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&!['click','countin','mix'].includes(t.stem)).map(t=>t.name||t.stem);return m.length?'ปิด: '+m.join(', '):'เปิดทุกแทร็กเสียง'}
-/** chips mirror the lanes: a chip is on when its lane (or all of its sub-lanes) is muted */
-function syncChipsFromTracks(){$('rMutes').querySelectorAll('input[data-mute]').forEach(inp=>{const k=inp.dataset.mute;const ls=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length&&(t.stem===k||t.fineOf===k));if(!ls.length)return;
-  // 1.0.39 (t328u): some sub-lanes off, some on (e.g. นำ off, คอรัส on) → chip shows a partial state, not plain on/off
-  const n=ls.filter(t=>t.mute).length,part=n>0&&n<ls.length;inp.checked=n===ls.length;inp.indeterminate=part;inp.closest('.chip')?.classList.toggle('part',part);
-  inp.closest('.chip')?.setAttribute('title',part?'บางเลนย่อยปิดอยู่: '+ls.filter(t=>t.mute).map(t=>t.name).join(', ')+' · กด = ปิดทั้งหมด':'')})}
+/** 1.0.54: family keys follow the lanes (a family is on only when every sub-lane is muted) — same rule the chips used */
+function syncMutesFromTracks(){const T=studio.state.tracks.filter(t=>t.type==='audio'&&t.clips.length);recipeMutes=MUTE_FAMS.filter(k=>{const ls=T.filter(t=>t.stem===k||t.fineOf===k);return ls.length&&ls.every(t=>t.mute)})}
 
 function refreshGuides(){
   const hasMusic=studio.state.tracks.some(t=>t.type==='audio'&&t.stem&&t.stem!=='click'&&t.stem!=='countin'&&t.stem!=='mix'&&t.clips.length);
@@ -778,7 +764,7 @@ $('rCountPace').onchange=()=>{const raw=+$('rCountPace').value,p=(raw===.5||raw=
   markSetDirty();refreshGuides();$('sRecipe').textContent='จังหวะนับ: '+(p===.5||p===0.5?'เร็ว (2×)':p===2?'ช้า (½)':p===4?'ช้ามาก (¼)':'ทุกจังหวะ (ตามนอม)')};
 $('rCountN').onchange=()=>{$('sRecipe').textContent=+$('rCountN').value===4?'แบบนับ: 1 2 3 4':'แบบนับ: 1 · 2 · 1 2 3 4'};
 syncIntroUI();
-/* ⭐ one-tap preset = measured reference file */
+/* 📄 one-tap preset = measured reference file (icon distinct from ⭐ เสียงเด่น) */
 $('btnRefPreset').onclick=()=>{
   const P=REF_PRESET;
   applyRecipeState({feel:P.style,rate:P.rate,accent:P.accent,ciMode:P.ciMode,ci:P.ci,cues:P.cues,endAuto:P.endAuto,sr:P.sr,loud:P.loud,flourish:false,nom:'R',outFmt:'dual',
@@ -810,7 +796,7 @@ window.__onTapAt=r=>{setArmed('tap',false);saveRecipe();toast('ตั้งจ�
 addEventListener('keydown',e=>{if(e.code!=='KeyT'||e.target.closest?.('input,select,textarea'))return;if(!studio.state.playing)return;e.preventDefault();const r=studio.tapNow();window.__onTapAt(r)});
 addEventListener('keydown',e=>{if(e.key==='Escape')setArmed('',false)});
 window.__onMarkers=()=>{saveRecipe();refreshGuides();$('sRecipe').textContent=markerStatus()||'ไม่มีจุดนับ'};
-window.__onStemMute=()=>{syncChipsFromTracks();$('sRecipe').textContent=muteStatus();saveRecipe()}; // 1.0.37: the studio already changed that one lane
+window.__onStemMute=()=>{syncMutesFromTracks();$('sRecipe').textContent=muteStatus();saveRecipe()}; // 1.0.37/1.0.54: the studio already changed that one lane
 function syncMetroBtn(){const on=!!$('chkMetro').checked;$('btnMetro').classList.toggle('on',on);$('metroIco').textContent=on?'🔔':'🔕';$('btnMetro').title=on?'เสียงนอมตอนฟัง: เปิด (คลิกเพื่อปิด)':'เสียงนอมตอนฟัง: ปิดอยู่ (คลิกเพื่อเปิด)'}
 $('chkMetro').addEventListener('change',syncMetroBtn);syncMetroBtn();
 function fmtBpm(b){return String(Math.round((+b||0)*100)/100)}
@@ -920,7 +906,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.53',outFmt:r.outFmt||'dual',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.54',outFmt:r.outFmt||'dual',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);
