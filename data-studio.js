@@ -304,9 +304,12 @@ export function createStudio(ui){
       slot.title=st.line||'';
     });
   }
-  function setFineStatus(stem,phase,line,row){fineState[stem]={phase,line,row:row||''};paintFineStatus()}
-  async function fineSplit(trackIdx){
-    const tr=state.tracks[trackIdx];if(!isFineParent(tr))return;
+  function setFineStatus(stem,phase,line,row){fineState[stem]={phase,line,row:row||''};paintFineStatus();if((phase==='done'||phase==='err')&&fineWait[stem]){const w=fineWait[stem];delete fineWait[stem];w.forEach(f=>{try{f(phase==='done')}catch(e){}})}}
+  // Data 1.0.53 (MUS-14): fineSplit(i,{quiet}) skips the confirm (one-tap ✂ โซโล่) and resolves when the split is done/failed
+  const fineWait=Object.create(null);
+  function fineDone(stem){return new Promise(ok=>{(fineWait[stem]=fineWait[stem]||[]).push(ok)})}
+  async function fineSplit(trackIdx,opt){
+    const tr=state.tracks[trackIdx];if(!isFineParent(tr))return false;
     if(fineState[tr.stem]&&(fineState[tr.stem].phase==='queued'||fineState[tr.stem].phase==='run'))return;
     const spec=FINE[tr.stem],clip=tr.clips&&tr.clips[0],buf=clip&&state.buffers.get(clip.buf);
     if(!buf){ui.toast?.('ไม่มีเสียงในเลนนี้');return}
@@ -320,7 +323,7 @@ export function createStudio(ui){
       cached?('โมเดลพร้อมแล้ว · แยกในเครื่องนี้ เพลง ~'+Math.round(sec)+' วินาที ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'):('ครั้งแรกจะโหลดโมเดล '+(spec.bytes/1e6|0)+' MB จาก Hugging Face แล้วแยกในเครื่อง · ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'),
       spec.note+(spec.kind==='vocals'?'':''),
       phone?'บนมือถืออาจช้าหรือหน่วยความจำไม่พอ — แนะนำใช้คอมพิวเตอร์':'โมเดล MIT ทำงานในเบราว์เซอร์ เสียงไม่ออกเครื่อง'];
-    if(!confirm(lines.join('\n\n')))return;
+    if(!(opt&&opt.quiet)&&!confirm(lines.join('\n\n')))return false;
     if(state.playing)stopPlay();
     const sr=buf.sampleRate||44100;
     const pL=Float32Array.from(buf.getChannelData(0));
@@ -332,7 +335,8 @@ export function createStudio(ui){
       parentScale:clip.mixScale!=null?+clip.mixScale:1
     });
     setFineStatus(tr.stem,'queued','⏳ '+fineLabel(tr.stem)+'รอคิว','รอคิว');
-    pumpFineQueue();
+    const p=fineDone(tr.stem);pumpFineQueue();
+    return await p;
   }
   async function pumpFineQueue(){
     if(fineRunning)return;
@@ -2257,7 +2261,9 @@ export function createStudio(ui){
         sched(state.buffers.get(c.buf),g,pad+(c.start||0),c.offset||0,c.dur);
       }
     }
-    return await off.startRendering();
+    const out=await off.startRendering();
+    if(state.push)glueComp(out); // 1.0.53 📢 ดันสู้วง: gentle 2:1 glue on the music side (gain only goes DOWN → no new clipping; masterMusic sets −11 LUFS after)
+    return out;
   }
 
   /**
@@ -2377,6 +2383,39 @@ export function createStudio(ui){
   /** Studio preview opts from the recipe (Data 1.0.30) — same generator as export, no pre-roll shift unless 'pre'. */
   // pre-roll count-in bars that shift the music (0 when counting over the intro)
   function preCi(){const v=+(typeof document!=='undefined'&&document.getElementById('rCi')?.value)||0;return state.nomOpt&&state.nomOpt.ciMode==='over'?0:v}
+  /** 1.0.53 (MUS-14) 📢: transient clamp (see below) + stereo-linked RMS compressor, 2:1, soft knee 6 dB, threshold 2 dB under the gated level,
+   *  attack 15 ms / release 250 ms, at most 6 dB reduction, no make-up (never raises a sample). In place; returns {thr,maxGr}. */
+  function glueComp(buf){
+    const sr=buf.sampleRate,n=buf.length,ch=[];for(let c=0;c<buf.numberOfChannels;c++)ch.push(buf.getChannelData(c));
+    if(!n)return null;
+    // (1) transient clamp: with กลอง muted the loudest 0.5 % are drum hits that leak through the other lanes (measured on
+    //     ไม่ได้เลวขนาดนั้น: 99.5 % = −17 dBFS but 99.9 % = −9 dBFS, every beat) — they, not the music, capped the −11 LUFS gain.
+    //     2 ms look-ahead, 60 ms release, at most 8 dB, gain only goes down.
+    let clampGr=0;{const st=Math.max(1,Math.floor(n/400000)),smp=[];for(let i=0;i<n;i+=st){let v=0;for(const x of ch){const a=x[i]<0?-x[i]:x[i];if(a>v)v=a}smp.push(v)}
+      smp.sort((p,q)=>p-q);const c=smp[Math.min(smp.length-1,Math.floor(smp.length*0.995))];
+      if(c>1e-5){const LA=Math.max(1,Math.floor(0.002*sr)),floor=Math.pow(10,-8/20),need=new Float32Array(n);
+        for(let i=0;i<n;i++){let v=0;for(const x of ch){const a=x[i]<0?-x[i]:x[i];if(a>v)v=a}need[i]=v>c?Math.max(c/v,floor):1}
+        const mn=new Float32Array(n),dq=new Int32Array(n);let h=0,t=0;
+        for(let i=n-1;i>=0;i--){while(t>h&&need[dq[t-1]]>=need[i])t--;dq[t++]=i;while(dq[h]>i+LA)h++;mn[i]=need[dq[h]]}
+        const aA=Math.exp(-1/(LA/2+1)),aRel=Math.exp(-1/(0.06*sr));let g=1;
+        for(let i=0;i<n;i++){const q=mn[i];g=q<g?aA*g+(1-aA)*q:aRel*g+(1-aRel)*q;if(g>q)g=q;if(g<1){for(const x of ch)x[i]*=g;const d=-20*Math.log10(g);if(d>clampGr)clampGr=d}}}}
+    // (2) gentle RMS glue
+    const W=Math.max(1,Math.floor(0.4*sr));let gs=0,gn=0;
+    for(let i=0;i+W<=n;i+=W){let q=0;for(const x of ch)for(let j=i;j<i+W;j++)q+=x[j]*x[j];q/=W*ch.length;if(q>1e-7){gs+=q;gn++}}
+    if(!gn)return null;
+    const lvl=10*Math.log10(gs/gn),thr=lvl-2,R=2,K=6,MAXGR=6;
+    const aR=Math.exp(-1/(0.010*sr)),aA=Math.exp(-1/(0.015*sr)),aRel=Math.exp(-1/(0.25*sr));
+    let e=0,g=0,maxGr=0;
+    for(let i=0;i<n;i++){
+      let q=0;for(const x of ch)q+=x[i]*x[i];q/=ch.length;
+      e=aR*e+(1-aR)*q;const L=10*Math.log10(e+1e-12),o=L-thr;
+      let gr=o>K/2?o*(1-1/R):o>-K/2?(1-1/R)*(o+K/2)*(o+K/2)/(2*K):0;if(gr>MAXGR)gr=MAXGR;
+      g=gr>g?aA*g+(1-aA)*gr:aRel*g+(1-aRel)*gr;if(g>maxGr)maxGr=g;
+      const m=Math.pow(10,-g/20);for(const x of ch)x[i]*=m;
+    }
+    state._glue={thr:+thr.toFixed(1),maxGr:+maxGr.toFixed(2),clampGr:+clampGr.toFixed(2)};
+    return state._glue;
+  }
   function previewNomOpt(){
     const o=state.nomOpt||{};
     return{style:o.style==='ref'?'ref':'normal',rate:o.rate===2?2:1,accent:o.accent!==false,ciMode:o.ciMode==='pre'?'pre':'over',
@@ -2745,7 +2784,7 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setMaxCut,getMaxCut:()=>!!state.maxCut,setDeepClean,getDeepClean:()=>!!state.deepClean,mixerInfo:()=>{const p=state._pull;return{mode:p?(p.wl?'worklet':'scriptprocessor'):null,wlReady:!!(state._wl&&state._wl.ready),wlErr:state._wl?.err||null,under:p?.wl?p.wl.under:null,cuts:p?.wl?p.wl.cuts:null}},setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
+    fineSplit,refreshLanes(){applyLiveMix();renderTracks();renderMixer()},setPush(on){state.push=!!on;return state.push},getPush:()=>!!state.push,glueInfo:()=>state._glue||null,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setMaxCut,getMaxCut:()=>!!state.maxCut,setDeepClean,getDeepClean:()=>!!state.deepClean,mixerInfo:()=>{const p=state._pull;return{mode:p?(p.wl?'worklet':'scriptprocessor'):null,wlReady:!!(state._wl&&state._wl.ready),wlErr:state._wl?.err||null,under:p?.wl?p.wl.under:null,cuts:p?.wl?p.wl.cuts:null}},setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
