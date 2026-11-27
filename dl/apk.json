@@ -1,6 +1,6 @@
 {
-  "build": 129,
-  "ver": "1.0.136",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b129-1.0.136/SetSod.apk",
-  "notes": "1.0.136: 🎧 แก้เด้งกลับนอมซ้าย (งานเต้นรำ) จริง — อ่านป้าย {แทร็ก R} · นอมที่ตั้งเองไม่ถูกคลาวด์/คลังทับแม้ stamp เก่า · ไม่ยก sa ให้ฝั่งแคตตาล็อกเอง"
+  "build": 130,
+  "ver": "1.0.137",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b130-1.0.137/SetSod.apk",
+  "notes": "1.0.137: 🥁 นับเข้าครบจังหวะนอมแล้ว — ทุกจังหวะ · เร็ว (2×) · ช้า (½) · ช้ามาก (¼) ตาม BPM เพลง (เครื่องมือ → นับเข้า → จังหวะนับ)"
 }
