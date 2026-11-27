@@ -1,6 +1,6 @@
 {
-  "build": 135,
-  "ver": "1.0.142",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b135-1.0.142/SetSod.apk",
-  "notes": "1.0.142: 🙈 ซ่อนรายการระบบ “ไม่ส่งเพลงซ้ำ” จากลิสต์ที่บันทึก · เพลงนำเข้าชื่ออังกฤษ/โรมันจัดหมวดตามจังหวะที่ประมาณ (ไม่บังคับเข้าสากล)"
+  "build": 136,
+  "ver": "1.0.143",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b136-1.0.143/SetSod.apk",
+  "notes": "1.0.143: 📱 ป้ายนอมไม่เบียดชื่อเพลงบนเด็คในมือถือแล้ว — ชื่อยาวขึ้นบรรทัดเต็ม ป้ายนอมย้ายไปอยู่แถวศิลปิน"
 }
