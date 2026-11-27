@@ -1,7 +1,7 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
 import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.40';
 import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
-import {renderHeard,denoiseBed,UNMIX,UNMIX_CLEAN,UNMIX_DEFAULT,eqFlat} from './data-unmix.js?v=1.0.44';
+import {renderHeard,denoiseBed,UNMIX,UNMIX_CLEAN,UNMIX_DEFAULT,eqFlat} from './data-unmix.js?v=1.0.46';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -524,11 +524,11 @@ export function createStudio(ui){
   const MAXCUT={lo:24,mid:24,hi:24};
   function cutOf(t){return state.maxCut&&heardGain(t,t.clips[0])<0.25?MAXCUT:t.cut}
   function setMaxCut(on){state.maxCut=!!on;state.dirty=true;applyLiveMix();renderTracks();return state.maxCut}
-  /** 1.0.43: 🧹 สะอาด — ✂max + stronger residual mask + post spectral gate (cuts hiss / soft AI bleed) */
+  /** 1.0.46: 🧹 สะอาด — stronger residual mask + post spectral gate (independent of ✂max) */
   function setDeepClean(on){
     state.deepClean=!!on;
-    if(state.deepClean){state.maxCut=true;Object.assign(UNMIX,UNMIX_CLEAN)}
-    else{Object.assign(UNMIX,UNMIX_DEFAULT)}
+    if(state.deepClean)Object.assign(UNMIX,UNMIX_CLEAN);
+    else Object.assign(UNMIX,UNMIX_DEFAULT);
     state._heard=null;state.dirty=true;applyLiveMix();renderTracks();scheduleHeard();return state.deepClean}
   function heardKey(){
     const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(cutOf(t))).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF,UNMIX.RESID,UNMIX.SOFT,UNMIX.SOFT_FLOOR,UNMIX.SOFT_EXP,state.deepClean?1:0].join('/');
@@ -2020,7 +2020,7 @@ export function createStudio(ui){
         for(const [id,[o,l]] of Object.entries(proj.bufIndex||{}))proj.bufs[id]=new Uint8Array(ab,base+o,l)}
       else proj=JSON.parse(new TextDecoder().decode(new Uint8Array(ab)));
       if(!proj||typeof proj!=='object')throw new Error('ไฟล์ไม่ใช่โปรเจกต์ SetSod Data');
-      stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.deepClean=!!proj.deepClean;if(state.deepClean){state.maxCut=true;Object.assign(UNMIX,UNMIX_CLEAN)}else Object.assign(UNMIX,UNMIX_DEFAULT);state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
+      stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.deepClean=!!proj.deepClean;if(state.deepClean)Object.assign(UNMIX,UNMIX_CLEAN);else Object.assign(UNMIX,UNMIX_DEFAULT);state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
       const a=ac();
       for(const id of Object.keys(proj.bufs||{})){
         const raw=proj.bufs[id];
@@ -2717,7 +2717,7 @@ export function createStudio(ui){
         const db=await idb();
         const proj=await new Promise((ok,no)=>{const tx=db.transaction('projects','readonly');const g=tx.objectStore('projects').get('current');g.onsuccess=()=>ok(g.result);g.onerror=()=>no(g.error)});
         if(proj&&proj.tracks&&proj.bufs){
-          stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.deepClean=!!proj.deepClean;if(state.deepClean){state.maxCut=true;Object.assign(UNMIX,UNMIX_CLEAN)}else Object.assign(UNMIX,UNMIX_DEFAULT);state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
+          stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.deepClean=!!proj.deepClean;if(state.deepClean)Object.assign(UNMIX,UNMIX_CLEAN);else Object.assign(UNMIX,UNMIX_DEFAULT);state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
           const a=ac();
           for(const id of Object.keys(proj.bufs||{})){
             const raw=proj.bufs[id];const u8=raw instanceof Uint8Array?raw:new Uint8Array(raw);

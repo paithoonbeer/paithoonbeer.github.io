@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.45">
+<meta name="bp-data" content="1.0.46">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -313,7 +313,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
       <div class="lanes" id="lanes"><div class="playhead" id="playhead"></div></div>
     </div>
     <div class="mixer-wrap folded" id="mixerWrap">
-      <div class="mixer-head"><button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="false" title="หุบ/กางมิกเซอร์">ระดับเสียง (ไฟล์ดาต้าได้ตามที่ได้ยิน) <span class="chev" id="mixerChev">▸</span></button><button type="button" class="maxcut deepclean" id="btnDeepClean" aria-pressed="false" title="ทำความสะอาด noise — ตัดแรงสุด + กรองเศษเสียง/เสียงฟู่จาก AI (ปิดเลนก่อนแล้วค่อยกด · แลกกับเสียงบางลงนิดหน่อย)">🧹<b>สะอาด</b></button><button type="button" class="maxcut" id="btnMaxCut" aria-pressed="false" title="ตัดแรงสุด — ทุกเลนที่ปิด (รวมเลนย่อย) ตัดเสียงที่หลงเหลือเต็ม 24 dB ทุกแถบ · กดอีกครั้ง = กลับไปใช้ค่าเดิมของแต่ละเลน · เลนที่เปิดอยู่ไม่โดน">✂<b>max</b></button></div>
+      <div class="mixer-head"><button type="button" class="mixer-fold" id="btnMixerFold" aria-expanded="false" title="หุบ/กางมิกเซอร์">ระดับเสียง (ไฟล์ดาต้าได้ตามที่ได้ยิน) <span class="chev" id="mixerChev">▸</span></button><button type="button" class="maxcut deepclean" id="btnDeepClean" aria-pressed="false" title="🧹 สะอาด — กรอง noise/เศษเสียง AI (ฟู่/bleed) โดยไม่บังคับ ✂max · กดแยกจากตัดแรงสุดได้ · ปิดเลนที่ไม่เอาก่อน · แลกกับเสียงบางลงนิดหน่อย">🧹<b>สะอาด</b></button><button type="button" class="maxcut" id="btnMaxCut" aria-pressed="false" title="✂ ตัดแรงสุด — ทุกเลนที่ปิดตัดเสียงหลงเหลือเต็ม 24 dB · กดแยกจาก 🧹 ได้ · กดอีกครั้ง = กลับค่าเดิม · เลนที่เปิดอยู่ไม่โดน">✂<b>max</b></button></div>
       <div class="mixer" id="mixer"></div>
     </div>
   </div>
@@ -566,8 +566,8 @@ function restoreSong(){const t=songKey();if(!t)return false;let hit=false;
 function markerStatus(){const n=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;return n?`🗣 ${n} จุดนับ`:''}
 $('btnMuteClear').onclick=()=>{setMuteUI([]);applyRecipeMutes();saveRecipe()};
 // 1.0.37 (t320u): a chip changes only its own lane (and that lane's sub-lanes), never the others
-$('btnMaxCut').onclick=()=>{const on=studio.setMaxCut(!studio.getMaxCut());if(!on&&studio.getDeepClean())studio.setDeepClean(false);toast(on?'✂ ตัดแรงสุด: เลนที่ปิดทั้งหมดตัดเต็ม 24 dB':'✂ กลับไปใช้ค่าตัดเดิมของแต่ละเลน')};
-$('btnDeepClean').onclick=()=>{const on=studio.setDeepClean(!studio.getDeepClean());toast(on?'🧹 สะอาด: ตัดแรงสุด + กรอง noise/เศษ AI (รอแถบ % แล้วฟังเทียบ)':'🧹 ปิดโหมดสะอาด — กลับค่าตัดปกติ')};
+$('btnMaxCut').onclick=()=>{const on=studio.setMaxCut(!studio.getMaxCut());toast(on?'✂ ตัดแรงสุด: เลนที่ปิดทั้งหมดตัดเต็ม 24 dB (🧹 ยังเปิด/ปิดแยกได้)':'✂ กลับไปใช้ค่าตัดเดิมของแต่ละเลน')};
+$('btnDeepClean').onclick=()=>{const on=studio.setDeepClean(!studio.getDeepClean());toast(on?'🧹 สะอาด: กรอง noise/เศษ AI (ไม่บังคับ ✂max — รอแถบ % แล้วฟังเทียบ)':'🧹 ปิดโหมดสะอาด — กลับค่าตัดปกติ')};
 $('rMutes').onchange=e=>{const k=e.target?.dataset?.mute;if(k){studio.applyStemMutes(muteKeysFromUI(),{only:[k]});syncChipsFromTracks();$('sRecipe').textContent=muteStatus()}else applyRecipeMutes();saveRecipe()};
 function muteStatus(){const m=studio.state.tracks.filter(t=>t.type==='audio'&&t.mute&&t.stem&&!['click','countin','mix'].includes(t.stem)).map(t=>t.name||t.stem);return m.length?'ปิด: '+m.join(', '):'เปิดทุกแทร็กเสียง'}
 /** chips mirror the lanes: a chip is on when its lane (or all of its sub-lanes) is muted */
