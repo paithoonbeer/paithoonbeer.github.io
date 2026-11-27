@@ -1229,7 +1229,18 @@ body.op18.live #livelist #op-sfx.op-chip.on{
   font-family:Inter,"Noto Sans Thai",system-ui,sans-serif;
   box-sizing:border-box;
 }
+/* 1.0.139: JS parks the sheet in free space (decks / now-playing) — left/top/width/max-height set inline */
+#op-sfxsheet.sfx-anch-free{
+  transform:none;right:auto;bottom:auto;
+  box-shadow:0 12px 36px rgba(0,0,0,.6);
+  border-color:#52525b;
+}
 #op-sfxsheet[hidden]{display:none!important}
+/* dim decks/now only — never dim the song list */
+body.sfx-open.op-dual #op-dualui .dd-decks{opacity:.55;transition:opacity .15s ease}
+body.sfx-open.op-dual #op-dualui .dd-listwrap{opacity:1;filter:none}
+body.sfx-open:not(.op-dual) #livelist > .lvnow{opacity:.7;transition:opacity .15s ease}
+body.sfx-open:not(.op-dual) #livelist .lvl,body.sfx-open:not(.op-dual) #livelist .op-listh{opacity:1}
 #op-sfxsheet .sfx-h{display:flex;align-items:center;gap:10px;margin-bottom:8px}
 #op-sfxsheet .sfx-h b{font:800 13px/1 Inter,system-ui;letter-spacing:.04em}
 #op-sfxsheet .sfx-vol{flex:1 1 auto;display:flex;align-items:center;gap:8px;min-width:0;color:#a1a1aa;font:600 11px/1 Inter,"Noto Sans Thai",system-ui}

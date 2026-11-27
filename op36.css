@@ -158,6 +158,18 @@ body.op36-big #op-dualui{--dk:clamp(290px,calc(var(--dd-vvh,100dvh) * .41),520px
 #op-dualui #dd-auto{font-size:19px}
 #op-dualui .dd-mbtn svg{width:18px;height:18px}
 #op-dualui .dd-mbtn.on{color:var(--d6-ac);border-color:rgba(48,209,88,.5);background:var(--d6-acd)}
+/* 1.0.139: SFX trigger area on the crossfader row — labeled, opens popup over decks (not the list) */
+#op-dualui .dd-sfxbtn{
+  width:auto;min-width:52px;padding:0 10px;gap:5px;
+  display:inline-flex;align-items:center;justify-content:center;
+  grid:none;place-items:unset;
+}
+#op-dualui .dd-sfxbtn .dd-sfxl{font:800 11px/1 Inter,system-ui,sans-serif;letter-spacing:.04em}
+#op-dualui .dd-sfxbtn.on{color:#fb923c;border-color:rgba(251,146,60,.55);background:rgba(251,146,60,.16)}
+@media (max-width:380px){
+  #op-dualui .dd-sfxbtn .dd-sfxl{display:none}
+  #op-dualui .dd-sfxbtn{width:40px;min-width:40px;padding:0}
+}
 
 /* ---------- today list + insert search ---------- */
 #op-dualui .dd-listwrap{display:flex;flex-direction:column;min-height:0;min-width:0;background:var(--d6-card);border:1px solid var(--d6-line);border-radius:var(--d6-rad);overflow:hidden;position:relative}
