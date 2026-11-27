@@ -339,11 +339,11 @@ async function runKara2(L,R,sess){
 
 /* ---------- Guitar lead / rhythm (DSP, no ONNX) ----------
    Lead ≈ center (mid) content gated by center-vs-side envelopes (typical rock: solo center, rhythm wide).
-   Rhythm = residual. Studio foldResidual restores exact parent sum when both lanes unmuted. */
+   Rhythm = residual (mutates L/R in place). Studio foldResidual restores exact parent sum when both unmuted.
+   1.0.52: yield + single done{stems} — long songs used to hit ~97% then “ไม่ครบสเต็ม” (multi stem postMessage drops). */
 async function runGuitarSep(L,R,sr){
   const n=L.length,sr0=Math.max(8000,+sr||44100);
   const leadL=new Float32Array(n),leadR=new Float32Array(n);
-  const rhL=new Float32Array(n),rhR=new Float32Array(n);
   const aEnv=Math.exp(-1/(sr0*0.028));
   const hpA=Math.exp(-2*Math.PI*180/sr0); // gentle HPF on mid → solo body
   let envM=0,envS=0,hp=0;
@@ -359,13 +359,15 @@ async function runGuitarSep(L,R,sr){
     g=g*g*(3-2*g); // smoothstep — avoid brittle gating
     const l=midHp*g;
     leadL[i]=l;leadR[i]=l;
-    rhL[i]=L[i]-l;rhR[i]=R[i]-l;
-    if((i&65535)===0){
-      const p=i/n;if(p-lastP>=0.04){lastP=p;postMessage({t:'prog',p,ms:performance.now()-t0})}
+    L[i]-=l;R[i]-=l; // rhythm = residual in place (saves 2 full buffers)
+    if((i&131071)===0){
+      const p=i/n;if(p-lastP>=0.02){lastP=p;postMessage({t:'prog',p,ms:performance.now()-t0})}
+      // yield so mobile/Safari don't kill the worker on long songs
+      await new Promise(r=>setTimeout(r,0));
     }
   }
   postMessage({t:'prog',p:1,ms:performance.now()-t0});
-  return[[rhL,rhR],[leadL,leadR]];
+  return[[L,R],[leadL,leadR]];
 }
 
 /* ---------- session ---------- */
@@ -389,11 +391,11 @@ onmessage=async({data:d})=>{
       postMessage({t:'ready',ep:'dsp',threads:1,loadMs:0,src:spec.src,kind});
       postMessage({t:'sepStart',n,sec:n/sr,sr,src:spec.src,kind});
       const out=await runGuitarSep(L,R,sr);
-      for(let k=0;k<out.length;k++){
-        const a=out[k][0],b=out[k][1];
-        postMessage({t:'stem',i:k,name:spec.src[k],L:a,R:b,n},[a.buffer,b.buffer]);
-      }
-      postMessage({t:'done',src:spec.src,n,sr,kind});
+      // One done payload (not N stem posts) — large multi-transfer drops caused “ไม่ครบสเต็ม” near the end
+      const stems=out.map(([a,b],k)=>({i:k,name:spec.src[k],L:a,R:b}));
+      const xfer=[];
+      for(const s of stems){if(s.L&&s.L.buffer)xfer.push(s.L.buffer);if(s.R&&s.R.buffer&&s.R.buffer!==s.L.buffer)xfer.push(s.R.buffer)}
+      postMessage({t:'done',src:spec.src,n,sr,kind,stems},xfer);
       return;
     }
     ort=await import(d.opt&&d.opt.ort||ORT+(d.opt&&d.opt.wasmOnly?'ort.wasm.min.mjs':'ort.webgpu.min.mjs'));

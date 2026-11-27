@@ -348,7 +348,7 @@ export function createStudio(ui){
     if(!tr||!isFineParent(tr)){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่สำเร็จ — ไม่มีเลนนี้','');return}
     const prog=(line,row)=>setFineStatus(job.stem,'run',line,row);
     prog('⏳ แยก'+lab+'…','กำลังแยก…');
-    const w=new Worker('stems-fine-worker.js?v=1.0.51');
+    const w=new Worker('stems-fine-worker.js?v=1.0.52');
     let stems;
     try{
       stems=await new Promise((ok,no)=>{
@@ -360,14 +360,25 @@ export function createStudio(ui){
           else if(m.t==='log')try{console.warn(m.m)}catch(e){}
           else if(m.t==='stem')got[m.i]={key:m.name,L:m.L,R:m.R};
           else if(m.t==='err'){try{w.terminate()}catch(e){};no(new Error(m.m))}
-          else if(m.t==='done'){try{w.terminate()}catch(e){};ok(got)}
+          else if(m.t==='done'){
+            // 1.0.52: guitar (and any job) may ship all stems inside done — prefer that over multi stem posts
+            if(Array.isArray(m.stems)){
+              for(const s of m.stems){
+                if(!s)continue;
+                const i=s.i!=null?s.i:got.length;
+                got[i]={key:s.name||s.key,L:s.L,R:s.R};
+              }
+            }
+            try{w.terminate()}catch(e){};ok(got);
+          }
         };
         w.onerror=e=>{try{w.terminate()}catch(err){};no(e.error||e)};
         const useGpu=!!(ui.gpuF16&&ui.gpuF16());
         w.postMessage({kind:spec.kind,L:wL,R:wR,sr,opt:{wasmOnly:!useGpu,eps:useGpu?['webgpu','wasm']:['wasm']}},[wL.buffer,wR.buffer]);
       });
     }catch(e){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่สำเร็จ: '+(e.message||e),'');ui.toast?.('❌ แยกละเอียดไม่สำเร็จ: '+(e.message||e));return}
-    if(!stems||stems.filter(Boolean).length!==spec.parts.length){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่ครบสเต็ม','');ui.toast?.('แยกไม่ครบสเต็ม');return}
+    const gotN=stems?stems.filter(s=>s&&s.L).length:0;
+    if(!stems||gotN!==spec.parts.length){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่ครบสเต็ม ('+gotN+'/'+spec.parts.length+')','');ui.toast?.('แยกไม่ครบสเต็ม');return}
     const parts=spec.parts.map(meta=>{
       const g=stems.find(x=>x&&x.key===meta.key);if(!g)throw new Error('missing '+meta.key);
       return{key:meta.key,L:g.L,R:g.R};
