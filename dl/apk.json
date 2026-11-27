@@ -1,6 +1,6 @@
 {
-  "build": 124,
-  "ver": "1.0.131",
-  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b124-1.0.131/SetSod.apk",
-  "notes": "1.0.131: จัดหมวดได้อิสระทุกเพลง — หมวดที่ตั้ง (ช้า/กลาง/เร็ว/สากล) ไม่ถูก BPM ทับอีกแล้ว (เช่น กรุณาฟังให้จบ ตั้งกลางแล้วขึ้นแท็บกลางจริง)"
+  "build": 125,
+  "ver": "1.0.132",
+  "url": "https://github.com/paithoonbeer/setsod-app/releases/download/b125-1.0.132/SetSod.apk",
+  "notes": "1.0.132: 🥁 นับเข้าก่อนเพลงตั้งจังหวะได้ — ตามจังหวะห้อง/BPM หรือช้า (½) กินเวลา 2 เท่า เหมาะเพลงช้า (เครื่องมือ → นับเข้า → จังหวะนับ)"
 }
