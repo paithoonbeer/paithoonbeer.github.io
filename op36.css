@@ -415,3 +415,50 @@ body.op36-big #op-dualui .dd-mstep{width:30px;height:40px}
 body.live #stusave{display:none!important}
 #stusave.flt42{position:fixed;left:50%;transform:translateX(-50%);top:calc(8px + env(safe-area-inset-top));width:auto;margin:0;z-index:95}
 #stusave .t{flex:1}
+
+/* 1.0.140: on phone / Fold (≤999px) SFX moves into the unused bottom-right มิกซ์ร้าน tile.
+   Desktop / Fold landscape (≥1000px) keeps PR #121: SFX on the crossfader, full mixer labels. */
+#op-dualui .dd-mixrow{display:flex;flex:1;min-width:0;min-height:0;align-items:stretch}
+#op-dualui #dd-sfxdock{display:none}
+#op-dualui .dd-mxplug{display:none}
+@media (max-width:999px){
+  #op-dualui .dd-master #dd-sfx{display:none!important}
+  #op-dualui .dd-mixer .dd-bt{display:none}
+  #op-dualui .dd-mixer .dd-chs,#op-dualui .dd-mixer .dd-mxsliders{display:none}
+  #op-dualui .dd-mixrow{position:relative;width:100%;height:100%;min-height:52px}
+  #op-dualui #dd-sfxdock{
+    display:inline-flex!important;flex:1;width:100%;min-width:0;height:auto;min-height:52px;
+    padding:0 10px;border-radius:12px;gap:6px;
+    align-items:center;justify-content:center;
+    background:#111118;border:1px solid var(--d6-line);color:#e5e7eb;
+    grid:none;place-items:unset;
+  }
+  #op-dualui #dd-sfxdock svg{width:22px;height:22px}
+  #op-dualui #dd-sfxdock .dd-sfxl{display:inline;font:800 13px/1 Inter,system-ui,sans-serif;letter-spacing:.04em}
+  #op-dualui #dd-sfxdock.on{color:#fb923c;border-color:rgba(251,146,60,.55);background:rgba(251,146,60,.16)}
+  #op-dualui .dd-mxbody{
+    position:absolute;top:6px;right:6px;z-index:2;
+    width:32px;height:32px;min-width:32px;min-height:32px;padding:0;
+    justify-content:center;align-items:center;flex:none;
+    border-radius:10px;background:#1a1a23;border:1px solid var(--d6-line);
+  }
+  #op-dualui .dd-mxplug{display:grid;place-items:center}
+  #op-dualui .dd-mxplug svg{width:16px;height:16px;color:var(--d6-mut)}
+  #op-dualui .dd-mxbody>svg{display:none}
+}
+/* slim one-row dock: widen the 54px mixer so SFX and the mix plug sit side by side, no overlap */
+@media (max-width:999px) and (orientation:landscape) and (max-height:520px),
+       (max-width:699px) and (orientation:portrait) and (max-height:760px){
+  #op-dualui .dd-dock{grid-template-columns:minmax(0,1fr) 88px}
+  #op-dualui .dd-mixer{width:88px;padding:3px}
+  #op-dualui .dd-mixrow{display:flex;flex-direction:row;align-items:stretch;gap:2px;min-height:0;height:100%}
+  #op-dualui #dd-sfxdock{flex:1;width:auto;min-width:0;min-height:0;height:100%;padding:0}
+  #op-dualui #dd-sfxdock .dd-sfxl{display:none}
+  #op-dualui #dd-sfxdock svg{width:20px;height:20px}
+  #op-dualui .dd-mxbody{
+    position:static;top:auto;right:auto;z-index:auto;
+    width:32px;height:auto;min-width:32px;min-height:0;
+    flex:none;align-self:stretch;
+  }
+  #op-dualui .dd-mxplug svg{width:14px;height:14px}
+}
