@@ -1,7 +1,7 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
 import {beepAt,clickGrid,cueWords,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.40';
 import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
-import {renderHeard,UNMIX,eqFlat} from './data-unmix.js?v=1.0.40';
+import {renderHeard,denoiseBed,UNMIX,UNMIX_CLEAN,UNMIX_DEFAULT,eqFlat} from './data-unmix.js?v=1.0.43';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const COLS=['#e8a54b','#5b8def','#6fbf73','#d67bb8','#45c4d4','#c97b5a','#9b8af0','#d4c35a'];
 const uid=()=>'c'+Math.random().toString(36).slice(2,9);
@@ -524,12 +524,19 @@ export function createStudio(ui){
   const MAXCUT={lo:24,mid:24,hi:24};
   function cutOf(t){return state.maxCut&&heardGain(t,t.clips[0])<0.25?MAXCUT:t.cut}
   function setMaxCut(on){state.maxCut=!!on;state.dirty=true;applyLiveMix();renderTracks();return state.maxCut}
+  /** 1.0.43: 🧹 สะอาด — ✂max + stronger residual mask + post spectral gate (cuts hiss / soft AI bleed) */
+  function setDeepClean(on){
+    state.deepClean=!!on;
+    if(state.deepClean){state.maxCut=true;Object.assign(UNMIX,UNMIX_CLEAN)}
+    else{Object.assign(UNMIX,UNMIX_DEFAULT)}
+    state._heard=null;state.dirty=true;applyLiveMix();renderTracks();scheduleHeard();return state.deepClean}
   function heardKey(){
-    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(cutOf(t))).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF,UNMIX.RESID,UNMIX.SOFT,UNMIX.SOFT_FLOOR,UNMIX.SOFT_EXP].join('/');
+    const mt=musicTracks();return mt.map(t=>t.id+':'+heardGain(t,t.clips[0]).toFixed(3)+':'+(t.clips[0].mixScale!=null?(+t.clips[0].mixScale).toFixed(4):'1')+':'+t.clips[0].buf+':'+eqKey(t.eq)+':'+eqKey(cutOf(t))).join('|')+'#'+(state.mixBuf?state.mixBuf.length:0)+'#'+[UNMIX.GAMMA,UNMIX.FLOOR,UNMIX.TF,UNMIX.FF,UNMIX.RESID,UNMIX.SOFT,UNMIX.SOFT_FLOOR,UNMIX.SOFT_EXP,state.deepClean?1:0].join('/');
   }
   /** the clean render is needed when a lane is muted / below 25 % (extra cleaning) or an audible lane has EQ (1.0.37);
    *  otherwise mix + (g−1)·stem is exact */
-  function needsHeard(){return canUnmix()&&musicTracks().some(t=>{const g=heardGain(t,t.clips[0]);return g<0.25-1e-6||(g>0&&!eqFlat(t.eq))})}
+  /** 1.0.43: 🧹 สะอาด always runs the heard pipeline (even with every lane open) so denoiseBed can scrub hiss */
+  function needsHeard(){return canUnmix()&&(!!state.deepClean||musicTracks().some(t=>{const g=heardGain(t,t.clips[0]);return g<0.25-1e-6||(g>0&&!eqFlat(t.eq))}))}
   function heardReady(){const h=state._heard;return needsHeard()&&h&&h.buf&&h.key===heardKey()?h.buf:null}
   /** what the live mixer may crossfade to: the (possibly still rendering) target of the current state */
   function heardLive(){const h=state._heard;return h&&h.T&&h.key===state._wantKey?h:null}
@@ -547,9 +554,15 @@ export function createStudio(ui){
       ui.onUnmix?.(0);
       const out=await renderHeard({mix:{L:mb.getChannelData(0),R:mb.numberOfChannels>1?mb.getChannelData(1):mb.getChannelData(0)},sr:mb.sampleRate,startSec:from,target:job.T,
         stems:mt.map(t=>{const b=state.buffers.get(t.clips[0].buf);return{L:b.getChannelData(0),R:b.numberOfChannels>1?b.getChannelData(1):b.getChannelData(0),g:heardGain(t,t.clips[0]),scale:t.clips[0].mixScale!=null?+t.clips[0].mixScale:1,eq:t.eq,cut:cutOf(t)}}),
-        onProgress:p=>{if(state._heard===job)ui.onUnmix?.(p)},cancelled:()=>state._heard!==job});
+        onProgress:p=>{if(state._heard===job)ui.onUnmix?.(Math.min(0.85,p*0.85))},cancelled:()=>state._heard!==job});
       if(!out||state._heard!==job){return null}
-      const b=ac().createBuffer(2,n,mb.sampleRate);b.copyToChannel(out.L,0);b.copyToChannel(out.R,1);
+      let L=out.L,R=out.R;
+      if(state.deepClean){
+        const d=await denoiseBed(L,R,mb.sampleRate,{strength:0.88,floor:0.05,hfBoost:2.2,
+          onProgress:p=>{if(state._heard===job)ui.onUnmix?.(0.85+0.15*p)},cancelled:()=>state._heard!==job});
+        if(!d||state._heard!==job)return null;L=d.L;R=d.R;
+      }
+      const b=ac().createBuffer(2,n,mb.sampleRate);b.copyToChannel(L,0);b.copyToChannel(R,1);
       job.buf=b;ui.onUnmix?.(1);
       return b;
     })();
@@ -1205,7 +1218,8 @@ export function createStudio(ui){
   function renderAll(){renderTracks();renderArrange();renderMixer();renderPiano();ui.onProject?.(state)}
 
   function renderTracks(){
-    {const mc=typeof document!=='undefined'&&document.getElementById('btnMaxCut');if(mc){mc.classList.toggle('on',!!state.maxCut);mc.setAttribute('aria-pressed',state.maxCut?'true':'false')}}
+    {const mc=typeof document!=='undefined'&&document.getElementById('btnMaxCut');if(mc){mc.classList.toggle('on',!!state.maxCut);mc.setAttribute('aria-pressed',state.maxCut?'true':'false')}
+     const dc=typeof document!=='undefined'&&document.getElementById('btnDeepClean');if(dc){dc.classList.toggle('on',!!state.deepClean);dc.setAttribute('aria-pressed',state.deepClean?'true':'false')}}
     const box=$('trackHeads');if(!box)return;box.innerHTML='';
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'')+(tr.fineOf?' fine':'');el.dataset.i=i;if(tr.stem)el.dataset.stem=tr.stem;
@@ -1950,7 +1964,7 @@ export function createStudio(ui){
     const RAW={targetPeak:1e9,maxGain:1}; // 1.0.35: store TRUE levels (peak-normalising every stem on save broke mix − stem after reload)
     for(const [id,buf] of state.buffers){if(used.has(id))bufs[id]=bufToWavU8(buf,RAW)} // skip stale click buffers from every nom rebuild (was saved too → 95 MB for 30 s)
     if(state.mixBuf)bufs.__mix=bufToWavU8(state.mixBuf,RAW);
-    const proj={v:1,beatV:132,lvl:1,title:state.title,bpm:state.bpm,t0:saneT0(state.t0,state.bpm),markers:state.markers||[],recipe:state.recipe||null,maxCut:!!state.maxCut,ghosts:ghostTracks(),tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
+    const proj={v:1,beatV:132,lvl:1,title:state.title,bpm:state.bpm,t0:saneT0(state.t0,state.bpm),markers:state.markers||[],recipe:state.recipe||null,maxCut:!!state.maxCut,deepClean:!!state.deepClean,ghosts:ghostTracks(),tracks:state.tracks.map(t=>({...t,clips:t.clips.map(c=>({...c,peaks:null}))})),bufs,savedAt:Date.now()};
     const db=await idb();
     await new Promise((ok,no)=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(proj,'current');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});
     state.dirty=false;ui.toast?.('บันทึกในเบราว์เซอร์แล้ว');
@@ -2006,7 +2020,7 @@ export function createStudio(ui){
         for(const [id,[o,l]] of Object.entries(proj.bufIndex||{}))proj.bufs[id]=new Uint8Array(ab,base+o,l)}
       else proj=JSON.parse(new TextDecoder().decode(new Uint8Array(ab)));
       if(!proj||typeof proj!=='object')throw new Error('ไฟล์ไม่ใช่โปรเจกต์ SetSod Data');
-      stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
+      stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.deepClean=!!proj.deepClean;if(state.deepClean){state.maxCut=true;Object.assign(UNMIX,UNMIX_CLEAN)}else Object.assign(UNMIX,UNMIX_DEFAULT);state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
       const a=ac();
       for(const id of Object.keys(proj.bufs||{})){
         const raw=proj.bufs[id];
@@ -2678,7 +2692,7 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setMaxCut,getMaxCut:()=>!!state.maxCut,mixerInfo:()=>{const p=state._pull;return{mode:p?(p.wl?'worklet':'scriptprocessor'):null,wlReady:!!(state._wl&&state._wl.ready),wlErr:state._wl?.err||null,under:p?.wl?p.wl.under:null,cuts:p?.wl?p.wl.cuts:null}},setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
+    fineSplit,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setMaxCut,getMaxCut:()=>!!state.maxCut,setDeepClean,getDeepClean:()=>!!state.deepClean,mixerInfo:()=>{const p=state._pull;return{mode:p?(p.wl?'worklet':'scriptprocessor'):null,wlReady:!!(state._wl&&state._wl.ready),wlErr:state._wl?.err||null,under:p?.wl?p.wl.under:null,cuts:p?.wl?p.wl.cuts:null}},setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,
@@ -2703,7 +2717,7 @@ export function createStudio(ui){
         const db=await idb();
         const proj=await new Promise((ok,no)=>{const tx=db.transaction('projects','readonly');const g=tx.objectStore('projects').get('current');g.onsuccess=()=>ok(g.result);g.onerror=()=>no(g.error)});
         if(proj&&proj.tracks&&proj.bufs){
-          stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
+          stopPlay();state.buffers.clear();state.mixBuf=null;state.tracks=proj.tracks||[];state.title=proj.title||'Untitled';state.bpm=proj.bpm||120;state.markers=Array.isArray(proj.markers)?proj.markers:[];state.recipe=proj.recipe||null;state.maxCut=!!proj.maxCut;state.deepClean=!!proj.deepClean;if(state.deepClean){state.maxCut=true;Object.assign(UNMIX,UNMIX_CLEAN)}else Object.assign(UNMIX,UNMIX_DEFAULT);state.ghosts=Array.isArray(proj.ghosts)?proj.ghosts:[];if(proj.t0!=null)state.t0=+proj.t0||0;
           const a=ac();
           for(const id of Object.keys(proj.bufs||{})){
             const raw=proj.bufs[id];const u8=raw instanceof Uint8Array?raw:new Uint8Array(raw);

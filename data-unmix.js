@@ -1,4 +1,4 @@
-/* SetSod Data 1.0.40 — clean mute / solo / volume / per-lane EQ on AI stems (t317u, t320u).
+/* SetSod Data 1.0.43 — clean mute / solo / volume / per-lane EQ on AI stems + deep residual denoise.
  * Source = mix + Σ (G_k(f) − 1)·S_k   (1.0.33 "mix − muted stem", now per frequency: G = gain × lane EQ)
  * then a soft mask per STFT bin cleans what the AI lanes left behind of the stems that were turned off:
  *   keep = Σ G²·|S_k|²      cut = Σ w(G)·γ·cutMul_k(f)·|S_k|²      w = ((1−G)·max(0,1−4G))²  (0 from 25 % up)
@@ -8,9 +8,13 @@
  * (γ × 10^(dB/20), floor × 10^(−dB/40): 24 dB → γ 48, floor −26 dB — stronger means more damage to the music in that band).
  * 1.0.39 (t328u): by default the mask only cleans the residual (mix − Σ lanes) and the heard lanes are added back exactly
  * (kept instruments/คอรัส keep their level, no watery sound); with ✂ extra cut / ✂max the mask may touch the kept lanes (old way).
+ * 1.0.43: CLEAN preset (FLOOR 0.08 / GAMMA 4.5 / stronger soft) + denoiseBed() spectral gate on residual hiss after unmix.
  * All gains 1 and EQ flat → output = the mix exactly. Renders progressively from any start point (playhead first)
  * so playback can switch to it hop by hop; pure JS, yields every ~8 ms (keeps the audio thread fed). */
 export const UNMIX={N:2048,H:512,GAMMA:3,FLOOR:0.2,TF:5,FF:5,RESID:1,SOFT:1,SOFT_FLOOR:0.5,SOFT_EXP:0.5};
+/** 1.0.43: aggressive residual cleanup for 🧹 สะอาด (still soft enough to avoid alien bed) */
+export const UNMIX_CLEAN={GAMMA:4.5,FLOOR:0.08,SOFT:1,SOFT_FLOOR:0.38,SOFT_EXP:0.7};
+export const UNMIX_DEFAULT={GAMMA:3,FLOOR:0.2,SOFT:1,SOFT_FLOOR:0.5,SOFT_EXP:0.5};
 const EQF={lo:180,mid:1200,hi:6000};
 /** 3-band lane EQ (dB) → dB at frequency f: low ≲180 Hz, mid around 1.2 kHz, high ≳6 kHz, smooth crossfades between (no phase) */
 export function eqDb(eq,f){
@@ -164,4 +168,78 @@ export async function renderHeard(o){
     }
   }
   T.done=true;return T;
+}
+
+/**
+ * 1.0.43: post-unmix spectral gate — estimate per-bin noise from the quietest frames, then Wiener-attenuate.
+ * Aimed at residual hiss / soft AI bleed after mute, not at rewriting the musical bed.
+ * @param {Float32Array} L
+ * @param {Float32Array} [R]
+ * @param {number} sr
+ * @param {{strength?:number,floor?:number,hfBoost?:number,N?:number,H?:number,cancelled?:()=>boolean,onProgress?:(p:number)=>void}} [opt]
+ */
+export async function denoiseBed(L,R,sr,opt){
+  opt=opt||{};const N=opt.N||2048,H=opt.H||512,B=N/2+1,n=L.length,Rr=R||L;
+  const strength=Math.max(0,Math.min(1,opt.strength!=null?+opt.strength:0.75));
+  const floor=Math.max(0.015,Math.min(0.5,opt.floor!=null?+opt.floor:0.12)); // never mute bins totally
+  const hfBoost=opt.hfBoost!=null?+opt.hfBoost:1.6; // clean highs a bit more (hiss lives there)
+  if(!(strength>0.01)||n<N*4)return {L,R:Rr};
+  const pl=fftPlan(N),win=new Float32Array(N);for(let i=0;i<N;i++)win[i]=0.5-0.5*Math.cos(2*Math.PI*i/N);
+  const frames=Math.max(1,Math.floor((n-N)/H)+1);
+  const pL=new Float32Array(frames*B),pR=new Float32Array(frames*B);
+  const re=new Float32Array(N),im=new Float32Array(N);
+  // pass 1: power spectrogram + frame energy
+  const eF=new Float32Array(frames);
+  for(let f=0;f<frames;f++){
+    const s0=f*H;
+    for(let i=0;i<N;i++){const j=s0+i;re[i]=(j<n?L[j]:0)*win[i];im[i]=(j<n?Rr[j]:0)*win[i]}
+    fft(pl,re,im,false);
+    let e=0;const o=f*B;
+    for(let q=0;q<B;q++){
+      const q2=(N-q)%N;
+      const lr=0.5*(re[q]+re[q2]),li=0.5*(im[q]-im[q2]),rr=0.5*(im[q]+im[q2]),ri=-0.5*(re[q]-re[q2]);
+      const a=lr*lr+li*li,b=rr*rr+ri*ri;pL[o+q]=a;pR[o+q]=b;e+=a+b;
+    }
+    eF[f]=e;
+    if(opt.onProgress&&(f&63)===0)opt.onProgress(0.35*f/frames);
+    if((f&31)===0){await new Promise(r=>setTimeout(r,0));if(opt.cancelled&&opt.cancelled())return null}
+  }
+  // noise = ~18th percentile frame power per bin (quiet parts) + per-bin spectral minimum (tracks steady hiss)
+  const order=Array.from({length:frames},(_,i)=>i).sort((a,b)=>eF[a]-eF[b]);
+  const nTake=Math.max(4,Math.floor(frames*0.18));
+  const nL=new Float32Array(B),nR=new Float32Array(B),minL=new Float32Array(B).fill(Infinity),minR=new Float32Array(B).fill(Infinity);
+  for(let f=0;f<frames;f++){const o=f*B;for(let q=0;q<B;q++){if(pL[o+q]<minL[q])minL[q]=pL[o+q];if(pR[o+q]<minR[q])minR[q]=pR[o+q]}}
+  for(let q=0;q<B;q++){let a=0,b=0;for(let i=0;i<nTake;i++){const o=order[i]*B+q;a+=pL[o];b+=pR[o]}nL[q]=Math.max(a/nTake,minL[q]*1.4);nR[q]=Math.max(b/nTake,minR[q]*1.4)}
+  // detect lossy brick-wall (energy cliff) — hard-gate bins above it (hiss / empty ultrasonics)
+  const avg=new Float32Array(B);for(let q=0;q<B;q++){let s=0;for(let f=0;f<frames;f++)s+=pL[f*B+q]+pR[f*B+q];avg[q]=s/frames}
+  let brick=B; // bin index of first "empty" zone
+  {const mid=Math.max(2,Math.floor(8000*N/sr)),hi=Math.min(B-2,Math.floor(18000*N/sr));
+    let base=0,nb=0;for(let q=Math.floor(2000*N/sr);q<mid;q++){base+=avg[q];nb++}base=(base/Math.max(1,nb))+1e-30;
+    for(let q=mid;q<hi;q++){if(avg[q]<base*0.04&&avg[q+1]<base*0.04){brick=q;break}}}
+  // pass 2: Wiener gains + OLA rewrite
+  const outL=new Float32Array(n),outR=new Float32Array(n),wsum=new Float32Array(n);
+  for(let f=0;f<frames;f++){
+    const s0=f*H,o=f*B;
+    for(let i=0;i<N;i++){const j=s0+i;re[i]=(j<n?L[j]:0)*win[i];im[i]=(j<n?Rr[j]:0)*win[i]}
+    fft(pl,re,im,false);
+    for(let q=0;q<B;q++){
+      const freq=q*sr/N,boost=freq>=6000?hfBoost:freq>=3000?1+0.4*(hfBoost-1):1;
+      const a=pL[o+q],b=pR[o+q];
+      let gL=a/(a+boost*strength*nL[q]+1e-30),gR=b/(b+boost*strength*nR[q]+1e-30);
+      gL=Math.max(floor,Math.min(1,gL));gR=Math.max(floor,Math.min(1,gR));
+      // above brick-wall: kill residual hash (lossy empty zone — keep tiny OLA floor)
+      if(q>=brick){gL=Math.min(gL,0.03);gR=Math.min(gR,0.03)}
+      const q2=(N-q)%N;
+      const lr=0.5*(re[q]+re[q2])*gL,li=0.5*(im[q]-im[q2])*gL;
+      const rr=0.5*(im[q]+im[q2])*gR,ri=-0.5*(re[q]-re[q2])*gR;
+      const zr=lr-ri,zi=li+rr,zr2=lr+ri,zi2=-li+rr;
+      if(q===0||q===N/2){re[q]=zr;im[q]=zi}else{re[q]=zr;im[q]=zi;re[q2]=zr2;im[q2]=zi2}
+    }
+    fft(pl,re,im,true);
+    for(let i=0;i<N;i++){const j=s0+i;if(j<0||j>=n)continue;const w=win[i];outL[j]+=re[i]/N*w;outR[j]+=im[i]/N*w;wsum[j]+=w*w}
+    if(opt.onProgress&&(f&63)===0)opt.onProgress(0.35+0.65*f/frames);
+    if((f&31)===0){await new Promise(r=>setTimeout(r,0));if(opt.cancelled&&opt.cancelled())return null}
+  }
+  for(let i=0;i<n;i++){const w=wsum[i]>1e-6?wsum[i]:1;outL[i]/=w;outR[i]/=w}
+  return {L:outL,R:outR};
 }
