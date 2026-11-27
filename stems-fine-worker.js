@@ -1,6 +1,7 @@
 // SetSod Data — optional fine split (แยกละเอียด).
 // DrumSep v2 (inagoy / Gridshift, MIT) — drums → kick, snare, cymbals, toms.
 // UVR-MDX-NET KARA 2 (Ultimate Vocal Remover, MIT) — vocals → lead, backing.
+// Guitar 1.0.51 — DSP center/side lead↔rhythm (no big model). Parent fold keeps sum = original guitar.
 // Hosted on Hugging Face like htdemucs_6s (GitHub Pages is 100 MB/file). Cache API: bp-ai-models-v4.
 // STFT/iSTFT run in JS (HDemucs contract for DrumSep; UVR/audio-separator contract for KARA 2).
 const ORT='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.31.1/dist/';
@@ -17,6 +18,10 @@ const MODELS={
     bytes:52786726,
     sha:'bf32e15105a09c0f7dddd2b67346146334d6f3ecb399ed7638eba2ab07cbf5f4',
     src:['lead','backing']
+  },
+  guitar:{
+    url:null,bytes:0,sha:null,
+    src:['grhythm','glead']
   }
 };
 
@@ -332,6 +337,37 @@ async function runKara2(L,R,sess){
   return[[leadL,leadR],[primaryL,primaryR]];
 }
 
+/* ---------- Guitar lead / rhythm (DSP, no ONNX) ----------
+   Lead ≈ center (mid) content gated by center-vs-side envelopes (typical rock: solo center, rhythm wide).
+   Rhythm = residual. Studio foldResidual restores exact parent sum when both lanes unmuted. */
+async function runGuitarSep(L,R,sr){
+  const n=L.length,sr0=Math.max(8000,+sr||44100);
+  const leadL=new Float32Array(n),leadR=new Float32Array(n);
+  const rhL=new Float32Array(n),rhR=new Float32Array(n);
+  const aEnv=Math.exp(-1/(sr0*0.028));
+  const hpA=Math.exp(-2*Math.PI*180/sr0); // gentle HPF on mid → solo body
+  let envM=0,envS=0,hp=0;
+  const t0=performance.now();let lastP=0;
+  for(let i=0;i<n;i++){
+    const mid=0.5*(L[i]+R[i]),side=0.5*(L[i]-R[i]);
+    hp=hpA*hp+(1-hpA)*mid;const midHp=mid-hp;
+    const am=midHp<0?-midHp:midHp,as=side<0?-side:side;
+    envM=aEnv*envM+(1-aEnv)*am;envS=aEnv*envS+(1-aEnv)*as;
+    // Center-dominant → more lead; cap so rhythm always keeps some body
+    let g=envM/(envM+envS*1.55+1e-6);
+    g=Math.min(0.82,Math.max(0.04,g));
+    g=g*g*(3-2*g); // smoothstep — avoid brittle gating
+    const l=midHp*g;
+    leadL[i]=l;leadR[i]=l;
+    rhL[i]=L[i]-l;rhR[i]=R[i]-l;
+    if((i&65535)===0){
+      const p=i/n;if(p-lastP>=0.04){lastP=p;postMessage({t:'prog',p,ms:performance.now()-t0})}
+    }
+  }
+  postMessage({t:'prog',p:1,ms:performance.now()-t0});
+  return[[rhL,rhR],[leadL,leadR]];
+}
+
 /* ---------- session ---------- */
 let ort;
 async function makeSess(buf,eps){
@@ -346,8 +382,20 @@ async function makeSess(buf,eps){
 
 onmessage=async({data:d})=>{
   try{
-    const kind=d.kind==='vocals'?'vocals':'drums';
+    const kind=d.kind==='vocals'?'vocals':d.kind==='guitar'?'guitar':'drums';
     const spec=MODELS[kind];
+    const L=d.L,R=d.R,sr=d.sr||44100,n=L.length;
+    if(kind==='guitar'){
+      postMessage({t:'ready',ep:'dsp',threads:1,loadMs:0,src:spec.src,kind});
+      postMessage({t:'sepStart',n,sec:n/sr,sr,src:spec.src,kind});
+      const out=await runGuitarSep(L,R,sr);
+      for(let k=0;k<out.length;k++){
+        const a=out[k][0],b=out[k][1];
+        postMessage({t:'stem',i:k,name:spec.src[k],L:a,R:b,n},[a.buffer,b.buffer]);
+      }
+      postMessage({t:'done',src:spec.src,n,sr,kind});
+      return;
+    }
     ort=await import(d.opt&&d.opt.ort||ORT+(d.opt&&d.opt.wasmOnly?'ort.wasm.min.mjs':'ort.webgpu.min.mjs'));
     ort.env.wasm.wasmPaths=d.opt&&d.opt.ortBase||ORT;
     ort.env.wasm.numThreads=self.crossOriginIsolated?Math.min(8,navigator.hardwareConcurrency||4):1;
@@ -355,7 +403,6 @@ onmessage=async({data:d})=>{
     const tLoad=performance.now();
     const{sess,ep}=await makeSess(buf,d.opt&&d.opt.eps||['webgpu','wasm']);
     postMessage({t:'ready',ep,threads:ort.env.wasm.numThreads,loadMs:performance.now()-tLoad,src:spec.src,kind});
-    const L=d.L,R=d.R,sr=d.sr||44100,n=L.length;
     postMessage({t:'sepStart',n,sec:n/sr,sr,src:spec.src,kind});
     const out=kind==='drums'?await runDrumsep(L,R,sess):await runKara2(L,R,sess);
     try{sess.release&&sess.release()}catch(e){}

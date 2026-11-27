@@ -256,9 +256,20 @@ export function createStudio(ui){
         {key:'lead',name:'นำ',color:'#d67bb8',tip:'คุณภาพขึ้นกับเพลง'},
         {key:'backing',name:'คอรัส',color:'#9b8af0',tip:'คุณภาพขึ้นกับเพลง'}
       ]
+    },
+    // 1.0.51: DSP center/side — no ONNX. Mute glead (M) = rhythm only; both unmuted = original guitar (fold).
+    guitar:{
+      kind:'guitar',bytes:0,url:null,dsp:true,
+      title:'แยกกีตาร์เป็น ริธึม / โซโล่?',
+      note:'แยกเบาในเครื่อง · รวมเลนแล้วยังได้ซาวเดิม · ปิดเลนโซโล่ด้วยปุ่ม M',
+      fold:'grhythm',
+      parts:[
+        {key:'grhythm',name:'กีตาร์ริธึม',color:'#c97b5a',tip:'ริธึม / คอร์ด — รวมกับโซโล่แล้วได้กีตาร์เดิม'},
+        {key:'glead',name:'กีตาร์โซโล่',color:'#e8a070',tip:'ลีด/โซโล่ (ประมาณ) — กด M เพื่อปิดโซโล่ เหลือริธึม'}
+      ]
     }
   };
-  const FINE_CHILD={kick:'drums',snare:'drums',toms:'drums',cymbals:'drums',lead:'vocals',backing:'vocals'};
+  const FINE_CHILD={kick:'drums',snare:'drums',toms:'drums',cymbals:'drums',lead:'vocals',backing:'vocals',grhythm:'guitar',glead:'guitar'};
   function isFineParent(tr){return !!(tr&&FINE[tr.stem]&&!tr.fineOf&&!state.tracks.some(x=>x.fineOf===tr.stem))}
   function foldResidual(parent,parts,foldKey){
     const n=parent.L.length,sL=new Float32Array(n),sR=new Float32Array(n);
@@ -267,15 +278,15 @@ export function createStudio(ui){
     const TL=t.L,TR=t.R||t.L,PL=parent.L,PR=parent.R||parent.L;
     for(let i=0;i<n;i++){TL[i]+=PL[i]-sL[i];TR[i]+=PR[i]-sR[i]}
   }
-  async function modelCached(url){try{const c=await caches.open('bp-ai-models-v4');return !!(await c.match(url))}catch(e){return false}}
+  async function modelCached(url){if(!url)return true;try{const c=await caches.open('bp-ai-models-v4');return !!(await c.match(url))}catch(e){return false}}
   // 1.0.36 (t319u): one fine-split at a time (saves memory). Second click is queued;
   // each parent row shows its own status; the global #sAi line is labeled and never mixes two %.
   const fineState=Object.create(null); // stem -> {phase,line,row}
   const fineQueue=[];
   let fineRunning=false;
-  function fineLabel(kind){return kind==='vocals'?'ร้อง':'กลอง'}
+  function fineLabel(kind){return kind==='vocals'?'ร้อง':kind==='guitar'?'กีตาร์':'กลอง'}
   function paintFineStatus(){
-    const kinds=['drums','vocals'];
+    const kinds=['drums','vocals','guitar'];
     const run=kinds.map(k=>fineState[k]).find(s=>s&&s.phase==='run');
     const q=kinds.filter(k=>fineState[k]&&fineState[k].phase==='queued').map(fineLabel);
     let line=run&&run.line||'';
@@ -301,7 +312,11 @@ export function createStudio(ui){
     if(!buf){ui.toast?.('ไม่มีเสียงในเลนนี้');return}
     const sec=buf.duration||clip.dur||0,phone=!!(ui.isPhone&&ui.isPhone()),cached=await modelCached(spec.url);
     const lo=Math.max(1,Math.round(sec/120)||1),hi=Math.max(lo+1,Math.round(sec/40)||2);
-    const lines=[spec.title,
+    const lines=spec.dsp?[spec.title,
+      'แยกเบาในเครื่องนี้ · ไม่โหลดโมเดลใหญ่ · เพลง ~'+Math.round(sec)+' วินาที (เร็ว)',
+      spec.note,
+      'รวมเลนริธึม+โซโล่แล้วยังได้ซาวกีตาร์เดิม · ปิดโซโล่ด้วยปุ่ม M']:
+      [spec.title,
       cached?('โมเดลพร้อมแล้ว · แยกในเครื่องนี้ เพลง ~'+Math.round(sec)+' วินาที ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'):('ครั้งแรกจะโหลดโมเดล '+(spec.bytes/1e6|0)+' MB จาก Hugging Face แล้วแยกในเครื่อง · ประมาณ '+lo+'–'+hi+' นาที (ขึ้นกับเครื่อง)'),
       spec.note+(spec.kind==='vocals'?'':''),
       phone?'บนมือถืออาจช้าหรือหน่วยความจำไม่พอ — แนะนำใช้คอมพิวเตอร์':'โมเดล MIT ทำงานในเบราว์เซอร์ เสียงไม่ออกเครื่อง'];
@@ -333,7 +348,7 @@ export function createStudio(ui){
     if(!tr||!isFineParent(tr)){setFineStatus(job.stem,'err','❌ แยก'+lab+'ไม่สำเร็จ — ไม่มีเลนนี้','');return}
     const prog=(line,row)=>setFineStatus(job.stem,'run',line,row);
     prog('⏳ แยก'+lab+'…','กำลังแยก…');
-    const w=new Worker('stems-fine-worker.js?v=1.0.36');
+    const w=new Worker('stems-fine-worker.js?v=1.0.51');
     let stems;
     try{
       stems=await new Promise((ok,no)=>{
@@ -1234,7 +1249,8 @@ export function createStudio(ui){
     state.tracks.forEach((tr,i)=>{
       const el=document.createElement('div');el.className='thead'+(state.sel.track===i?' on':'')+(tr.fineOf?' fine':'');el.dataset.i=i;if(tr.stem)el.dataset.stem=tr.stem;
       if(tr.fineTip)el.title=tr.fineTip;
-      const fine=isFineParent(tr)?`<button type="button" class="tb fine" data-fine="${i}" title="${tr.stem==='drums'?'แยกละเอียด — กระเดื่อง สแนร์ ทอม ฉาบ':'แยกละเอียด — นำ / คอรัส (คุณภาพขึ้นกับเพลง)'}">✂</button>`:'';
+      const fineTip=tr.stem==='drums'?'แยกละเอียด — กระเดื่อง สแนร์ ทอม ฉาบ':tr.stem==='guitar'?'แยกละเอียด — ริธึม / โซโล่ (ปิดโซโล่ด้วย M)':'แยกละเอียด — นำ / คอรัส (คุณภาพขึ้นกับเพลง)';
+      const fine=isFineParent(tr)?`<button type="button" class="tb fine" data-fine="${i}" title="${fineTip}">✂</button>`:'';
       el.innerHTML=`<div class="tn"><i style="background:${tr.color}"></i><input value="${escAttr(tr.name)}" data-rn="${i}">${fine}<b>${tr.type==='midi'?'MIDI':'AUD'}</b>
           <button type="button" class="tb del" data-deltr="${i}" title="ลบแทร็กนี้">✕</button></div>
         <div class="tops">
