@@ -1,5 +1,5 @@
 /* SetSod Data Studio — arrangement, MIDI piano roll, record, FX, project save */
-import {beepAt,clickGrid,cueWords,countSlots,stretchCue,countPaceNorm,masterMusic,masterNom,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.48';
+import {beepAt,clickGrid,cueWords,countSlots,stretchCue,countPaceNorm,masterMusic,masterNom,houseSound,wav16,autoEnd,peakAbs} from './data-nom.js?v=1.0.55';
 import {detectBeat,musicStartSec as nomMusicStart} from './data-beat.js?v=1.0.33';
 import {renderHeard,denoiseBed,UNMIX,UNMIX_CLEAN,UNMIX_DEFAULT,eqFlat} from './data-unmix.js?v=1.0.46';
 const NOTES=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -304,7 +304,7 @@ export function createStudio(ui){
       slot.title=st.line||'';
     });
   }
-  function setFineStatus(stem,phase,line,row){fineState[stem]={phase,line,row:row||''};paintFineStatus();if((phase==='done'||phase==='err')&&fineWait[stem]){const w=fineWait[stem];delete fineWait[stem];w.forEach(f=>{try{f(phase==='done')}catch(e){}})}}
+  function setFineStatus(stem,phase,line,row){fineState[stem]={phase,line,row:row||''};if((phase==='done'||phase==='err')&&fineWait[stem]){const w=fineWait[stem];delete fineWait[stem];w.forEach(f=>{try{f(phase==='done')}catch(e){}})}try{paintFineStatus()}catch(e){console.warn('paintFine',e)}}
   // Data 1.0.53 (MUS-14): fineSplit(i,{quiet}) skips the confirm (one-tap ✂ โซโล่) and resolves when the split is done/failed
   const fineWait=Object.create(null);
   function fineDone(stem){return new Promise(ok=>{(fineWait[stem]=fineWait[stem]||[]).push(ok)})}
@@ -401,10 +401,12 @@ export function createStudio(ui){
       const b=bufFromLR(p.L,p.R,sr);const id=putBuf(b);
       t.clips.push({id:uid(),buf:id,start,offset:0,dur:b.duration,gain:1,peaks:peaksOf(b),name:meta.key,mixScale:parentScale});
     });
-    state.sel.track=idx;state.dirty=true;renderAll();
+    state.sel.track=idx;state.dirty=true;
     const names=spec.parts.map(p=>p.name).join(' / ');
+    // Resolve waiters before renderAll so one-tap 🎹/📢 can finish even if painting is slow or throws
     setFineStatus(job.stem,'done','✅ แยก'+lab+'แล้ว — '+names,'');
     ui.toast?.('แยกละเอียดแล้ว · '+names);
+    setTimeout(()=>{try{renderAll()}catch(e){console.warn('render after fine',e)}},0);
   }
 
   /* ---------- FX graph helpers ---------- */
@@ -2442,11 +2444,14 @@ export function createStudio(ui){
     const n=Math.max(musicMonoBuf.length,nomBuf.length);
     const pad=x=>{if(!x)return null;if(x.length===n)return x;const o=new Float32Array(n);o.set(x.subarray(0,Math.min(n,x.length)));return o};
     const music=pad(mono(musicMonoBuf)),nom=pad(mono(nomBuf)),guide=opt.guideBuf?pad(mono(opt.guideBuf)):null;
-    const mm=opt.loud!==false?masterMusic(music,sr,opt.lufs!=null?opt.lufs:-11,opt.tpDb!=null?opt.tpDb:-1):{y:music,grDb:0,lufs:null};
+    // 1.0.55 🏠 house sound on the music side only (nom/click untouched); target −12 LUFS, never above the −11 cap, TP ≤ −1 dBTP
+    let hs=null,musicIn=music;
+    if(opt.house){hs=houseSound(new Float32Array(music),sr,{glue:opt.houseGlue!==false,clamp:opt.houseGlue!==false});musicIn=hs.y}
+    const mm=opt.loud!==false?masterMusic(musicIn,sr,opt.lufs!=null?opt.lufs:(opt.house?-12:-11),opt.tpDb!=null?opt.tpDb:-1):{y:musicIn,grDb:0,lufs:null};
     const nm=masterNom(nom,sr,opt.clickPeakDb!=null?opt.clickPeakDb:-0.5,guide,opt.guideDb!=null?opt.guideDb:-28);
     const chans=side==='L'?[nm,mm.y]:[mm.y,nm];
     const blob=new Blob([wav16(chans,sr)],{type:'audio/wav'});
-    return{blob,report:{lufs:mm.lufs,grDb:mm.grDb,musicPeak:peakAbs(mm.y),nomPeak:peakAbs(nm),sr}};
+    return{blob,report:{lufs:mm.lufs,grDb:mm.grDb,musicPeak:peakAbs(mm.y),nomPeak:peakAbs(nm),sr,house:hs?hs.glue:null}};
   }
   /** Auto end marker time (song s) from the rendered music. */
   function autoEndT(musicMonoBuf,t0,bpm,rate,lead){
@@ -2784,7 +2789,7 @@ export function createStudio(ui){
   const api={
     state,newProject,loadStemChannels,importAudioToTrack,startPlay,stopPlay,seek,saveProject,mixdown,
     playTrack,applyLiveMix,addAudioTrack,addMidiTrack,deleteTrack,setTrackWaveZoom,setNomVol,renderAll,toggleRecord,getDur:dur,fmt,
-    fineSplit,refreshLanes(){applyLiveMix();renderTracks();renderMixer()},setPush(on){state.push=!!on;return state.push},getPush:()=>!!state.push,glueInfo:()=>state._glue||null,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setMaxCut,getMaxCut:()=>!!state.maxCut,setDeepClean,getDeepClean:()=>!!state.deepClean,mixerInfo:()=>{const p=state._pull;return{mode:p?(p.wl?'worklet':'scriptprocessor'):null,wlReady:!!(state._wl&&state._wl.ready),wlErr:state._wl?.err||null,under:p?.wl?p.wl.under:null,cuts:p?.wl?p.wl.cuts:null}},setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,
+    fineSplit,refreshLanes(){applyLiveMix();renderTracks();renderMixer()},setPush(on){state.push=!!on;return state.push},getPush:()=>!!state.push,glueInfo:()=>state._glue||null,applyStemMutes,renderTrackWav,renderMusicMono,splitDualWav,heardGain,ensureMixScales,ensureHeard,needsHeard,heardReady,setMaxCut,getMaxCut:()=>!!state.maxCut,setDeepClean,getDeepClean:()=>!!state.deepClean,mixerInfo:()=>{const p=state._pull;return{mode:p?(p.wl?'worklet':'scriptprocessor'):null,wlReady:!!(state._wl&&state._wl.ready),wlErr:state._wl?.err||null,under:p?.wl?p.wl.under:null,cuts:p?.wl?p.wl.cuts:null}},setUnmix(o){Object.assign(UNMIX,o||{});state._heard=null;scheduleHeard();return{...UNMIX}},makeDualMonoBlob,makeExportClickBuf,houseSound,
     makeClickWav,makeFlourishWav,bufToWavBlob,nativeSr,detectBeatGrid,relockBeat,nudgeNom,playheadT,
     copySelected,pasteClipboard,ensureMidiInst,MIDI_INST,scrubTo,
     syncGuideTracks,makeCountInBuf,makeClickBuf,loadCiVoices,setNomAudible,

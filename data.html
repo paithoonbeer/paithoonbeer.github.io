@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="bp-data" content="1.0.54">
+<meta name="bp-data" content="1.0.55">
 <title>SetSod Data Studio</title>
 <link rel="icon" href="icon-192.png">
 <style>
@@ -62,6 +62,8 @@ body{display:flex;flex-direction:column;height:100vh}
 .recipe .rlead{display:flex;gap:4px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--mut)}
 .recipe .rlead .lb{min-height:28px;min-width:30px;padding:2px 6px;font-size:15px;line-height:1}
 .recipe .rlead .lb.on{background:#2c3a22;border-color:#7fb04a;box-shadow:0 0 0 1px #7fb04a inset}
+.recipe .rlead .lb.keep.on{background:#1f3340;border-color:#5aa9d6;box-shadow:0 0 0 1px #5aa9d6 inset}
+.recipe .rlead .lb.house.on{background:#33281f;border-color:#d6a05a;box-shadow:0 0 0 1px #d6a05a inset}
 .recipe .rlead .lb.push.on{background:#3a2c18;border-color:#e0a040;box-shadow:0 0 0 1px #e0a040 inset}
 .recipe .rlead select{min-height:28px;font-size:12px}
 select{-webkit-appearance:none;appearance:none;background:#0c0f14 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2385909b'/%3E%3C/svg%3E") no-repeat right 6px center;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:3px 20px 3px 6px}
@@ -292,7 +294,7 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
     <button type="button" class="btn pri" id="btnRefPreset" title="ตั้งทุกอย่างเหมือนไฟล์ตัวอย่าง: บี๊บทุก 2 จังหวะ · นับเข้าตอนต้นเพลง · 48k · −11 LUFS">📄 แบบไฟล์ตัวอย่าง</button>
     <span class="cnt"><button type="button" class="btn" id="btnCount" aria-pressed="false" title="เปิดแล้วคลิกบนไทม์ไลน์ตรงไหน = นับตรงนั้น (ตามนอมของเพลง) · คลิกที่ช่องนับ = ลบ · ลาก = ย้าย">🗣 นับ 1-2-3-4</button><select id="rCountN" title="แบบการนับ"><option value="8" title="one · two · one two three four">8 ครั้ง</option><option value="4" title="one two three four">4 ครั้ง</option></select><select id="rCountPace" title="จังหวะนับเทียบกับจังหวะนอม — ทุกจังหวะ / เร็ว / ช้า / ช้ามาก"><option value="1" selected>ทุกจังหวะ (ตามนอม)</option><option value="0.5">เร็ว (2×)</option><option value="2">ช้า (½)</option><option value="4">ช้ามาก (¼)</option></select></span>
     <label class="chk">นับเข้า <select id="rIntro"><option value="0">ไม่นับ</option><option value="over1" selected>ต้นเพลง 1 รอบ</option><option value="over2">ต้นเพลง 2 รอบ</option><option value="pre1">ก่อนเพลง 1 ห้อง</option><option value="pre2">ก่อนเพลง 2 ห้อง</option></select></label>
-    <div class="rlead" id="rLead" title="Data 1.0.54 — ⭐ เสียงเด่นของเพลงนี้ (จำแยกต่อเพลง)">
+    <div class="rlead" id="rLead" title="Data 1.0.55 — ⭐ เสียงเด่นของเพลงนี้ (จำแยกต่อเพลง)">
       <span title="⭐ เสียงเด่น: เลนที่เลือกดังขึ้น +3 dB · กดซ้ำ = ยกเลิก">⭐</span>
       <button type="button" class="btn lb" data-lead="vocals" title="⭐ ร้องเด่น">🎤</button>
       <button type="button" class="btn lb" data-lead="guitar" title="⭐ กีตาร์เด่น">🎸</button>
@@ -303,7 +305,9 @@ label.chk{display:inline-flex;gap:5px;align-items:center;color:var(--mut);font-s
         <option value="">🎼 แนว</option><option value="pop">🎤 ป๊อป</option><option value="rock">🎸 ร็อค</option><option value="luktung">🪕 ลูกทุ่ง</option><option value="molam">🎋 หมอลำ</option><option value="samcha">💃 สามช่า</option><option value="pcl">🌾 เพื่อชีวิต</option><option value="slow">🌙 ช้า</option>
       </select>
       <button type="button" class="btn lb" id="btnCutSolo" title="✂ ตัดโซโล่กีตาร์ (ปิดเต็ม) — แยกกีตาร์เป็น ริธึม/โซโล่ ให้เอง แล้วปิดเลนโซโล่ · กดซ้ำ = เปิดโซโล่คืน">✂🎸</button>
+      <button type="button" class="btn lb keep" id="btnKeep" title="🎹 เก็บคีย์ ประดับ ริธึม — ปิด กลอง เบส ร้องนำ กีตาร์โซโล่ · เก็บ คอรัส คีย์/เปียโน ดนตรีอื่นๆ (ซินธ์ สตริง) กีตาร์ริธึม · แยกร้อง/กีตาร์ให้เองถ้ายังไม่แยก · กดซ้ำ = คืนค่าเดิม · แนะนำ 💎 HQ บนพีซี">🎹 เก็บคีย์</button>
       <button type="button" class="btn lb push" id="btnPush" title="📢 ดันสู้วง — ปิด กลอง เบส กีตาร์ ร้องนำ (วงเล่นสดเอง) · ดัน คีย์ คอรัส ดนตรีอื่นๆ +3 dB · บีบเสียงเบาๆ 2:1 ตอนทำไฟล์ · เพลง −11 LUFS ไม่แตก · กดซ้ำ = คืนค่าเดิม">📢</button>
+      <button type="button" class="btn lb house on" id="btnHouse" aria-pressed="true" title="🏠 ซาวด์ SetSod (เปิดอยู่) — มาสเตอร์ฝั่งเพลงตอนทำดาต้า: ตัดต่ำ 40 Hz + ลดเบสนิดหน่อยให้เบสสดมีที่ · ดันกลางแหลมเล็กน้อย (คีย์/ริธึม/คอรัส) · บีบเบาๆ · −12 LUFS ไม่เกิน −11 · TP ≤ −1 dB ไม่แตก · ไม่แตะฝั่งนอม · กดเพื่อปิด">🏠</button>
     </div>
     <span class="chpill" id="chPill" title="ต้นทาง = ไฟล์ที่ลากเข้า · ส่งออก = รูปแบบที่ตั้งใน ⚙"><b>—</b> <span id="chPillTxt">ยังไม่มีไฟล์</span></span>
     <button type="button" class="btn setpri" id="btnSetSaveBar" hidden disabled title="ยืนยันการตั้งค่าที่แก้ไว้">💾 บันทึก</button>
@@ -387,7 +391,10 @@ const studio=createStudio({
   onProjectLoaded(proj){if(window.__recipeReady)window.__applyProj?.(proj);else window.__pendProj=proj},
   onMarkers(list){window.__onMarkers?.(list)},
   onUnmix(p){const el=document.getElementById('sRecipe');if(!el)return; // 1.0.35: clean-mute render progress
-    if(p<0)return;el.textContent=p>=1?'🎚 ตัดเสียงที่ปิดออกแบบสะอาดแล้ว (ฟัง = ไฟล์)':`🎚 กำลังตัดเสียงที่ปิดให้สะอาด… ${Math.round(p*100)}%`},
+    if(p<0)return;
+    // 1.0.55: don't overwrite 🎹/📢/🏠/⭐ status (heard-clean used to hide the preset line)
+    if(/^[🎹📢🏠⭐]/.test(el.textContent||''))return;
+    el.textContent=p>=1?'🎚 ตัดเสียงที่ปิดออกแบบสะอาดแล้ว (ฟัง = ไฟล์)':`🎚 กำลังตัดเสียงที่ปิดให้สะอาด… ${Math.round(p*100)}%`},
   onStemMute(stem,mute){window.__onStemMute?.(stem,mute)},
   onNomMute(mute){const c=document.getElementById('chkMetro');if(c){c.checked=!mute;c.dispatchEvent(new Event('change',{bubbles:true}))}},
   countArmed(){return !!window.__countArmed},
@@ -548,14 +555,14 @@ function applyRecipeMutes(opt){
   $('sRecipe').textContent=muteStatus();
 }
 /* ===== Data 1.0.53 (MUS-14) ⭐ เสียงเด่น · 🎼 แนวเพลง · ✂🎸 ตัดโซโล่ · 📢 ดันสู้วง — saved per song in the recipe ===== */
-const LP={lead:'',genre:'',cutSolo:false,push:false,pushPrev:null};
+const LP={lead:'',genre:'',cutSolo:false,push:false,pushPrev:null,keep:false,keepPrev:null,house:true}; // 1.0.55: keep = 🎹 เก็บคีย์ ประดับ ริธึม · house = 🏠 SetSod house sound (default on)
 const LIVE_BAND=['drums','bass','guitar']; // + ร้องนำ (sub-lane 'lead') — the live band plays these
 const GENRES={pop:{lead:'vocals',cutSolo:true,dim:{guitar:50}},rock:{lead:'guitar',cutSolo:false},luktung:{lead:'vocals',cutSolo:false},
   molam:{lead:'other',cutSolo:false},samcha:{lead:'keys',cutSolo:false},pcl:{lead:'vocals',cutSolo:false},slow:{lead:'vocals',cutSolo:true}};
 const LEAD_VOL=141,PUSH_VOL=141; // +3 dB
 function musicLanes(){return studio.state.tracks.filter(t=>t.type==='audio'&&t.stem&&!['click','countin','mix'].includes(t.stem)&&t.clips.length)}
 function paintLead(){const b=$('rLead');if(!b)return;b.querySelectorAll('[data-lead]').forEach(x=>{const on=x.dataset.lead===LP.lead;x.classList.toggle('on',on);x.setAttribute('aria-pressed',on?'true':'false')});
-  $('rGenre').value=LP.genre||'';for(const [id,on] of [['btnCutSolo',LP.cutSolo],['btnPush',LP.push]]){const x=$(id);x.classList.toggle('on',on);x.setAttribute('aria-pressed',on?'true':'false')}}
+  $('rGenre').value=LP.genre||'';for(const [id,on] of [['btnCutSolo',LP.cutSolo],['btnPush',LP.push],['btnKeep',LP.keep],['btnHouse',LP.house]]){const x=$(id);x.classList.toggle('on',on);x.setAttribute('aria-pressed',on?'true':'false')}}
 /** lane levels/mutes from ⭐/🎼/✂/📢 — only touches faders when one of them is set (else the user's faders stay) */
 function applyLeadPush(){
   const T=musicLanes();if(!T.length)return;
@@ -566,7 +573,8 @@ function applyLeadPush(){
     if(LP.push&&(f==='keys'||f==='other'||t.stem==='backing'))v=PUSH_VOL;
     t.vol=v}}
   const gl=T.find(t=>t.stem==='glead');if(gl&&LP.cutSolo)gl.mute=true;
-  const ld=T.find(t=>t.stem==='lead');if(ld&&LP.push)ld.mute=true;
+  const ld=T.find(t=>t.stem==='lead');if(ld&&(LP.push||LP.keep))ld.mute=true;
+  if(gl&&LP.keep)gl.mute=true;
   studio.setPush(LP.push);
   try{studio.refreshLanes()}catch(e){}
   syncMutesFromTracks();
@@ -584,7 +592,7 @@ async function ensureVocalSplit(){
   if(musicLanes().some(t=>t.stem==='lead'))return true;
   const i=fineIdx('vocals');if(i<0)return false;
   const ok=await studio.fineSplit(i); // asks first (downloads the vocal model once)
-  if(ok){applyRecipeMutes();toast('📢 แยกร้องนำ/คอรัสแล้ว — ปิดร้องนำ ดันคอรัส')}
+  if(ok){applyRecipeMutes();toast('แยกร้องนำ/คอรัสแล้ว — ปิดร้องนำ เก็บคอรัส')}
   return !!ok;
 }
 function leadDone(msg){paintLead();applyLeadPush();saveRecipe();$('sRecipe').textContent=msg}
@@ -597,7 +605,23 @@ $('rLead').addEventListener('click',async e=>{
     if(LP.cutSolo){paintLead();if(await ensureSoloCut())leadDone('✂🎸 ตัดโซโล่กีตาร์ (ปิดเต็ม)');else{LP.cutSolo=false;paintLead()}}
     else{const gl=musicLanes().find(t=>t.stem==='glead');if(gl&&!muteKeysFromUI().includes('guitar'))gl.mute=false;leadDone('✂🎸 เปิดโซโล่กีตาร์คืน')}
     return}
+  if(e.target.closest('#btnHouse')){LP.house=!LP.house;paintLead();saveRecipe();
+    $('sRecipe').textContent=LP.house?'🏠 ซาวด์ SetSod เปิด — มาสเตอร์ฝั่งเพลงตอนทำดาต้า':'🏠 ปิดซาวด์ SetSod — มาสเตอร์แบบเดิม (−11 LUFS)';toast($('sRecipe').textContent);return}
+  if(e.target.closest('#btnKeep')){
+    if(!LP.keep){
+      try{
+        if(LP.push){LP.push=false;setMuteUI(LP.pushPrev||[]);LP.pushPrev=null;studio.setPush(false)} // 🎹 and 📢 are alternatives
+        LP.keep=true;LP.keepPrev=muteKeysFromUI();setMuteUI([...new Set([...LP.keepPrev,'drums','bass'])]);paintLead();applyRecipeMutes();saveRecipe();
+        $('sRecipe').textContent='🎹 เก็บคีย์ ประดับ ริธึม: ปิด กลอง เบส ร้องนำ กีตาร์โซโล่';
+        try{const hq=$('btnHq');if(hq&&!hq.hidden&&hq.getAttribute('aria-pressed')!=='true')toast('💡 บนพีซี เปิด 💎 HQ ก่อนแยกเพลง จะได้คีย์/คอรัสสะอาดขึ้น (ไม่บังคับ)',4200)}catch(_){}
+        if(!musicLanes().some(t=>t.stem==='glead')){const ok=await ensureSoloCut();if(!ok)toast('🎹 ยังไม่แยกกีตาร์ — กีตาร์ยังเปิดทั้งแทร็ก')}
+        if(!musicLanes().some(t=>t.stem==='lead')){const ok=await ensureVocalSplit();if(!ok)toast('🎹 ยังไม่แยกร้องนำ/คอรัส — เลนร้องยังเปิดอยู่ (กด ✂ ที่เลนร้อง)')}
+      }catch(err){console.warn('keep',err);toast('🎹 แยกไม่ครบ — ตรวจเลนแล้วลองอีกครั้ง')}
+      finally{leadDone('🎹 เก็บคีย์ ประดับ ริธึม: ปิด กลอง เบส ร้องนำ กีตาร์โซโล่ · เก็บ คอรัส คีย์ อื่นๆ ริธึม')}
+    }else{LP.keep=false;setMuteUI(LP.keepPrev||[]);LP.keepPrev=null;paintLead();applyRecipeMutes();leadDone('🎹 ปิด เก็บคีย์ — คืนค่าเดิม')}
+    return}
   if(e.target.closest('#btnPush')){
+    if(LP.keep&&!LP.push){LP.keep=false;setMuteUI(LP.keepPrev||[]);LP.keepPrev=null} // 📢 replaces 🎹
     if(!LP.push){LP.push=true;LP.pushPrev=muteKeysFromUI();setMuteUI([...new Set([...LP.pushPrev,...LIVE_BAND])]);paintLead();applyRecipeMutes();saveRecipe();
       $('sRecipe').textContent='📢 ดันสู้วง: ปิด กลอง เบส กีตาร์ ร้องนำ · ดัน คีย์ คอรัส อื่นๆ';
       if(!musicLanes().some(t=>t.stem==='lead')){const ok=await ensureVocalSplit();if(!ok)toast('📢 ยังไม่แยกร้องนำ/คอรัส — เลนร้องยังเปิดอยู่ (กด ✂ ที่เลนร้อง หรือปิดชิป ร้อง เอง)')}
@@ -614,10 +638,10 @@ function guideKeysFromUI(){return [...$('rGuideBox').querySelectorAll('input[dat
 function recipeState(){return{mute:muteKeysFromUI(),nom:$('rNom').value,ci:+$('rCi').value,feel:$('rFeel').value||'normal',flourish:!!$('rFlourish').checked,
   rate:+$('rRate').value===2?2:1,accent:!!$('rAccent').checked,ciMode:$('rCiMode').value==='over'?'over':'pre',cues:true,endAuto:!!$('rEndAuto').checked,
   outFmt:$('rOutFmt')?.value==='mono'?'mono':'dual',countPace:(()=>{const p=+$('rCountPace')?.value;return (p===.5||p===0.5||p===2||p===4)?p:1})(),
-  lead:LP.lead,genre:LP.genre,cutSolo:LP.cutSolo,push:LP.push,pushPrev:LP.pushPrev,sr:+$('rSr').value||0,loud:!!$('rLoud').checked,guide:{on:!!$('rGuide').checked,stems:guideKeysFromUI(),db:Math.max(-40,Math.min(-12,+$('rGuideDb').value||-28))}}}
+  lead:LP.lead,genre:LP.genre,cutSolo:LP.cutSolo,push:LP.push,pushPrev:LP.pushPrev,keep:LP.keep,keepPrev:LP.keepPrev,house:LP.house,sr:+$('rSr').value||0,loud:!!$('rLoud').checked,guide:{on:!!$('rGuide').checked,stems:guideKeysFromUI(),db:Math.max(-40,Math.min(-12,+$('rGuideDb').value||-28))}}}
 function syncNomOpt(){const r=recipeState();studio.state.recipe=r;studio.state.nomOpt={style:r.feel==='ref'?'ref':'normal',rate:r.rate,accent:r.accent,ciMode:r.ciMode,ci:r.ci,cues:r.cues,
   countPace:r.countPace,endT:undefined};return r}
-function applyRecipeState(o){if(!o)return;LP.lead=o.lead||'';LP.genre=o.genre||'';LP.cutSolo=!!o.cutSolo;LP.push=!!o.push;LP.pushPrev=Array.isArray(o.pushPrev)?o.pushPrev:null;studio.setPush(LP.push);paintLead();if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;
+function applyRecipeState(o){if(!o)return;LP.lead=o.lead||'';LP.genre=o.genre||'';LP.cutSolo=!!o.cutSolo;LP.push=!!o.push;LP.pushPrev=Array.isArray(o.pushPrev)?o.pushPrev:null;LP.keep=!!o.keep;LP.keepPrev=Array.isArray(o.keepPrev)?o.keepPrev:null;if('house' in o)LP.house=o.house!==false;studio.setPush(LP.push);paintLead();if(Array.isArray(o.mute))setMuteUI(o.mute);if(o.nom)$('rNom').value=o.nom;if(o.ci!=null)$('rCi').value=String(o.ci);if(o.feel)$('rFeel').value=o.feel;if('flourish' in o)$('rFlourish').checked=!!o.flourish;
   if(o.rate)$('rRate').value=String(o.rate===2?2:1);if('accent' in o)$('rAccent').checked=!!o.accent;if(o.ciMode)$('rCiMode').value=o.ciMode==='over'?'over':'pre';if('cues' in o)$('rCues').checked=!!o.cues;if('endAuto' in o)$('rEndAuto').checked=!!o.endAuto;
   if(o.outFmt&&$('rOutFmt'))$('rOutFmt').value=o.outFmt==='mono'?'mono':'dual';
   if(o.countPace!=null&&$('rCountPace')){const p=+o.countPace;$('rCountPace').value=(p===.5||p===0.5||p===2||p===4)?String(p):'1'}
@@ -894,9 +918,9 @@ async function makeDataNow(){
       let dual;
       if(r.loud||r.guide.on){
         const gbuf=r.guide.on?await studio.renderStemsMono(r.guide.stems,sr,pad,total):null;
-        const res=studio.makeRefDualBlob(mono,guide.buf,nomSide,{loud:r.loud,lufs:-11,tpDb:-1,clickPeakDb:-0.5,guideBuf:gbuf,guideDb:r.guide.db});
+        const res=studio.makeRefDualBlob(mono,guide.buf,nomSide,{loud:r.loud,house:!!r.house,houseGlue:!r.push,lufs:r.house?-12:-11,tpDb:-1,clickPeakDb:-0.5,guideBuf:gbuf,guideDb:r.guide.db});
         dual=res.blob;report=res.report;
-      }else dual=studio.makeDualMonoBlob(mono,guide.buf,nomSide,{targetPeak:0.97,maxGain:1.6});
+      }else{if(r.house){try{const hy=studio.houseSound(Float32Array.from(mono.getChannelData(0)),mono.sampleRate,{glue:!r.push,clamp:!r.push}).y;mono.getChannelData(0).set(hy)}catch(e){console.warn('house',e)}}dual=studio.makeDualMonoBlob(mono,guide.buf,nomSide,{targetPeak:0.97,maxGain:1.6})}
       if(wantDual)dualFile=new File([dual],`${title} (พร้อมใช้ ${sideLab}).wav`,{type:'audio/wav'});
       const [chL,chR]=await studio.splitDualWav(dual);
       const musicCh=nomSide==='R'?chL:chR,nomCh=nomSide==='R'?chR:chL;
@@ -906,7 +930,7 @@ async function makeDataNow(){
     if(out.length<2){toast('เรนเดอร์ไม่ครบ');return}
     const nCue=(studio.state.markers||[]).filter(m=>m.kind==='count'||m.kind==='section').length;
     // ci:0/cia:0 → นับอยู่ในไฟล์แล้ว (ก่อนเพลงหรือทับอินโทร) แอปอย่านับซ้ำ
-    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.54',outFmt:r.outFmt||'dual',ciBaked:r.ciMode==='pre'?ci:0,
+    const meta={s:nomSide,ci:0,cia:0,b:bpm,t0,feel,flourish:flourish?1:0,sr,from:'data-1.0.55',outFmt:r.outFmt||'dual',ciBaked:r.ciMode==='pre'?ci:0,
       ciOver:r.ciMode==='over'?ci:0,rate:r.rate,cues:nCue,endT:endT!=null?Math.round(endT*1000)/1000:null};
     window.__lastExport={files:out,meta,report,endT,dual:dualFile};
     await sendStemsToSetsod(out,meta);

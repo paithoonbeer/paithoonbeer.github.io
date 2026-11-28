@@ -128,6 +128,40 @@ export function masterMusic(x,sr,target,tpDb,opt){
   const r=limit(x.map(v=>v*g),sr,tpDb);tpTrim(r.y,tpDb);
   return{y:r.y,grDb:r.grDb,lufs:lufs(r.y,sr),gainDb:20*Math.log10(g)};
 }
+/** 1.0.55 (MUS-15) 🏠 SetSod house sound — music side only, before masterMusic. Tuned for a live band playing over the track:
+ *  HP 40 Hz (12 dB/oct) + gentle low shelf −2.5 dB @130 Hz (room for the live bass) + presence +1.5 dB @3.2 kHz (keys / rhythm / chorus)
+ *  + optional gentle 1.8:1 RMS glue (max 4 dB, never raises a sample; skipped when 📢 already glued). Returns {y,glue}. */
+export function houseSound(x,sr,opt){
+  opt=opt||{};
+  const pk=(f,g,Q)=>{const A=Math.pow(10,g/40),w=2*Math.PI*f/sr,al=Math.sin(w)/(2*Q),c=Math.cos(w),a0=1+al/A;return[(1+al*A)/a0,-2*c/a0,(1-al*A)/a0,-2*c/a0,(1-al/A)/a0]};
+  const ls=(f,g,S)=>{const A=Math.pow(10,g/40),w=2*Math.PI*f/sr,c=Math.cos(w),al=Math.sin(w)/2*Math.sqrt((A+1/A)*(1/S-1)+2),sA=2*Math.sqrt(A)*al;
+    const a0=(A+1)+(A-1)*c+sA;return[A*((A+1)-(A-1)*c+sA)/a0,2*A*((A-1)-(A+1)*c)/a0,A*((A+1)-(A-1)*c-sA)/a0,-2*((A-1)+(A+1)*c)/a0,((A+1)+(A-1)*c-sA)/a0]};
+  const hp=(f,Q)=>{const w=2*Math.PI*f/sr,al=Math.sin(w)/(2*Q),c=Math.cos(w),a0=1+al;return[(1+c)/2/a0,-(1+c)/a0,(1+c)/2/a0,-2*c/a0,(1-al)/a0]};
+  let y=x;for(const k of [hp(40,0.7071),ls(130,-2.5,1),pk(3200,1.5,0.7)])y=biq(y,k[0],k[1],k[2],k[3],k[4]);
+  // transient clamp (gain only goes down): the loudest ~pct of samples are drum/transient peaks that cap the whole song's loudness;
+  // tame them by at most maxDb with 2 ms look-ahead so every song can reach the same target without crackle. Skipped when 📢 already did it.
+  let clampGr=0;
+  if(opt.clamp!==false){const pct=opt.clampPct!=null?opt.clampPct:0.995,maxDb=opt.clampDb!=null?opt.clampDb:6,n=y.length,st=Math.max(1,Math.floor(n/400000)),smp=[];
+    for(let i=0;i<n;i+=st){const v=y[i];smp.push(v<0?-v:v)}smp.sort((a,b)=>a-b);const c=smp[Math.min(smp.length-1,Math.floor(smp.length*pct))];
+    if(c>1e-5){const LA=Math.max(1,Math.floor(0.002*sr)),floor=Math.pow(10,-maxDb/20),need=new Float32Array(n);
+      for(let i=0;i<n;i++){const v=y[i]<0?-y[i]:y[i];need[i]=v>c?Math.max(c/v,floor):1}
+      const mn=new Float32Array(n),dq=new Int32Array(n);let h=0,tl=0;
+      for(let i=n-1;i>=0;i--){while(tl>h&&need[dq[tl-1]]>=need[i])tl--;dq[tl++]=i;while(dq[h]>i+LA)h++;mn[i]=need[dq[h]]}
+      const aA=Math.exp(-1/(LA/2+1)),aRel=Math.exp(-1/(0.06*sr));let g=1;
+      for(let i=0;i<n;i++){const q=mn[i];g=q<g?aA*g+(1-aA)*q:aRel*g+(1-aRel)*q;if(g>q)g=q;if(g<1){y[i]*=g;const d=-20*Math.log10(g);if(d>clampGr)clampGr=d}}}}
+  let glue={thr:null,maxGr:0,clampGr:+clampGr.toFixed(2)};
+  if(opt.glue!==false){
+    const n=y.length,W=Math.max(1,Math.floor(0.4*sr));let gs=0,gn=0;
+    for(let i=0;i+W<=n;i+=W){let q=0;for(let j=i;j<i+W;j++)q+=y[j]*y[j];q/=W;if(q>1e-7){gs+=q;gn++}}
+    if(gn){const lvl=10*Math.log10(gs/gn),thr=lvl-2,R=1.8,K=6,MAXGR=4;
+      const aR=Math.exp(-1/(0.010*sr)),aA=Math.exp(-1/(0.020*sr)),aRel=Math.exp(-1/(0.25*sr));let e=0,g=0,mx=0;
+      for(let i=0;i<n;i++){e=aR*e+(1-aR)*y[i]*y[i];const o=10*Math.log10(e+1e-12)-thr;
+        let gr=o>K/2?o*(1-1/R):o>-K/2?(1-1/R)*(o+K/2)*(o+K/2)/(2*K):0;if(gr>MAXGR)gr=MAXGR;
+        g=gr>g?aA*g+(1-aA)*gr:aRel*g+(1-aRel)*gr;if(g>mx)mx=g;y[i]*=Math.pow(10,-g/20)}
+      glue={thr:+thr.toFixed(1),maxGr:+mx.toFixed(2),clampGr:+clampGr.toFixed(2)}}
+  }
+  return{y,glue};
+}
 /** Nom side: click/voice to peakDb, optional guide bed at guideDb RMS, final limit at peakDb. */
 export function masterNom(nom,sr,peakDb,guide,guideDb){
   const pk=peakAbs(nom),g=pk>1e-9?Math.pow(10,peakDb/20)/pk:1;
